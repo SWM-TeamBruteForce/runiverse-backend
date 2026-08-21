@@ -3,6 +3,7 @@ package com.runiverse.running_service.domain.running.aggregate;
 import com.runiverse.running_service.domain.running.exception.AlreadyRoomPlayerException;
 import com.runiverse.running_service.domain.running.exception.InvalidCloseAtException;
 import com.runiverse.running_service.domain.running.exception.NotRoomPlayerException;
+import com.runiverse.running_service.domain.running.exception.PlayerAlreadyLeftException;
 import com.runiverse.running_service.domain.running.exception.RoomNotJoinableException;
 import com.runiverse.running_service.domain.running.exception.RunningRoomTypeRequiredException;
 import com.runiverse.running_service.domain.running.exception.StartAtRequiredException;
@@ -154,6 +155,10 @@ public class RunningRoom {
 
     public void leave(Long runningPlayerId) {
         RoomSession session = session(runningPlayerId);   // 참가자 확인이 먼저 — 아니면 인원만 줄고 예외가 난다
+        if (!session.isConnected()) {
+            // 인원을 줄이기 전에 막는다 — 뒤로 가면 예외가 나도 playerCount는 이미 줄어 있다
+            throw new PlayerAlreadyLeftException();
+        }
         this.playerCount = playerCount.leave();
         session.leave();
         if (playerCount.current() == 0 && status.isBeforeStart()) {
