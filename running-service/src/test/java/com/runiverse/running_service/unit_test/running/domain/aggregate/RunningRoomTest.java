@@ -414,21 +414,22 @@ public class RunningRoomTest {
         }
 
         @Test
-        @DisplayName("종료된 방의 이탈이 거절되면 인원·세션도 그대로다")
-        void rejectedLeaveOnFinishedRoomKeepsRoomIntact() {
+        @DisplayName("종료된 방에서 마지막 참가자가 나가도 방은 취소되지 않는다")
+        void leaveOnFinishedRoomDoesNotCancelRoom() {
             // given -> 러닝이 끝난 뒤 마지막 참가자가 연결을 끊는다
             RunningRoom room = matchRoom();
             room.closeMatching();
             room.start();
             room.finish();
 
-            // when & then -> 취소로 못 가는 방이면 아무것도 바뀌지 않아야 한다
-            assertThatThrownBy(() -> room.leave(HOST))
-                    .isInstanceOf(InvalidRoomStatusTransitionException.class);
-            assertThat(room.getPlayerCount().current()).isEqualTo(1);
+            // when
+            room.leave(HOST);
+
+            // then -> 끝난 방은 닫지 않는다. 취소로 덮으면 기록이 사라진다
+            assertThat(room.getPlayerCount().current()).isZero();
             assertThat(room.getStatus()).isEqualTo(RunningRoomStatus.FINISHED);
-            assertThat(sessionOf(room, HOST).isConnected()).isTrue();
-            assertThat(sessionOf(room, HOST).getLeaveCount().value()).isZero();
+            assertThat(sessionOf(room, HOST).isConnected()).isFalse();
+            assertThat(sessionOf(room, HOST).getLeaveCount().value()).isEqualTo(1);
         }
 
         @Test
