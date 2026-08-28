@@ -49,7 +49,8 @@ import java.util.Optional;
 public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUserPort, LoadUserByEmailPort,
         LoadUserByProviderPort, LoadUserByIdPort, ExistsOnboardingPort, CheckNicknameDuplicatePort, SaveOnboardingPort,
         UpdateProfileImagePort, ClearProfileImagePort, LoadNicknamePort, UpdateNicknamePort,
-        UpdatePasswordPort, LoadUserAvgPacePort, UpdateIntroductionPort, UpdateOnboardingPort, LoadUserWeightPort {
+        UpdatePasswordPort, LoadUserAvgPacePort, UpdateIntroductionPort, UpdateOnboardingPort, LoadUserWeightPort,
+        LoadOnboardingProfilePort {
 
     private final EntityManager entityManager;
 

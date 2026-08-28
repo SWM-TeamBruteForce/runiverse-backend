@@ -65,6 +65,8 @@ class RunningWebSocketHandlerTest {
 
     private static final UUID USER_ID = UuidCreator.getTimeOrderedEpoch();
     private static final long ROOM_ID = 125L;
+    // Location.MAX_SEQUENCE와 같은 값 — 구현이 바뀌면 이 상수도 같이 옮긴다
+    private static final long MAX_SEQUENCE = 100_000L;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
@@ -144,8 +146,9 @@ class RunningWebSocketHandlerTest {
                 "accuracyMeters":6.2,"recordedAt":"2026-07-25T19:10:30"}""".formatted(sequence);
     }
 
-    // api-spec 5-D의 좌표 한 개 — 단말이 모두 측정한 정상 배치
-    private static String point(int sequence) {
+    // api-spec 5-D의 좌표 한 개 — 단말이 모두 측정한 정상 배치.
+    // Long.MAX_VALUE까지 실어 보낼 수 있어야 커서를 끝으로 미는 좌표를 재현한다
+    private static String point(long sequence) {
         return """
                 {"sequence":%d,"latitude":35.1795543,"longitude":129.0756416,\
                 "altitudeMeters":18.4,"accuracyMeters":6.2,"speedMetersPerSecond":2.8,\
@@ -423,6 +426,82 @@ class RunningWebSocketHandlerTest {
             assertThat(point.sequence()).isZero();
             assertThat(point.accuracyMeters()).isEqualTo(6.2);
         });
+    }
+
+    @Test
+    @DisplayName("순번이 상한을 넘으면 적재하지 않고 INVALID_REQUEST로 응답한다")
+    void rejectsSequenceBeyondUpperBound() throws Exception {
+        // given -> Redis 커서(last)는 되돌아오지 않는다. 튄 순번이 한 번 실리면
+        // 남은 러닝의 정상 좌표가 전부 sequence > last에 걸려 버려진다
+        given(startRunningUsecase.handle(any())).willReturn(new StartRunningResult(ROOM_ID));
+        handler.handleMessage(session, runningStart("""
+                {"runningRoomId":125}"""));
+
+        // when
+        handler.handleMessage(session, locationUpdate("""
+                {"locations":[%s]}""".formatted(point(MAX_SEQUENCE + 1))));
+
+        // then
+        verify(appendRunningTrackPort, never()).append(anyLong(), any(), anyList());
+        assertThatError(captureLastSent(session), "INVALID_REQUEST", "RUNNING_LOCATION_UPDATE");
+    }
+
+    @Test
+    @DisplayName("Long.MAX_VALUE 순번은 커서에 닿기 전에 막는다")
+    void rejectsLongMaxValueSequence() throws Exception {
+        // given -> 클라 버그 하나로 TTL 6시간 동안 트랙이 통째로 비는 경로다
+        given(startRunningUsecase.handle(any())).willReturn(new StartRunningResult(ROOM_ID));
+        handler.handleMessage(session, runningStart("""
+                {"runningRoomId":125}"""));
+
+        // when
+        handler.handleMessage(session, locationUpdate("""
+                {"locations":[%s]}""".formatted(point(Long.MAX_VALUE))));
+
+        // then
+        verify(appendRunningTrackPort, never()).append(anyLong(), any(), anyList());
+        assertThatError(captureLastSent(session), "INVALID_REQUEST", "RUNNING_LOCATION_UPDATE");
+    }
+
+    @Test
+    @DisplayName("순번 상한 값 자체는 정상 좌표로 받는다")
+    void acceptsSequenceAtUpperBound() throws Exception {
+        // given -> 상한은 sanity bound다. 경계를 한 칸 잘못 잡으면 멀쩡한 배치를 버린다
+        given(startRunningUsecase.handle(any())).willReturn(new StartRunningResult(ROOM_ID));
+        handler.handleMessage(session, runningStart("""
+                {"runningRoomId":125}"""));
+
+        // when
+        handler.handleMessage(session, locationUpdate("""
+                {"locations":[%s]}""".formatted(point(MAX_SEQUENCE))));
+
+        // then
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<TrackPoint>> captor = ArgumentCaptor.forClass(List.class);
+        verify(appendRunningTrackPort).append(eq(ROOM_ID), any(), captor.capture());
+        assertThat(captor.getValue()).extracting(TrackPoint::sequence).containsExactly(MAX_SEQUENCE);
+    }
+
+    @Test
+    @DisplayName("순번이 튄 배치를 튕겨도 이어지는 정상 배치는 그대로 적재한다")
+    void keepsAppendingAfterRejectedBatch() throws Exception {
+        // given -> 이번 버그의 핵심. 튄 좌표가 그 배치 10초만 잃게 하고
+        // 남은 러닝까지 끌고 가지 않아야 한다
+        given(startRunningUsecase.handle(any())).willReturn(new StartRunningResult(ROOM_ID));
+        handler.handleMessage(session, runningStart("""
+                {"runningRoomId":125}"""));
+        handler.handleMessage(session, locationUpdate("""
+                {"locations":[%s]}""".formatted(point(Long.MAX_VALUE))));
+
+        // when -> 클라는 ERROR를 받아도 러닝을 계속하며 다음 배치를 보낸다(api-spec 5-D)
+        handler.handleMessage(session, locationUpdate("""
+                {"locations":[%s,%s]}""".formatted(point(12), point(13))));
+
+        // then -> 튕긴 배치만 빠지고 뒤 배치는 살아 있어야 한다
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<TrackPoint>> captor = ArgumentCaptor.forClass(List.class);
+        verify(appendRunningTrackPort).append(eq(ROOM_ID), any(), captor.capture());
+        assertThat(captor.getValue()).extracting(TrackPoint::sequence).containsExactly(12L, 13L);
     }
 
     @Test

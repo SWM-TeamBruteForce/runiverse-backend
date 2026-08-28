@@ -32,7 +32,7 @@ import java.util.UUID;
 
 public class InMemoryOnboardingStore implements ExistsOnboardingPort,
         CheckNicknameDuplicatePort, SaveOnboardingPort, LoadNicknamePort, UpdateNicknamePort,
-        UpdateOnboardingPort, LoadUserAvgPacePort, LoadUserWeightPort {
+        UpdateOnboardingPort, LoadUserAvgPacePort, LoadUserWeightPort, LoadOnboardingProfilePort {
 
     // 실제 어댑터가 컬럼 단위로 갱신하므로 도메인 객체가 아니라 user_onboardings의 한 행을 들고 있는다
     @Getter
