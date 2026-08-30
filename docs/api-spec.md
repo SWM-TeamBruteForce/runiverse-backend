@@ -1238,7 +1238,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 ```json
 {
   "code": "NOT_ROOM_PLAYER",
-  "message": "같은 방 참가자만 조회할 수 있습니다."
+  "message": "이 방의 참가자가 아닙니다."
 }
 ```
 
@@ -1319,7 +1319,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 ```json
 {
   "code": "NOT_ROOM_PLAYER",
-  "message": "같은 방 참가자만 조회할 수 있습니다."
+  "message": "이 방의 참가자가 아닙니다."
 }
 ```
 
