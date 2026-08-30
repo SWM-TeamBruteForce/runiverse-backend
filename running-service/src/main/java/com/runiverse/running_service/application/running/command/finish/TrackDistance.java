@@ -22,10 +22,17 @@ public final class TrackDistance {
     }
 
     public static double between(TrackPoint from, TrackPoint to) {
-        double fromLatitude = Math.toRadians(from.latitude());
-        double toLatitude = Math.toRadians(to.latitude());
+        return between(from.latitude(), from.longitude(), to.latitude(), to.longitude());
+    }
+
+    // 러닝 중 누적은 직전 좌표를 위경도만 들고 있다 — 계산식은 위와 하나를 공유한다
+    public static double between(
+            double fromLatitudeDegrees, double fromLongitudeDegrees,
+            double toLatitudeDegrees, double toLongitudeDegrees) {
+        double fromLatitude = Math.toRadians(fromLatitudeDegrees);
+        double toLatitude = Math.toRadians(toLatitudeDegrees);
         double latitudeDelta = toLatitude - fromLatitude;
-        double longitudeDelta = Math.toRadians(to.longitude() - from.longitude());
+        double longitudeDelta = Math.toRadians(toLongitudeDegrees - fromLongitudeDegrees);
         double a = square(Math.sin(latitudeDelta / 2))
                 + Math.cos(fromLatitude) * Math.cos(toLatitude)
                 * square(Math.sin(longitudeDelta / 2));

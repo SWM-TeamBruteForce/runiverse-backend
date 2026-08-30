@@ -16,6 +16,7 @@ public enum RunningMessageType {
     // S -> C
     HEALTH_CHECKED,
     RUNNING_STARTED,
+    PLAYER_RUNNING_PROGRESS_UPDATED,
     RUNNING_FINISHED,
     ERROR;
 

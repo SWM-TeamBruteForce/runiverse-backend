@@ -1,6 +1,8 @@
 package com.runiverse.running_service.infrastructure.redis.running;
 
+import com.runiverse.running_service.application.running.command.progress.BroadcastRunningProgressCommand;
 import com.runiverse.running_service.application.running.command.session.CloseSupersededSessionCommand;
+import com.runiverse.running_service.application.running.port.in.BroadcastRunningProgressUsecase;
 import com.runiverse.running_service.application.running.port.in.CloseSupersededSessionUsecase;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +19,7 @@ public class RunningRoomListener implements MessageListener {
 
     private final JsonMapper jsonMapper;
     private final CloseSupersededSessionUsecase closeSupersededSessionUsecase;
+    private final BroadcastRunningProgressUsecase broadcastRunningProgressUsecase;
 
     @Override
     public void onMessage(Message message, byte[] pattern) {
@@ -30,8 +33,7 @@ public class RunningRoomListener implements MessageListener {
         }
         switch (envelope.type()) {
             case SUPERSEDE -> handleSupersede(envelope.data());
-            // D단계에서 채운다
-            case PROGRESS -> log.debug("진행 상황 수신");
+            case PROGRESS -> handleProgress(envelope.data());
         }
     }
 
@@ -39,5 +41,11 @@ public class RunningRoomListener implements MessageListener {
         SupersedeMessage payload = jsonMapper.convertValue(data, SupersedeMessage.class);
         closeSupersededSessionUsecase.handle(
                 new CloseSupersededSessionCommand(payload.userId(), payload.winnerSessionId()));
+    }
+
+    private void handleProgress(Object data) {
+        ProgressMessage payload = jsonMapper.convertValue(data, ProgressMessage.class);
+        broadcastRunningProgressUsecase.handle(new BroadcastRunningProgressCommand(
+                payload.runningRoomId(), payload.toProgress()));
     }
 }

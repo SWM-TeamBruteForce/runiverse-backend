@@ -5,6 +5,8 @@ import com.runiverse.running_service.application.auth.command.emailverification.
 import com.runiverse.running_service.application.auth.command.signup.SignUpHandler;
 import com.runiverse.running_service.application.auth.command.signup.SignUpUserRegistrar;
 import com.runiverse.running_service.integration_test.fake.FakeEmailSender;
+import com.runiverse.running_service.integration_test.fake.FakeRunningProgressPublisher;
+import com.runiverse.running_service.integration_test.fake.InMemoryRunningDistanceStore;
 import com.runiverse.running_service.integration_test.fake.FakeGpsTrackUploader;
 import com.runiverse.running_service.integration_test.fake.FakeWeatherProvider;
 import com.runiverse.running_service.integration_test.fake.FakeOauthClient;
@@ -37,6 +39,8 @@ public abstract class IntegrationTestSupport {
     protected InMemoryOnboardingStore onboardingStore;
     protected InMemoryRunningStore runningStore;
     protected InMemoryRunningTrackStore runningTrackStore;
+    protected InMemoryRunningDistanceStore runningDistanceStore;
+    protected FakeRunningProgressPublisher runningProgressPublisher;
     protected InMemoryRunningRecordStore runningRecordStore;
     protected FakeGpsTrackUploader gpsTrackUploader;
     protected FakeWeatherProvider weatherProvider;
@@ -60,6 +64,8 @@ public abstract class IntegrationTestSupport {
         onboardingStore = new InMemoryOnboardingStore();
         runningStore = new InMemoryRunningStore();
         runningTrackStore = new InMemoryRunningTrackStore();
+        runningDistanceStore = new InMemoryRunningDistanceStore();
+        runningProgressPublisher = new FakeRunningProgressPublisher();
         runningRecordStore = new InMemoryRunningRecordStore();
         gpsTrackUploader = new FakeGpsTrackUploader();
         weatherProvider = new FakeWeatherProvider();

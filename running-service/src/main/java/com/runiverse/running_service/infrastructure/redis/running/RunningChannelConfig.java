@@ -10,8 +10,6 @@ import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 @RequiredArgsConstructor
 public class RunningChannelConfig {
 
-    private final RunningRoomListener supersedeListener;
-
     @Bean
     public RedisMessageListenerContainer runningChannelContainer(RedisConnectionFactory factory) {
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();

@@ -9,6 +9,7 @@ import com.runiverse.running_service.application.running.port.out.LoadRunningRoo
 import com.runiverse.running_service.application.running.port.out.UpdateRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.UpdateRunningRoomPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.domain.running.metric.vo.Distance;
 import com.runiverse.running_service.domain.running.player.RunningPlayer;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerId;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerStatus;
@@ -75,7 +76,9 @@ public class StartRunningHandler implements StartRunningUsecase {
         // 6. 본격적인 업데이트를 시작한다
         updateRunningRoomPort.update(room);
         updateRunningPlayerPort.update(player);
-        return new StartRunningResult(room.getRunningRoomId().orElseThrow().value());
+        return new StartRunningResult(
+                room.getRunningRoomId().orElseThrow().value(),
+                room.getTargetDistance().map(Distance::meters).orElse(null));
     }
 
     // 러닝을 시작할 수 있는 신청인가 — INVITED는 아직 수락하지 않았고,

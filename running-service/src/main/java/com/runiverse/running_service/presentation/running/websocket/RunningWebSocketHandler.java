@@ -7,6 +7,7 @@ import com.runiverse.running_service.application.running.command.location.Update
 import com.runiverse.running_service.application.running.command.session.RegisterRunningSessionCommand;
 import com.runiverse.running_service.application.running.command.session.RemoveRunningSessionCommand;
 import com.runiverse.running_service.application.running.command.start.StartRunningCommand;
+import com.runiverse.running_service.application.running.command.start.StartRunningResult;
 import com.runiverse.running_service.application.running.port.in.FinishRunningUsecase;
 import com.runiverse.running_service.application.running.port.in.RegisterRunningSessionUsecase;
 import com.runiverse.running_service.application.running.port.in.RemoveRunningSessionUsecase;
@@ -48,7 +49,8 @@ public class RunningWebSocketHandler extends TextWebSocketHandler {
     private final FinishRunningUsecase finishRunningUsecase;
     // attribute에 저장할 runningRoomId
     public static final String RUNNING_ROOM_ID = "runningRoomId";
-
+    // 좌표 배치마다 방을 다시 읽지 않으려고 세션에 새겨 둔다 — 시작 뒤 바뀌지 않는 값이다
+    public static final String TARGET_DISTANCE_METERS = "targetDistanceMeters";
 
     // 웹소켓 연결이 성공한 직후 한번 호출
     @Override
@@ -106,21 +108,26 @@ public class RunningWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         UserId userId = userId(session);
+        StartRunningResult result;
         try {
-            startRunningUsecase.handle(
+            result = startRunningUsecase.handle(
                     new StartRunningCommand(userId.value(), request.runningRoomId()));
-            // 실패한 요청으로 남의 기기를 끊지 않도록 성공한 뒤에 등록한다
             registerRunningSessionUsecase.handle(new RegisterRunningSessionCommand(
-                    userId.value(), request.runningRoomId(), new WebSocketRunningConnection(session)));
-
+                    userId.value(), request.runningRoomId(),
+                    new WebSocketRunningConnection(session, jsonMapper)));
         } catch (BusinessException e) {
-            // 유스케이스가 튕겨낸 것만 코드로 내보낸다.
-            // 도메인 예외가 여기까지 오면 핸들러의 선검사가 샌 것이라 잡지 않는다
             sendError(session, e.getErrorCode(), envelope.event());
             return;
         }
-        // 검증을 통과한 방만 세션에 새긴다 — 이후 메시지는 클라가 보낸 값 대신 이것을 믿는다
         session.getAttributes().put(RUNNING_ROOM_ID, request.runningRoomId());
+        // 세션 attribute는 ConcurrentHashMap이라 null을 못 담는다.
+        // 목표 없는 솔로 방은 키 자체를 비워 두면 읽는 쪽이 null로 받는다
+        Integer targetDistanceMeters = result.targetDistanceMeters();
+        if (targetDistanceMeters == null) {
+            session.getAttributes().remove(TARGET_DISTANCE_METERS);
+        } else {
+            session.getAttributes().put(TARGET_DISTANCE_METERS, targetDistanceMeters);
+        }
         send(session, RunningMessageType.RUNNING_STARTED.message());
     }
 
@@ -146,7 +153,9 @@ public class RunningWebSocketHandler extends TextWebSocketHandler {
         }
         try {
             updateRunningLocationUsecase.handle(new UpdateRunningLocationCommand(
-                    userId(session).value(), startedRoomId, toTrackPoints(request)));
+                    userId(session).value(), startedRoomId,
+                    (Integer) session.getAttributes().get(TARGET_DISTANCE_METERS),
+                    toTrackPoints(request)));
         } catch (BusinessException e) {
             // 유스케이스가 튕겨낸 것만 코드로 내보낸다
             sendError(session, e.getErrorCode(), envelope.event());
@@ -235,7 +244,8 @@ public class RunningWebSocketHandler extends TextWebSocketHandler {
         // 연결 끊김 ≠ 방 나가기 — running_room_sessions.is_connected는 여기서 건드리지 않는다.
         // 명부는 접속 여부라 여기서 지운다
         removeRunningSessionUsecase.handle(
-                new RemoveRunningSessionCommand(userId.value(), new WebSocketRunningConnection(session)));
+                new RemoveRunningSessionCommand(
+                        userId.value(), new WebSocketRunningConnection(session, jsonMapper)));
         log.info("러닝 WebSocket 종료 — userId={}, status={}", userId(session), status);
     }
 

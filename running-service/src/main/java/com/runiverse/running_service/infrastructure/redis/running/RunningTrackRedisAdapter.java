@@ -32,23 +32,23 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRunningTrackPort, DeleteRunningTrackPort {
 
-    // 커서를 읽고 쓰는 사이에 재연결 배치가 끼면 중복이 샌다 - 한 덩어리로 실행한다.
-    // 좌표 값은 건드리지 않고 순번만 숫자로 읽어 정밀도가 흔들릴 여지를 없앤다
+    // 순번마다 비트 한 칸으로 중복을 판정한다 - 커서와 달리 뒤늦게 온 좌표도 자기 자리에 들어간다.
+    // SETBIT은 이전 비트를 돌려주므로 0이면 처음 보는 순번이다
     private static final RedisScript<Long> APPEND = RedisScript.of("""
-            local last = tonumber(redis.call('GET', KEYS[2]) or '-1')
+            local max = tonumber(ARGV[2])
             local fresh = {}
-            for i = 2, #ARGV, 2 do
+            for i = 3, #ARGV, 2 do
                 local sequence = tonumber(ARGV[i])
-                if sequence > last then
+                -- 비트맵은 offset만큼 메모리를 잡는다 - 상한 밖 순번 하나가 러닝당 수백 MB를 문다
+                if sequence >= 0 and sequence <= max
+                        and redis.call('SETBIT', KEYS[2], sequence, 1) == 0 then
                     fresh[#fresh + 1] = ARGV[i + 1]
-                    last = sequence
                 end
             end
             if #fresh == 0 then
                 return 0
             end
             redis.call('XADD', KEYS[1], '*', 'points', '[' .. table.concat(fresh, ',') .. ']')
-            redis.call('SET', KEYS[2], tostring(last))
             redis.call('EXPIRE', KEYS[1], ARGV[1])
             redis.call('EXPIRE', KEYS[2], ARGV[1])
             return #fresh
@@ -63,9 +63,11 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
 
     @Override
     public int append(Long runningRoomId, UserId userId, List<TrackPoint> points) {
-        List<String> args = new ArrayList<>(points.size() * 2 + 1);
+        List<String> args = new ArrayList<>(points.size() * 2 + 2);
         args.add(String.valueOf(properties.ttl().toSeconds()));
-        // 순번 오름차순이어야 Lua가 마지막 값 하나로 커서를 옮길 수 있다
+        args.add(String.valueOf(TrackPoint.MAX_SEQUENCE));
+        // 정확성은 순번별 판정이 책임진다 - 정렬은 저장 순서를 순번 순서에 맞춰
+        // load()의 정렬을 거의 공짜로 만들기 위한 것이다
         points.stream()
                 .sorted(Comparator.comparingLong(TrackPoint::sequence))
                 .forEach(point -> {
@@ -75,7 +77,7 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
         try {
             Long appended = redisTemplate.execute(
                     APPEND,
-                    List.of(trackKey(runningRoomId, userId), sequenceKey(runningRoomId, userId)),
+                    List.of(trackKey(runningRoomId, userId), seenKey(runningRoomId, userId)),
                     args.toArray());
             return appended == null ? 0 : appended.intValue();
         } catch (RuntimeException e) {
@@ -126,11 +128,14 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
             return new RunningTrack("[]", List.of());
         }
         // 배치마다 바깥 [ ]를 벗겨 잇는다 - 이미 압축 포맷이라 풀었다 다시 만들 이유가 없다.
-        // 스크립트가 커서보다 큰 순번만 담고 커서는 앞으로만 가므로 이어붙인 순서가 곧 순번 순서다
-        String raw = "[" + batches.stream()
+        // 구멍을 나중에 메울 수 있어 저장 순서가 순번 순서가 아니다 - 아래에서 조각째 정렬한다
+        String joined = batches.stream()
                 .map(batch -> (String) batch.getValue().get(POINTS_FIELD))
                 .map(points -> points.substring(1, points.length() - 1))
-                .collect(Collectors.joining(",")) + "]";
+                .collect(Collectors.joining(","));
+        String raw = sortedFragments("[" + joined + "]").stream()
+                .map(fragment -> "[" + fragment + "]")
+                .collect(Collectors.joining(",", "[", "]"));
         return new RunningTrack(raw, parse(raw));
     }
 
@@ -158,6 +163,19 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
         return points;
     }
 
+    // 구멍을 나중에 메울 수 있게 되면서 저장 순서가 곧 순번 순서가 아니다.
+    // 압축 문자열을 풀었다 다시 만들지 않고 조각째 옮긴다
+    private List<String> sortedFragments(String raw) {
+        List<String> fragments = new ArrayList<>();
+        Matcher matcher = POINT.matcher(raw);
+        while (matcher.find()) {
+            fragments.add(matcher.group(1));
+        }
+        fragments.sort(Comparator.comparingLong(
+                fragment -> Long.parseLong(fragment.substring(0, fragment.indexOf(',')))));
+        return fragments;
+    }
+
     // 종료 확정 뒤 버퍼를 비운다. TTL이 있어 남겨도 새지는 않지만,
     // 끝난 러닝에 재연결 재전송이 다시 쌓이는 걸 막는다.
     // 실패해도 종료를 되돌리지 않는다 — 이미 기록은 DB에 있고 TTL이 결국 지운다
@@ -165,7 +183,7 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
     public void delete(Long runningRoomId, UserId userId) {
         try {
             redisTemplate.delete(List.of(
-                    trackKey(runningRoomId, userId), sequenceKey(runningRoomId, userId)));
+                    trackKey(runningRoomId, userId), seenKey(runningRoomId, userId)));
         } catch (RuntimeException e) {
             log.warn("러닝 트랙 삭제 실패 — roomId={}, userId={}", runningRoomId, userId, e);
         }
@@ -184,8 +202,10 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
         return RedisKey.RUNNING_TRACK.of(String.valueOf(runningRoomId), userId.value().toString());
     }
 
-    private String sequenceKey(Long runningRoomId, UserId userId) {
+    // 순번 비트맵 — 예전 커서(:seq)와 값 형식이 달라 키를 갈라야 한다.
+    // 숫자 문자열에 SETBIT을 걸면 그 글자의 비트가 이미 켜진 것으로 읽힌다
+    private String seenKey(Long runningRoomId, UserId userId) {
         return RedisKey.RUNNING_TRACK.of(
-                String.valueOf(runningRoomId), userId.value().toString(), "seq");
+                String.valueOf(runningRoomId), userId.value().toString(), "seen");
     }
 }

@@ -90,15 +90,16 @@ class RunningTrackRedisAdapterTest {
     }
 
     @Test
-    @DisplayName("좌표 본체 키와 커서 키를 함께 넘긴다")
-    void usesTrackAndCursorKeys() {
+    @DisplayName("좌표 본체 키와 순번 비트맵 키를 함께 넘긴다")
+    void usesTrackAndSeenKeys() {
         // when
         adapter.append(ROOM_ID, userId, List.of(point(0)));
 
-        // then -> 스크립트가 커서를 읽고 쓰려면 두 키가 다 있어야 한다
+        // then -> 접미사가 :seq로 돌아가면 예전 커서 값(숫자 문자열)에 SETBIT이 걸린다.
+        // '5'는 0x35라 비트 2·3·5·7이 켜진 채로 시작해 그 순번들이 조용히 버려진다
         assertThat(scriptKeys()).containsExactly(
                 "running:track:" + ROOM_ID + ":" + userId.value(),
-                "running:track:" + ROOM_ID + ":" + userId.value() + ":seq");
+                "running:track:" + ROOM_ID + ":" + userId.value() + ":seen");
     }
 
     @Test
@@ -112,14 +113,25 @@ class RunningTrackRedisAdapterTest {
     }
 
     @Test
+    @DisplayName("두 번째 인자로 순번 상한을 넘긴다")
+    void passesMaxSequenceSecond() {
+        // when
+        adapter.append(ROOM_ID, userId, List.of(point(0)));
+
+        // then -> 비트맵은 offset만큼 메모리를 잡는다. 상한이 스크립트까지 가지 않으면
+        // 튄 순번 하나가 러닝 하나당 수백 MB를 물 수 있다
+        assertThat(scriptArgs()[1]).isEqualTo(String.valueOf(TrackPoint.MAX_SEQUENCE));
+    }
+
+    @Test
     @DisplayName("좌표를 필드명 없는 배열 문자열로 압축한다")
     void compactsPointIntoArray() {
         // when
         adapter.append(ROOM_ID, userId, List.of(point(7)));
 
         // then -> [순번,위도,경도,고도,정확도,속도,방위,케이던스,페이스,시각]
-        assertThat(scriptArgs()[1]).isEqualTo("7");
-        assertThat(scriptArgs()[2]).isEqualTo(
+        assertThat(scriptArgs()[2]).isEqualTo("7");
+        assertThat(scriptArgs()[3]).isEqualTo(
                 "[7,35.17955,129.07564,18.4,6.2,2.80,85.3,165,345,%d]".formatted(EPOCH_SECOND));
     }
 
@@ -133,29 +145,30 @@ class RunningTrackRedisAdapterTest {
         adapter.append(ROOM_ID, userId, List.of(pointWithoutOptionalFields(0)));
 
         // then -> 값이 없다는 사실이 남아야 읽는 쪽이 표본에서 제외할 수 있다(erd.md avg_cadence)
-        assertThat(scriptArgs()[2]).isEqualTo(
+        assertThat(scriptArgs()[3]).isEqualTo(
                 "[0,35.17955,129.07564,null,6.2,null,null,null,null,%d]".formatted(EPOCH_SECOND));
     }
 
     @Test
     @DisplayName("순번이 뒤섞여 들어와도 오름차순으로 실어 보낸다")
     void sortsPointsBySequence() {
-        // given -> 스크립트가 커서를 앞으로만 밀기 때문에 역순이면 뒤 좌표가 버려진다
+        // given -> 순번마다 독립으로 판정하므로 순서가 정확성을 좌우하지는 않는다.
+        // 다만 저장 순서를 순번 순서에 맞춰 두면 load()의 정렬이 거의 공짜가 된다
 
         // when
         adapter.append(ROOM_ID, userId, List.of(point(2), point(0), point(1)));
 
         // then
         Object[] args = scriptArgs();
-        assertThat(List.of(args[1], args[3], args[5])).containsExactly("0", "1", "2");
+        assertThat(List.of(args[2], args[4], args[6])).containsExactly("0", "1", "2");
     }
 
     @Test
     @DisplayName("Redis가 닿지 않으면 유스케이스가 다룰 수 있는 예외로 갈아끼워 던진다")
     void translatesRedisFailure() {
         // given -> execute의 가변 인자는 매처로 잡기 까다로워 개수를 맞춘다.
-        // 좌표 한 개면 [TTL, 순번, 좌표] 세 개다
-        given(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any(), any()))
+        // 좌표 한 개면 [TTL, 순번 상한, 순번, 좌표] 네 개다
+        given(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any(), any(), any()))
                 .willThrow(new RedisConnectionFailureException("redis down"));
 
         // when & then -> 인프라 예외가 그대로 새면 presentation이 Redis를 알아야 하고,
@@ -178,7 +191,7 @@ class RunningTrackRedisAdapterTest {
     // append가 실제로 만든 압축 문자열 — 테스트가 포맷을 따로 흉내 내지 않게 한다
     private String compacted(TrackPoint point) {
         adapter.append(ROOM_ID, userId, List.of(point));
-        return (String) scriptArgs()[2];
+        return (String) scriptArgs()[3];
     }
 
     @Test
@@ -203,9 +216,9 @@ class RunningTrackRedisAdapterTest {
         // given -> 10초마다 한 배치씩 쌓이므로 원본은 여러 항목에 나뉘어 있다
         adapter.append(ROOM_ID, userId, List.of(point(0), point(1), point(2)));
         Object[] args = scriptArgs();
-        String first = (String) args[2];
-        String second = (String) args[4];
-        String third = (String) args[6];
+        String first = (String) args[3];
+        String second = (String) args[5];
+        String third = (String) args[7];
         givenStoredBatches("[" + first + "," + second + "]", "[" + third + "]");
 
         // when
@@ -214,6 +227,29 @@ class RunningTrackRedisAdapterTest {
         // then -> 배치 사이에 쉼표가 빠지면 S3에 깨진 JSON이 올라간다
         assertThat(track.raw()).isEqualTo("[" + first + "," + second + "," + third + "]");
         assertThat(track.points()).containsExactly(point(0), point(1), point(2));
+    }
+
+    @Test
+    @DisplayName("나중에 메워진 좌표도 순번 순서로 되돌린다")
+    void sortsBackfilledPointsBySequence() {
+        // given -> 집합 dedup으로 바뀌면서 구멍을 나중에 메울 수 있게 됐다.
+        // 그러면 저장 순서가 더 이상 순번 순서가 아니다 — 5,6이 3,4보다 먼저 쌓여 있다
+        adapter.append(ROOM_ID, userId, List.of(point(3), point(4), point(5), point(6)));
+        Object[] args = scriptArgs();
+        String third = (String) args[3];
+        String fourth = (String) args[5];
+        String fifth = (String) args[7];
+        String sixth = (String) args[9];
+        givenStoredBatches("[" + fifth + "," + sixth + "]", "[" + third + "," + fourth + "]");
+
+        // when
+        RunningTrack track = adapter.load(ROOM_ID, userId);
+
+        // then -> 종료 파이프라인은 어디에서도 정렬하지 않는다(append의 정렬이 유일).
+        // 여기서 안 맞춰주면 거리·스플릿이 뒤엉킨 순서로 계산된다
+        assertThat(track.points()).containsExactly(point(3), point(4), point(5), point(6));
+        assertThat(track.raw()).isEqualTo(
+                "[" + third + "," + fourth + "," + fifth + "," + sixth + "]");
     }
 
     @Test
