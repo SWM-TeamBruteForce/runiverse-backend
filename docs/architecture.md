@@ -55,7 +55,7 @@ AuthController ──▶ SignUpUsecase ──▶ SignUpHandler ──▶ SaveUse
 - **domain/**: VO는 생성 시점에 검증하고 도메인 예외를 던진다.
 - **application/**: 상태 변경은 `command/`, 조회는 `query/`에 두고 후자에 `@Transactional(readOnly = true)`를 건다. `port/in`은 둘을 구분하지 않는다. DB 트랜잭션은 application에서 관리한다. 보통 Handler가 경계지만 필요하면 내부 컴포넌트가 맡고, Redis 전용처럼 DB를 쓰지 않으면 경계가 없어도 된다.
 - **port/out**: 작고 응집된 인터페이스로 나누고 Handler에는 필요한 포트만 주입한다. 사용 유스케이스나 변경 이유가 다르면 포트를 분리한다.
-- **infrastructure/**: 도메인 ↔ JPA 변환을 맡는다. application 포트의 기본 기술 구현체는 `*Adapter`로 명명한다. 외부 제공자와 직접 통신하면 `*Client`, 여러 Client를 선택해 application 포트를 구현하면 `*Router`로 명명한다. 같은 애그리거트·저장 기술의 포트는 어댑터 하나가 함께 구현할 수 있다.
+- **infrastructure/**: 도메인 ↔ JPA 변환을 맡는다. application 포트의 기본 기술 구현체는 `*Adapter`로 명명한다. 외부 제공자와 직접 통신하면 `*Client`, 여러 Client를 선택해 application 포트를 구현하면 `*Router`로 명명한다. 인스턴스 로컬 상태를 보관하며 그 조회 포트를 겸하는 컴포넌트는 `*Registry`로 명명할 수 있다. 같은 애그리거트·저장 기술의 포트는 어댑터 하나가 함께 구현할 수 있다.
 - **presentation/**: 컨트롤러 처리 중 발생한 예외는 `GlobalExceptionHandler`, 인증 진입 실패는 `AuthenticationEntryPoint`에서 변환한다.
 
 ## DDD 규칙

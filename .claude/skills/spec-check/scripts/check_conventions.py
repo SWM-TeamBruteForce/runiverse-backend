@@ -558,11 +558,11 @@ def check_application_structure(root: Path, scope: Path = None):
     return missing_sets, handler_issues, no_tx
 
 
-OUTBOUND_SUFFIXES = ("Adapter", "Client", "Router")
+OUTBOUND_SUFFIXES = ("Adapter", "Client", "Router", "Registry")
 
 
 def check_outbound_names(root: Path, scope: Path = None):
-    """port/out 구현체 네이밍: 포트 구현은 *Adapter, 외부 API는 *Client, 선택은 *Router."""
+    """port/out 구현체 네이밍: 포트 구현은 *Adapter, 외부 API는 *Client, 선택은 *Router, 상태 보관은 *Registry."""
     hits = []
     for f in java_files(root, scope):
         if layer_of(f, root) != "infrastructure":
@@ -708,7 +708,7 @@ def main():
     if outbound_names:
         confirmed += len(outbound_names)
         for path in outbound_names:
-            print(f"  - {path}: port/out 구현체는 *Adapter·*Client·*Router 중 하나로 명명")
+            print(f"  - {path}: port/out 구현체는 *Adapter·*Client·*Router·*Registry 중 하나로 명명")
     else:
         print("  위반 없음")
 
