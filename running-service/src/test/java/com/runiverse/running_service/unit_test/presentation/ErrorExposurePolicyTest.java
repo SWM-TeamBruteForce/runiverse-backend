@@ -41,6 +41,15 @@ public class ErrorExposurePolicyTest {
     }
 
     @Test
+    @DisplayName("방 참가자가 아닌 조회 거부는 403 그대로 노출한다")
+    void notRoomPlayerIsExposed() {
+        // 6-1이 REST로 던지는 코드다 — 목록에서 빠지면 500으로 바뀌어 클라가 권한 문제인지 알 수 없다
+        assertThat(ErrorExposurePolicy.isExposed(
+                HttpStatus.FORBIDDEN,
+                RunningErrorCode.NOT_ROOM_PLAYER.getCode())).isTrue();
+    }
+
+    @Test
     @DisplayName("진행 중인 러닝 충돌은 409 그대로 노출한다")
     void alreadyRunningIsExposed() {
         // 노출 목록에서 빠지면 500으로 바뀌어, 클라가 "이미 뛰고 있음"을 알 수 없다

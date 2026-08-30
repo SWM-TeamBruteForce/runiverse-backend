@@ -6,7 +6,13 @@ import com.runiverse.running_service.application.running.port.out.ExistsActiveRu
 import com.runiverse.running_service.application.running.port.out.ExistsRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.LoadActiveRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.LoadRoomPlayerPort;
+import com.runiverse.running_service.application.running.port.out.LoadRunningResultPlayersPort;
+import com.runiverse.running_service.application.running.port.out.LoadRunningResultRecordPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningRoomPort;
+import com.runiverse.running_service.application.running.port.out.LoadRunningSplitsPort;
+import com.runiverse.running_service.application.running.port.out.RunningResultPlayer;
+import com.runiverse.running_service.application.running.port.out.RunningResultRecord;
+import com.runiverse.running_service.application.running.port.out.RunningSplitRow;
 import com.runiverse.running_service.application.running.port.out.UpdateRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.UpdateRunningRoomPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
@@ -32,7 +38,7 @@ import java.util.stream.Collectors;
 public class RunningPersistenceAdapter implements CreateRunningPlayerPort, CreateRunningRoomPort,
         ExistsActiveRunningPlayerPort, LoadRunningRoomPort, UpdateRunningRoomPort,
         LoadActiveRunningPlayerPort, UpdateRunningPlayerPort, LoadRoomPlayerPort,
-        ExistsRunningPlayerPort {
+        ExistsRunningPlayerPort, LoadRunningResultPlayersPort, LoadRunningResultRecordPort, LoadRunningSplitsPort {
 
     private final EntityManager entityManager;
 
@@ -208,6 +214,80 @@ public class RunningPersistenceAdapter implements CreateRunningPlayerPort, Creat
                 .setParameter("roomId", runningRoomId.value())
                 .setParameter("status", RunningPlayerStatus.RUNNING)
                 .getSingleResult() > 0;
+    }
+
+    @Override
+    public List<RunningResultPlayer> loadPlayers(RunningRoomId runningRoomId) {
+        // 세션이 방과 참가자를 잇는다. 기록은 아직 없을 수 있어 LEFT JOIN이다.
+        // player.deletedAt은 걸지 않는다 — 완주·이탈에도 찍혀서 끝난 참가자가 통째로 빠진다
+        List<Object[]> rows = entityManager.createQuery("""
+                        select player, record
+                        from RunningRoomSessionJpaEntity session
+                        join session.player player
+                        left join RunningRecordJpaEntity record
+                            on record.room.runningRoomId = session.room.runningRoomId
+                           and record.userId = player.userId
+                        where session.room.runningRoomId = :roomId
+                        order by player.runningPlayerId
+                        """, Object[].class)
+                .setParameter("roomId", runningRoomId.value())
+                .getResultList();
+        return rows.stream()
+                .map(row -> toResultPlayer(
+                        (RunningPlayerJpaEntity) row[0], (RunningRecordJpaEntity) row[1]))
+                .toList();
+    }
+
+    @Override
+    public Optional<RunningResultRecord> loadRecord(RunningRoomId runningRoomId, UserId userId) {
+        // 폴리라인만 있으면 되므로 엔티티를 통째로 읽지 않는다 — 세 컬럼만 가져온다
+        return entityManager.createQuery("""
+                        select new com.runiverse.running_service.application.running.port.out.RunningResultRecord(
+                            record.routePolyline, record.startAt, record.endAt, record.totalDistance, record.totalElevationGain)
+                        from RunningRecordJpaEntity record
+                        where record.room.runningRoomId = :roomId
+                          and record.userId = :userId
+                        """, RunningResultRecord.class)
+                .setParameter("roomId", runningRoomId.value())
+                .setParameter("userId", userId.value())
+                .getResultStream()
+                .findFirst();
+    }
+
+    @Override
+    public List<RunningSplitRow> loadSplits(RunningRoomId runningRoomId) {
+        // 방의 모든 기록에 딸린 구간을 한 번에 긁는다 — 참가자·구간별로 나눠 부르면 수백 번 나간다.
+        // 참가자 구분은 record.userId로 하고, 묶는 것은 핸들러가 splitNumber로 한다
+        return entityManager.createQuery("""
+                        select new com.runiverse.running_service.application.running.port.out.RunningSplitRow(
+                            record.userId, split.splitNumber, split.distance, split.duration,
+                            split.avgPace, split.avgCadence, split.elevationChange, split.calories,
+                            split.routeStartIndex, split.routeEndIndex)
+                        from RunningSplitJpaEntity split
+                        join split.record record
+                        where record.room.runningRoomId = :roomId
+                        order by split.splitNumber, record.userId
+                        """, RunningSplitRow.class)
+                .setParameter("roomId", runningRoomId.value())
+                .getResultList();
+    }
+
+    private RunningResultPlayer toResultPlayer(RunningPlayerJpaEntity player,
+                                               RunningRecordJpaEntity record) {
+        // 아직 안 끝난 참가자 — 사용자 정보와 status만 채워 "기록 없음"으로 보낸다(api-spec 6-1)
+        if (record == null) {
+            return new RunningResultPlayer(player.getUserId(), player.getStatus(),
+                    null, null, null, null, null, null);
+        }
+        return new RunningResultPlayer(
+                player.getUserId(),
+                player.getStatus(),
+                record.getTotalDistance(),
+                record.getTotalDuration(),
+                record.getTotalCalories(),
+                record.getAvgPace(),
+                record.getAvgCadence(),
+                record.getTotalElevationGain());
     }
 
     private List<RunningRoomSessionJpaEntity> loadSessions(RunningRoomJpaEntity room) {

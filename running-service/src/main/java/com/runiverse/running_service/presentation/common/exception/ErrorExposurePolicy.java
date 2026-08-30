@@ -40,10 +40,11 @@ public final class ErrorExposurePolicy {
             AuthErrorCode.TOO_MANY_VERIFICATION_ATTEMPTS.getCode(),
             AuthErrorCode.EMAIL_NOT_VERIFIED.getCode(),
             AuthErrorCode.EMAIL_SEND_FAILED.getCode(),
-            RunningErrorCode.RUNNING_ALREADY_IN_PROGRESS.getCode()
-            // ROOM_NOT_FOUND·NOT_ROOM_PLAYER·INVALID_ROOM_STATE는 넣지 않는다 —
-            // WS ERROR 메시지로만 나가고 REST 응답에는 실리지 않는다.
-            // REST 엔드포인트가 이 코드를 던지게 되면 그때 함께 추가한다
+            RunningErrorCode.RUNNING_ALREADY_IN_PROGRESS.getCode(),
+            // 6-1이 이 코드를 REST로 던진다 — 방 참가자가 아니면 403으로 그대로 나간다
+            RunningErrorCode.NOT_ROOM_PLAYER.getCode()
+            // ROOM_NOT_FOUND·INVALID_ROOM_STATE는 아직 WS ERROR 메시지로만 나간다.
+            // 6-1의 404는 ResourceErrorCode.NOT_FOUND를 쓴다(api-spec 6-1)
     );
 
     private ErrorExposurePolicy() {

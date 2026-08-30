@@ -4,8 +4,10 @@ import com.runiverse.running_service.application.auth.port.out.CheckEmailDuplica
 import com.runiverse.running_service.application.auth.port.out.LoadUserByEmailPort;
 import com.runiverse.running_service.application.auth.port.out.LoadUserByProviderPort;
 import com.runiverse.running_service.application.auth.port.out.SaveUserPort;
+import com.runiverse.running_service.application.running.port.out.LoadPlayerProfilesPort;
 import com.runiverse.running_service.application.running.port.out.LoadUserAvgPacePort;
 import com.runiverse.running_service.application.running.port.out.LoadUserWeightPort;
+import com.runiverse.running_service.application.running.port.out.PlayerProfile;
 import com.runiverse.running_service.application.user.exception.NicknameAlreadyExistsException;
 import com.runiverse.running_service.application.user.exception.OnboardingNotCompletedException;
 import com.runiverse.running_service.application.user.exception.UserNotFoundException;
@@ -41,8 +43,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
@@ -50,7 +56,7 @@ public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUser
         LoadUserByProviderPort, LoadUserByIdPort, ExistsOnboardingPort, CheckNicknameDuplicatePort, SaveOnboardingPort,
         UpdateProfileImagePort, ClearProfileImagePort, LoadNicknamePort, UpdateNicknamePort,
         UpdatePasswordPort, LoadUserAvgPacePort, UpdateIntroductionPort, UpdateOnboardingPort, LoadUserWeightPort,
-        LoadOnboardingProfilePort {
+        LoadOnboardingProfilePort, LoadPlayerProfilesPort {
 
     private final EntityManager entityManager;
 
@@ -190,6 +196,27 @@ public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUser
                 .setParameter("userId", userId.value())
                 .getResultStream()
                 .findFirst();
+    }
+
+    @Override
+    public Map<UUID, PlayerProfile> loadProfiles(Collection<UUID> userIds) {
+        // in ()는 문법 오류다 — 빈 목록은 쿼리 없이 끝낸다
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+        // 닉네임은 users가 아니라 user_onboarding에 있다.
+        // 탈퇴자는 users 행이 지워져 결과에서 빠지고, 호출자가 그것으로 탈퇴를 판정한다
+        return entityManager.createQuery("""
+                        select new com.runiverse.running_service.application.running.port.out.PlayerProfile(
+                            userEntity.userId, onboarding.nickname, userEntity.profileImageKey)
+                        from UserJpaEntity userEntity
+                        join UserOnboardingJpaEntity onboarding
+                            on onboarding.userId = userEntity.userId
+                        where userEntity.userId in :userIds
+                        """, PlayerProfile.class)
+                .setParameter("userIds", userIds)
+                .getResultStream()
+                .collect(Collectors.toMap(PlayerProfile::userId, profile -> profile));
     }
 
     private User toDomain(UserJpaEntity entity) {
