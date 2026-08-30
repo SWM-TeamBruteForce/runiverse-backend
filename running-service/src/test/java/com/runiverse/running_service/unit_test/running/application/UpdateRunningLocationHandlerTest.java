@@ -263,4 +263,20 @@ public class UpdateRunningLocationHandlerTest {
         verify(saveRunningDistancePort, never()).saveDistance(anyLong(), any(), any());
         verify(publishRunningProgressPort, never()).publish(anyLong(), any());
     }
+
+    @Test
+    @DisplayName("누적 거리 읽기에 실패하면 좌표만 저장하고 거리 갱신·발행을 건너뛴다")
+    void skipsProgressWhenDistanceLoadFails() {
+        // given -> 못 읽은 것을 빈 값으로 이어가면 저장이 성공하는 순간 살아 있는 누적이 덮인다
+        given(loadRunningDistancePort.loadDistance(anyLong(), any()))
+                .willThrow(new RuntimeException("redis down"));
+
+        // when -> 진행 표시는 요청을 죽일 일이 아니다 — 예외가 밖으로 나가면 안 된다
+        updateRunningLocationHandler.handle(command(List.of(trackPoint(0L))));
+
+        // then
+        verify(appendRunningTrackPort).append(anyLong(), any(), anyList());
+        verify(saveRunningDistancePort, never()).saveDistance(anyLong(), any(), any());
+        verify(publishRunningProgressPort, never()).publish(anyLong(), any());
+    }
 }

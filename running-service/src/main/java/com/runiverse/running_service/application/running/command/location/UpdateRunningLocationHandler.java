@@ -28,9 +28,15 @@ public class UpdateRunningLocationHandler implements UpdateRunningLocationUsecas
         UserId userId = new UserId(command.userId());
         // 좌표 저장이 먼저다 — 여기서 던지면 진행 통지도 건너뛰고 클라가 ERROR를 받는다
         appendRunningTrackPort.append(command.runningRoomId(), userId, command.points());
-        RunningDistance updated = RunningDistanceAccumulator.accumulate(
-                loadRunningDistancePort.loadDistance(command.runningRoomId(), userId),
-                command.points());
+        RunningDistance stored;
+        try {
+            stored = loadRunningDistancePort.loadDistance(command.runningRoomId(), userId);
+        } catch (RuntimeException e) {
+            // 누적을 못 읽으면 이번 배치의 진행 표시만 거른다 — 좌표는 이미 저장됐고 저장된 누적도 그대로다.
+            // 건너뛴 배치의 곡선은 다음 배치가 직선으로 이어 라이브 표시에서만 빠진다 — 최종 기록이 바로잡는다
+            return;
+        }
+        RunningDistance updated = RunningDistanceAccumulator.accumulate(stored, command.points());
         saveRunningDistancePort.saveDistance(command.runningRoomId(), userId, updated);
         publishRunningProgressPort.publish(command.runningRoomId(), new RunningProgress(
                 command.userId(),
