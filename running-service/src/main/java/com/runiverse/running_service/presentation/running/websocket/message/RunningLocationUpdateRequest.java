@@ -8,9 +8,11 @@ import java.util.List;
 public record RunningLocationUpdateRequest(List<Location> locations) {
 
     public boolean isValid() {
+        // 원소가 null이면 메서드 참조가 NPE로 터진다 — 이 검사는 핸들러 try 밖이라
+        // 검증 실패 응답이 아니라 서버 오류로 연결이 끊긴다(1011). 잘못된 요청은 ERROR로 알리고 연결은 유지한다
         return locations != null
                 && !locations.isEmpty()
-                && locations.stream().allMatch(Location::isValid);
+                && locations.stream().allMatch(location -> location != null && location.isValid());
     }
 
     public record Location(

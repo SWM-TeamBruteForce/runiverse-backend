@@ -597,6 +597,24 @@ class RunningWebSocketHandlerTest {
     }
 
     @Test
+    @DisplayName("locations에 null 원소가 섞여도 연결을 끊지 않고 INVALID_REQUEST로 거부한다")
+    void rejectsNullLocationElement() throws Exception {
+        // given
+        given(startRunningUsecase.handle(any())).willReturn(new StartRunningResult(ROOM_ID, TARGET_DISTANCE_METERS));
+        handler.handleMessage(session, runningStart("""
+                {"runningRoomId":125}"""));
+
+        // when -> 실행으로 재현된 적 있는 페이로드다. 가드가 없으면 검증 자체가 NPE로 터져 연결이 끊긴다
+        handler.handleMessage(session, locationUpdate("""
+                {"locations":[null]}"""));
+
+        // then
+        assertThatError(captureLastSent(session), "INVALID_REQUEST", "RUNNING_LOCATION_UPDATE");
+        verifyNoInteractions(appendRunningTrackPort);
+        verify(session, never()).close(any());
+    }
+
+    @Test
     @DisplayName("RUNNING_START가 실패하면 방을 기억하지 않아 이어진 좌표도 거부한다")
     void doesNotRememberRoomWhenStartFails() throws Exception {
         // given
