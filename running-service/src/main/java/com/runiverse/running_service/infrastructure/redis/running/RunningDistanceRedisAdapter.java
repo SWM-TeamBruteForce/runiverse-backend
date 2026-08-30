@@ -68,7 +68,8 @@ public class RunningDistanceRedisAdapter implements LoadRunningDistancePort, Sav
             redisTemplate.opsForValue().set(
                     distanceKey(runningRoomId, userId), raw, properties.ttl());
         } catch (RuntimeException e) {
-            // 저장에 실패하면 다음 배치가 이전 누적부터 다시 더한다 — 거리가 잠깐 뒤처질 뿐이다
+            // 저장에 실패하면 다음 배치가 이전 누적에서 이어 간다 — 실패 배치의 곡선은
+            // 라이브 표시에서 빠지고(다음 배치가 직선으로 잇는다) 최종 기록이 바로잡는다
             log.warn("러닝 누적 거리 저장 실패 — roomId={}, userId={}", runningRoomId, userId, e);
         }
     }

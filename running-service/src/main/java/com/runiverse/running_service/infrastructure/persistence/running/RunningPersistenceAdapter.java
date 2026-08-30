@@ -240,7 +240,7 @@ public class RunningPersistenceAdapter implements CreateRunningPlayerPort, Creat
 
     @Override
     public Optional<RunningResultRecord> loadRecord(RunningRoomId runningRoomId, UserId userId) {
-        // 폴리라인만 있으면 되므로 엔티티를 통째로 읽지 않는다 — 세 컬럼만 가져온다
+        // 엔티티를 통째로 읽지 않는다 — 응답에 필요한 컬럼만 가져온다
         return entityManager.createQuery("""
                         select new com.runiverse.running_service.application.running.port.out.RunningResultRecord(
                             record.routePolyline, record.startAt, record.endAt, record.totalDistance, record.totalElevationGain)

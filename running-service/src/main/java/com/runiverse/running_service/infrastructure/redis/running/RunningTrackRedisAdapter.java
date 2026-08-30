@@ -140,7 +140,7 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
     }
 
     // compact()의 역방향 — 자리 순서가 계약이다.
-    // 저장 배열은 [순번,위도,경도,고도,정확도,...]인데 TrackPoint 생성자는 정확도가 고도보다 앞이다
+    // TrackPoint 레코드의 필드 선언 순서가 배열 자리 순서와 같아 자리대로 읽으면 된다
     private List<TrackPoint> parse(String raw) {
         List<TrackPoint> points = new ArrayList<>();
         Matcher matcher = POINT.matcher(raw);
@@ -149,9 +149,9 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
             points.add(new TrackPoint(
                     Long.parseLong(fields[0]),          // 순번
                     Double.parseDouble(fields[1]),      // 위도
-                    Double.parseDouble(fields[2]),
-                    toDouble(fields[3]),// 경도
-                    Double.parseDouble(fields[4]),      // 정확도 ← 배열 5번째// 고도   ← 배열 4번째
+                    Double.parseDouble(fields[2]),      // 경도
+                    toDouble(fields[3]),                // 고도 — 못 잰 값은 null
+                    Double.parseDouble(fields[4]),      // 정확도
                     toDouble(fields[5]),
                     toDouble(fields[6]),
                     toInteger(fields[7]),
