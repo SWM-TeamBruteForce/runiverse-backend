@@ -30,7 +30,8 @@ public class WeatherAdapter implements LoadWeatherPort {
                 break; // 값이 없는 응답은 재시도해도 같다
             } catch (HttpClientErrorException e) {
                 // 잘못된 좌표·파라미터는 400으로 온다 — 같은 요청을 되풀이할 이유가 없다
-                log.warn("날씨 요청이 거부됐다: lat={}, lon={}", latitude, longitude, e);
+                // 좌표는 러닝 시작 지점(위치 개인정보)이라 로그에 남기지 않는다 — 원인은 예외 본문이 말해준다
+                log.warn("날씨 요청이 거부됐다", e);
                 break;
             } catch (RestClientException e) {
                 log.warn("날씨 조회 실패 {}/{}", attempt, properties.maxAttempts(), e);
