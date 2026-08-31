@@ -22,8 +22,9 @@ public final class TrackAnalyzer {
                                                   BigDecimal weightKg,
                                                   RunningFinishProperties properties) {
         int interval = properties.splitDistanceMeters();
+        double[] cumulative = TrackDistance.cumulativeMeters(points);
         List<BoundaryPoint> boundaries = TrackResampler.resample(
-                points, TrackDistance.cumulativeMeters(points), targetDistanceMeters, interval);
+                points, cumulative, targetDistanceMeters, interval);
         if (boundaries.size() < 2) {
             return Optional.empty();
         }
@@ -46,11 +47,23 @@ public final class TrackAnalyzer {
                 totalDistance,
                 totalDuration,
                 avgPace,
-                elevationGain(points, properties.elevationNoiseThresholdMeters()),
+                elevationGain(recordedPoints(points, cumulative, totalDistance),
+                        properties.elevationNoiseThresholdMeters()),
                 PolylineEncoder.encode(boundaries),
                 splits.get(0).startAt(),
                 splits.get(splits.size() - 1).endAt(),
                 splits));
+    }
+
+    // 누적 상승도 거리·시간·경로와 같은 절단을 따른다 — 확정 총거리 밖의 실측점은 기록 밖이다.
+    // 경계에 정확히 걸친 실측점까지 포함해야 해서 sourceIndex가 아니라 누적 거리로 자른다
+    private static List<TrackPoint> recordedPoints(List<TrackPoint> points, double[] cumulative,
+                                                   int totalDistanceMeters) {
+        int end = points.size();
+        while (end > 0 && cumulative[end - 1] > totalDistanceMeters) {
+            end--;
+        }
+        return points.subList(0, end);
     }
 
     // 누적 상승은 실측점으로 낸다 — 경계점은 직선 보간이라 오르내림이 뭉개진다.
