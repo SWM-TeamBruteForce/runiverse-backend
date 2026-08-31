@@ -240,8 +240,8 @@ public class GetRunningSplitResultsHandlerTest {
     }
 
     @Test
-    @DisplayName("본인 기록이 없으면 최상위 값이 null이고 구간이 비어 있다")
-    void 본인_기록이_없으면_비어_있다() {
+    @DisplayName("본인 기록이 없으면 최상위 값이 null이고 다른 참가자의 구간은 남는다")
+    void 본인_기록이_없어도_남의_구간은_남는다() {
         // given -> 본인은 아직 뛰는 중이고 상대만 끝냈다
         givenRoomAndPlayers();
         when(loadRunningSplitsPort.loadSplits(any())).thenReturn(List.of(split(OTHER, 1, 0, 2)));

@@ -326,7 +326,7 @@ public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUser
 
     @Override
     public Optional<Pace> loadAvgPace(UserId userId) {
-        // 온보딩 완료 = user_onboardings row 존재 (erd.md §user_onboardings).
+        // 온보딩 완료 = user_onboardings row 존재.
         // row가 없으면 빈 Optional — 핸들러가 ONBOARDING_NOT_COMPLETED로 바꾼다
         return entityManager.createQuery(
                         """

@@ -29,14 +29,19 @@ public class RunningRoomMemberRegistry implements LoadRunningRoomMembersPort {
     }
 
     // 그 방의 첫 참가자를 받았으면 방 번호 — 그때만 구독하면 된다.
-    // 판정을 compute 안에서 해야 다른 스레드가 끼어들어도 한 번만 나온다
+    // 판정만이 아니라 add까지 compute 안이어야 한다 — 밖에 있으면 마지막 퇴장이
+    // 비운 Set을 지우는 사이에 끼어들어, 지워진 Set에 이름만 쓰고 명부에선 사라진다
     public Optional<Long> join(UserId userId, Long runningRoomId) {
         roomByUser.put(userId, runningRoomId);
         AtomicBoolean first = new AtomicBoolean();
-        usersByRoom.computeIfAbsent(runningRoomId, key -> {
-            first.set(true);
-            return ConcurrentHashMap.newKeySet();
-        }).add(userId);
+        usersByRoom.compute(runningRoomId, (key, users) -> {
+            if (users == null) {
+                first.set(true);
+                users = ConcurrentHashMap.newKeySet();
+            }
+            users.add(userId);
+            return users;
+        });
         return first.get() ? Optional.of(runningRoomId) : Optional.empty();
     }
 

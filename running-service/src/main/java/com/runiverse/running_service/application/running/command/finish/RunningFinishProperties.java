@@ -10,7 +10,7 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "running-finish")
 @Validated
 public record RunningFinishProperties(
-        // 확정 거리 ÷ 목표 거리가 이 값 미만이면 RUNNING_LEFT_PENALTY (feature-spec §2)
+        // 확정 거리 ÷ 목표 거리가 이 값 미만이면 RUNNING_LEFT_PENALTY
         @NotNull @DecimalMin("0.0") @DecimalMax("1.0") Double penaltyDistanceRatio,
         @NotNull @Positive Integer splitDistanceMeters,
         // 둘 중 하나라도 못 넘기면 기록 없이 상태만 확정한다

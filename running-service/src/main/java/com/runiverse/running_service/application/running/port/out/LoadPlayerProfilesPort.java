@@ -8,6 +8,6 @@ import java.util.UUID;
 public interface LoadPlayerProfilesPort {
 
     // 탈퇴자는 users 행이 지워져 결과에서 빠진다 —
-    // 호출자가 "없으면 탈퇴"로 판정한다(api-spec §0 탈퇴 유저 표시)
+    // 호출자가 "없으면 탈퇴"로 판정한다
     Map<UUID, PlayerProfile> loadProfiles(Collection<UUID> userIds);
 }

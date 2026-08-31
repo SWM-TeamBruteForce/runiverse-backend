@@ -29,9 +29,10 @@ public class RunningDistanceRedisAdapter implements LoadRunningDistancePort, Sav
         try {
             raw = redisTemplate.opsForValue().get(distanceKey(runningRoomId, userId));
         } catch (RuntimeException e) {
-            // 거리를 못 읽어도 좌표 저장은 이미 끝났다 — 이번 통지만 0으로 나가고 다음 배치가 복구한다
+            // 읽기 실패를 빈 값으로 위장하면 안 된다 — 이어지는 저장이 성공하는 순간
+            // 살아 있는 누적이 이번 배치 값으로 덮이고, 순번 스킵 때문에 이후 배치가 되돌리지 못한다
             log.warn("러닝 누적 거리 조회 실패 — roomId={}, userId={}", runningRoomId, userId, e);
-            return RunningDistance.empty();
+            throw e;
         }
         if (raw == null) {
             return RunningDistance.empty();   // 첫 배치
@@ -42,11 +43,17 @@ public class RunningDistanceRedisAdapter implements LoadRunningDistancePort, Sav
             log.warn("러닝 누적 거리 형식 불일치 — roomId={}, userId={}", runningRoomId, userId);
             return RunningDistance.empty();
         }
-        return new RunningDistance(
-                Double.parseDouble(fields[0]),
-                Long.parseLong(fields[1]),
-                toDouble(fields[2]),
-                toDouble(fields[3]));
+        try {
+            return new RunningDistance(
+                    Double.parseDouble(fields[0]),
+                    Long.parseLong(fields[1]),
+                    toDouble(fields[2]),
+                    toDouble(fields[3]));
+        } catch (NumberFormatException e) {
+            // 깨진 값은 다시 읽어도 같다 — 형식 불일치와 같은 폴백으로 처음부터 센다
+            log.warn("러닝 누적 거리 값 손상 — roomId={}, userId={}", runningRoomId, userId);
+            return RunningDistance.empty();
+        }
     }
 
     @Override
@@ -61,7 +68,8 @@ public class RunningDistanceRedisAdapter implements LoadRunningDistancePort, Sav
             redisTemplate.opsForValue().set(
                     distanceKey(runningRoomId, userId), raw, properties.ttl());
         } catch (RuntimeException e) {
-            // 저장에 실패하면 다음 배치가 이전 누적부터 다시 더한다 — 거리가 잠깐 뒤처질 뿐이다
+            // 저장에 실패하면 다음 배치가 이전 누적에서 이어 간다 — 실패 배치의 곡선은
+            // 라이브 표시에서 빠지고(다음 배치가 직선으로 잇는다) 최종 기록이 바로잡는다
             log.warn("러닝 누적 거리 저장 실패 — roomId={}, userId={}", runningRoomId, userId, e);
         }
     }

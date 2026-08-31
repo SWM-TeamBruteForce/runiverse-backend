@@ -1,6 +1,7 @@
 package com.runiverse.running_service.application.running.command.finish;
 
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
+import com.runiverse.running_service.domain.running.metric.vo.ElevationGain;
 import com.runiverse.running_service.domain.running.metric.vo.Pace;
 import com.runiverse.running_service.domain.running.record.SplitDraft;
 
@@ -9,7 +10,7 @@ import java.util.List;
 import java.util.Optional;
 
 // 실측 트랙 하나를 기록에 넣을 값들로 바꾼다.
-// 결과가 비면 "거리·시간·경로를 산출할 수 없는 트랙"이라 기록 없이 상태만 확정한다(api-spec 5-D).
+// 결과가 비면 "거리·시간·경로를 산출할 수 없는 트랙"이라 기록 없이 상태만 확정한다.
 public final class TrackAnalyzer {
 
     private static final int METERS_PER_KM = 1_000;
@@ -21,8 +22,9 @@ public final class TrackAnalyzer {
                                                   BigDecimal weightKg,
                                                   RunningFinishProperties properties) {
         int interval = properties.splitDistanceMeters();
+        double[] cumulative = TrackDistance.cumulativeMeters(points);
         List<BoundaryPoint> boundaries = TrackResampler.resample(
-                points, TrackDistance.cumulativeMeters(points), targetDistanceMeters, interval);
+                points, cumulative, targetDistanceMeters, interval);
         if (boundaries.size() < 2) {
             return Optional.empty();
         }
@@ -45,22 +47,34 @@ public final class TrackAnalyzer {
                 totalDistance,
                 totalDuration,
                 avgPace,
-                elevationGain(points, properties.elevationNoiseThresholdMeters()),
+                elevationGain(recordedPoints(points, cumulative, totalDistance),
+                        properties.elevationNoiseThresholdMeters()),
                 PolylineEncoder.encode(boundaries),
                 splits.get(0).startAt(),
                 splits.get(splits.size() - 1).endAt(),
                 splits));
     }
 
+    // 누적 상승도 거리·시간·경로와 같은 절단을 따른다 — 확정 총거리 밖의 실측점은 기록 밖이다.
+    // 경계에 정확히 걸친 실측점까지 포함해야 해서 sourceIndex가 아니라 누적 거리로 자른다
+    private static List<TrackPoint> recordedPoints(List<TrackPoint> points, double[] cumulative,
+                                                   int totalDistanceMeters) {
+        int end = points.size();
+        while (end > 0 && cumulative[end - 1] > totalDistanceMeters) {
+            end--;
+        }
+        return points.subList(0, end);
+    }
+
     // 누적 상승은 실측점으로 낸다 — 경계점은 직선 보간이라 오르내림이 뭉개진다.
-    // 구간의 순고도차(끝 − 시작)와 달리 올라간 것만 더하므로 구간 합과 일치하지 않는다(erd.md)
+    // 구간의 순고도차(끝 − 시작)와 달리 올라간 것만 더하므로 구간 합과 일치하지 않는다
     private static Integer elevationGain(List<TrackPoint> points, double noiseThresholdMeters) {
         Double previous = null;
         double gain = 0;
         int samples = 0;
         for (TrackPoint point : points) {
             Double altitude = point.altitudeMeters();
-            if (altitude == null) {
+            if (altitude == null || !Double.isFinite(altitude)) {
                 continue;
             }
             samples++;
@@ -69,6 +83,11 @@ public final class TrackAnalyzer {
             }
             previous = altitude;
         }
-        return samples < 2 ? null : (int) Math.round(gain);
+        if (samples < 2) {
+            return null;
+        }
+        // 캐스트로 자르기 전에 long으로 검사한다 — 글리치가 만든 초과 상승은 측정 실패와 같다
+        long rounded = Math.round(gain);
+        return ElevationGain.isValid(rounded) ? (int) rounded : null;
     }
 }

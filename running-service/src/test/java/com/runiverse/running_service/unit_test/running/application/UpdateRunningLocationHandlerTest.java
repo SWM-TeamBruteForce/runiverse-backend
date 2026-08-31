@@ -177,7 +177,7 @@ public class UpdateRunningLocationHandlerTest {
     @Test
     @DisplayName("이미 반영한 순번은 다시 더하지 않는다")
     void skipsAlreadyAccumulatedSequences() {
-        // given -> 재연결하면 클라는 로컬 트랙 전체를 순번 0부터 다시 보낸다(api-spec 5-D).
+        // given -> 재연결하면 클라는 로컬 트랙 전체를 순번 0부터 다시 보낸다.
         // 그대로 더하면 거리가 두 배가 된다
         TrackPoint previous = trackPoint(2L);
         RunningDistance stored =
@@ -208,7 +208,7 @@ public class UpdateRunningLocationHandlerTest {
         assertThat(published.userId()).isEqualTo(USER_ID);
         assertThat(published.targetDistanceMeters()).isEqualTo(TARGET_DISTANCE_METERS);
         assertThat(published.distanceMeters()).isEqualTo(captureSaved().metersRounded());
-        // RUNNING_PAUSE/RESUME 구현 전까지 항상 false다(api-spec 5-D)
+        // TODO: 일시정지 고정값 — RUNNING_PAUSE/RESUME을 만들 때 실제 상태 검증으로 교체한다
         assertThat(published.paused()).isFalse();
     }
 
@@ -239,7 +239,7 @@ public class UpdateRunningLocationHandlerTest {
     @Test
     @DisplayName("목표 없는 방이면 목표 거리를 null로 싣는다")
     void publishesNullTargetForRoomWithoutGoal() {
-        // given -> 솔로 방은 target_distance가 nullable이다(erd.md)
+        // given -> 솔로 방은 target_distance가 nullable이다
         // when
         updateRunningLocationHandler.handle(
                 new UpdateRunningLocationCommand(USER_ID, ROOM_ID, null, List.of(trackPoint(0L))));
@@ -255,11 +255,27 @@ public class UpdateRunningLocationHandlerTest {
         willThrow(new RunningTrackUnavailableException())
                 .given(appendRunningTrackPort).append(anyLong(), any(), anyList());
 
-        // when & then -> 예외는 그대로 나가야 클라가 ERROR를 받는다(api-spec 5-D)
+        // when & then -> 예외는 그대로 나가야 클라가 ERROR를 받는다
         assertThatThrownBy(() -> updateRunningLocationHandler.handle(
                 command(List.of(trackPoint(0L)))))
                 .isInstanceOf(RunningTrackUnavailableException.class);
         verify(loadRunningDistancePort, never()).loadDistance(anyLong(), any());
+        verify(saveRunningDistancePort, never()).saveDistance(anyLong(), any(), any());
+        verify(publishRunningProgressPort, never()).publish(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("누적 거리 읽기에 실패하면 좌표만 저장하고 거리 갱신·발행을 건너뛴다")
+    void skipsProgressWhenDistanceLoadFails() {
+        // given -> 못 읽은 것을 빈 값으로 이어가면 저장이 성공하는 순간 살아 있는 누적이 덮인다
+        given(loadRunningDistancePort.loadDistance(anyLong(), any()))
+                .willThrow(new RuntimeException("redis down"));
+
+        // when -> 진행 표시는 요청을 죽일 일이 아니다 — 예외가 밖으로 나가면 안 된다
+        updateRunningLocationHandler.handle(command(List.of(trackPoint(0L))));
+
+        // then
+        verify(appendRunningTrackPort).append(anyLong(), any(), anyList());
         verify(saveRunningDistancePort, never()).saveDistance(anyLong(), any(), any());
         verify(publishRunningProgressPort, never()).publish(anyLong(), any());
     }

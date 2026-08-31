@@ -21,6 +21,7 @@ import com.runiverse.running_service.application.running.port.out.SaveRunningDis
 import com.runiverse.running_service.application.running.port.out.RunningSessionPort;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.domain.running.metric.exception.CadenceOutOfRangeException;
 import com.runiverse.running_service.application.running.port.out.RunningRoomMembershipPort;
 import com.runiverse.running_service.infrastructure.websocket.RunningSessionRegistryAdapter;
 import com.runiverse.running_service.presentation.common.security.JwtHandshakeInterceptor;
@@ -168,7 +169,7 @@ class RunningWebSocketHandlerTest {
                 "accuracyMeters":6.2,"recordedAt":"2026-07-25T19:10:30"}""".formatted(sequence);
     }
 
-    // api-spec 5-D의 좌표 한 개 — 단말이 모두 측정한 정상 배치.
+    // 위치 배치의 좌표 한 개 — 단말이 모두 측정한 정상 배치.
     // Long.MAX_VALUE까지 실어 보낼 수 있어야 커서를 끝으로 미는 좌표를 재현한다
     private static String point(long sequence) {
         return """
@@ -358,7 +359,7 @@ class RunningWebSocketHandlerTest {
     @Test
     @DisplayName("목표 거리가 없는 솔로 방도 RUNNING_STARTED로 응답한다")
     void respondsRunningStartedForRoomWithoutTarget() throws Exception {
-        // given -> 솔로 방은 target_distance가 nullable이다(erd.md).
+        // given -> 솔로 방은 target_distance가 nullable이다.
         // 세션 attribute는 ConcurrentHashMap이라 null을 그대로 넣으면 NPE가 나고,
         // 그 예외가 핸들러 밖으로 새면 Spring이 세션을 1011로 닫는다
         given(startRunningUsecase.handle(any())).willReturn(new StartRunningResult(ROOM_ID, null));
@@ -390,7 +391,7 @@ class RunningWebSocketHandlerTest {
     @Test
     @DisplayName("RUNNING_START 없이 좌표를 보내면 RUNNING_NOT_STARTED로 응답하고 적재하지 않는다")
     void rejectsLocationBeforeStart() throws Exception {
-        // when -> 방은 RUNNING_START가 정한다(api-spec 5-D). 세션에 방이 없으면 쓸 곳을 모른다
+        // when -> 방은 RUNNING_START가 정한다. 세션에 방이 없으면 쓸 곳을 모른다
         handler.handleMessage(session, locationUpdate("""
                 {"locations":[%s]}""".formatted(point(0))));
 
@@ -464,7 +465,7 @@ class RunningWebSocketHandlerTest {
         handler.handleMessage(session, locationUpdate("""
                 {"locations":[%s]}""".formatted(pointWithoutOptionalFields(0))));
 
-        // then -> 배치 하나가 통째로 사라지면 그 10초가 빈다(api-spec 5-D)
+        // then -> 배치 하나가 통째로 사라지면 그 10초가 빈다
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<TrackPoint>> captor = ArgumentCaptor.forClass(List.class);
         verify(appendRunningTrackPort).append(eq(ROOM_ID), eq(new UserId(USER_ID)), captor.capture());
@@ -547,7 +548,7 @@ class RunningWebSocketHandlerTest {
         handler.handleMessage(session, locationUpdate("""
                 {"locations":[%s]}""".formatted(point(Long.MAX_VALUE))));
 
-        // when -> 클라는 ERROR를 받아도 러닝을 계속하며 다음 배치를 보낸다(api-spec 5-D)
+        // when -> 클라는 ERROR를 받아도 러닝을 계속하며 다음 배치를 보낸다
         handler.handleMessage(session, locationUpdate("""
                 {"locations":[%s,%s]}""".formatted(point(12), point(13))));
 
@@ -561,7 +562,7 @@ class RunningWebSocketHandlerTest {
     @Test
     @DisplayName("좌표 저장에 실패하면 코드로 알리되 러닝을 끊지 않는다")
     void respondsTrackUnavailableWithoutClosing() throws Exception {
-        // given -> 원본은 클라 로컬 트랙에 남아 있어 재연결로 복구된다(api-spec 5-D).
+        // given -> 원본은 클라 로컬 트랙에 남아 있어 재연결로 복구된다.
         // 저장소 장애 하나로 달리는 사람을 끊어서는 안 된다
         given(startRunningUsecase.handle(any())).willReturn(new StartRunningResult(ROOM_ID, TARGET_DISTANCE_METERS));
         handler.handleMessage(session, runningStart("""
@@ -597,6 +598,24 @@ class RunningWebSocketHandlerTest {
     }
 
     @Test
+    @DisplayName("locations에 null 원소가 섞여도 연결을 끊지 않고 INVALID_REQUEST로 거부한다")
+    void rejectsNullLocationElement() throws Exception {
+        // given
+        given(startRunningUsecase.handle(any())).willReturn(new StartRunningResult(ROOM_ID, TARGET_DISTANCE_METERS));
+        handler.handleMessage(session, runningStart("""
+                {"runningRoomId":125}"""));
+
+        // when -> 실행으로 재현된 적 있는 페이로드다. 가드가 없으면 검증 자체가 NPE로 터져 연결이 끊긴다
+        handler.handleMessage(session, locationUpdate("""
+                {"locations":[null]}"""));
+
+        // then
+        assertThatError(captureLastSent(session), "INVALID_REQUEST", "RUNNING_LOCATION_UPDATE");
+        verifyNoInteractions(appendRunningTrackPort);
+        verify(session, never()).close(any());
+    }
+
+    @Test
     @DisplayName("RUNNING_START가 실패하면 방을 기억하지 않아 이어진 좌표도 거부한다")
     void doesNotRememberRoomWhenStartFails() throws Exception {
         // given
@@ -623,7 +642,7 @@ class RunningWebSocketHandlerTest {
         handler.handleMessage(session, runningFinish("""
                 {"forced":false}"""));
 
-        // then -> 클라는 이 ack를 받고 로컬 트랙을 지운 뒤 REST로 결과를 본다(api-spec 5-D)
+        // then -> 클라는 이 ack를 받고 로컬 트랙을 지운 뒤 REST로 결과를 본다
         assertThat(captureLastSent(session).event()).isEqualTo("RUNNING_FINISHED");
         verify(finishRunningUsecase).handle(new FinishRunningCommand(ROOM_ID, USER_ID, false));
     }
@@ -769,6 +788,55 @@ class RunningWebSocketHandlerTest {
         verify(target, atLeastOnce()).sendMessage(captor.capture());
         List<TextMessage> sent = captor.getAllValues();
         return jsonMapper.readValue(sent.get(sent.size() - 1).getPayload(), WebSocketEnvelope.class);
+    }
+
+    @Test
+    @DisplayName("본문이 JSON null이면 MISSING_MESSAGE_TYPE으로 응답한다")
+    void respondsMissingMessageTypeOnNullBody() throws Exception {
+        // when -> 파싱은 성공하지만 봉투 자체가 없다 — 형식 오류지 서버 오류가 아니다
+        handler.handleMessage(session, text("null"));
+
+        // then
+        assertThatError(captureSent(), "MISSING_MESSAGE_TYPE", null);
+        verify(session, never()).close(any());
+    }
+
+    @Test
+    @DisplayName("도메인 예외가 새도 연결을 끊지 않고 INTERNAL_SERVER_ERROR로 마스킹한다")
+    void masksLeakedDomainException() throws Exception {
+        // given -> 선검사를 지나친 도메인 검증 예외 — 위생처리가 못 거른 미지의 독을 흉내 낸다
+        given(startRunningUsecase.handle(any())).willReturn(new StartRunningResult(ROOM_ID, TARGET_DISTANCE_METERS));
+        handler.handleMessage(session, runningStart("""
+                {"runningRoomId":125}"""));
+        willThrow(new CadenceOutOfRangeException())
+                .given(finishRunningUsecase).handle(any());
+
+        // when
+        handler.handleMessage(session, runningFinish("""
+                {"forced":false}"""));
+
+        // then -> 내부 코드·문구를 흘리지 않는다
+        assertThatError(captureLastSent(session), "INTERNAL_SERVER_ERROR", "RUNNING_FINISH");
+        verify(session, never()).close(any());
+    }
+
+    @Test
+    @DisplayName("인프라 런타임 예외가 새도 연결을 끊지 않고 INTERNAL_SERVER_ERROR로 응답한다")
+    void masksLeakedRuntimeException() throws Exception {
+        // given
+        given(startRunningUsecase.handle(any())).willReturn(new StartRunningResult(ROOM_ID, TARGET_DISTANCE_METERS));
+        handler.handleMessage(session, runningStart("""
+                {"runningRoomId":125}"""));
+        willThrow(new RuntimeException("s3 down"))
+                .given(finishRunningUsecase).handle(any());
+
+        // when
+        handler.handleMessage(session, runningFinish("""
+                {"forced":false}"""));
+
+        // then
+        assertThatError(captureLastSent(session), "INTERNAL_SERVER_ERROR", "RUNNING_FINISH");
+        verify(session, never()).close(any());
     }
 
     private void assertThatError(WebSocketEnvelope sent, String code, String sourceType) {

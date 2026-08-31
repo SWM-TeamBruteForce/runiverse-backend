@@ -12,4 +12,9 @@ public record ElevationGain(int meters) {
             throw new ElevationGainOutOfRangeException();
         }
     }
+
+    // 캐스트로 자르기 전에 long으로 묻는다 — 오버플로가 정상 범위로 래핑돼 검증을 우회하지 못하게
+    public static boolean isValid(long meters) {
+        return meters >= MIN && meters <= MAX;
+    }
 }

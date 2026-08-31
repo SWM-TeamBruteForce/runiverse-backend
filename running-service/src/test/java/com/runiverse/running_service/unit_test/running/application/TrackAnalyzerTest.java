@@ -67,7 +67,7 @@ public class TrackAnalyzerTest {
         // given
         TrackAnalysis analysis = analyze(track(1_800, 2.8, null));
 
-        // then -> erd.md가 total_duration을 구간 duration의 합으로 정의한다
+        // then -> total_duration은 구간 duration의 합이다
         assertThat(analysis.totalDurationSeconds())
                 .isEqualTo(analysis.splits().stream().mapToInt(SplitDraft::duration).sum());
     }
@@ -119,18 +119,69 @@ public class TrackAnalyzerTest {
     @Test
     @DisplayName("임계값을 넘는 상승만 누적한다")
     void accumulatesOnlyRisesAboveThreshold() {
-        // given -> 초당 5m씩 200초 오르막. 임계값 3m를 넘으므로 전부 쌓인다
+        // given -> 처음 190점은 초당 5m씩 오르막, 나머지는 평지 — 절단 위치와 무관하게 임계값만 본다
         List<TrackPoint> points = new ArrayList<>();
         for (int i = 0; i < 200; i++) {
-            points.add(point(i, 37.5 + i * 2.8 / METERS_PER_DEGREE, 10.0 + i * 5.0,
+            double altitude = i < 190 ? 10.0 + i * 5.0 : 10.0 + 189 * 5.0;
+            points.add(point(i, 37.5 + i * 2.8 / METERS_PER_DEGREE, altitude,
                     START.plusSeconds(i)));
         }
 
         // when
         TrackAnalysis analysis = analyze(points);
 
-        // then -> 199번 오르며 5m씩 = 995m
-        assertThat(analysis.totalElevationGainMeters()).isEqualTo(995);
+        // then -> 189번 오르며 5m씩 = 945m
+        assertThat(analysis.totalElevationGainMeters()).isEqualTo(945);
+    }
+
+    @Test
+    @DisplayName("누적 상승은 마지막 경계까지만 센다")
+    void elevationGainStopsAtLastBoundary() {
+        // given -> 총 ~557m라 기록은 550m 경계에서 끝난다. 경계 안(190~195)과
+        //          꼬리(198~)에 오르막을 하나씩 두면 절단이 어느 쪽으로 어긋나도 걸린다
+        List<TrackPoint> points = new ArrayList<>();
+        for (int i = 0; i < 200; i++) {
+            double altitude;
+            if (i < 190) {
+                altitude = 10.0;
+            } else if (i < 196) {
+                altitude = 10.0 + (i - 189) * 5.0;   // 경계 안 오르막 +30m
+            } else if (i < 198) {
+                altitude = 40.0;
+            } else {
+                altitude = 40.0 + (i - 197) * 5.0;   // 꼬리 오르막 +10m
+            }
+            points.add(point(i, 37.5 + i * 2.8 / METERS_PER_DEGREE, altitude,
+                    START.plusSeconds(i)));
+        }
+
+        // when
+        TrackAnalysis analysis = analyze(points);
+
+        // then -> 경계 안 상승 30m만 남고 꼬리 상승 10m는 기록 밖이다
+        assertThat(analysis.totalDistanceMeters()).isEqualTo(550);
+        assertThat(analysis.totalElevationGainMeters()).isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("목표 이후의 상승은 누적 상승에 넣지 않는다")
+    void elevationGainExcludesClimbBeyondTarget() {
+        // given -> 목표(5,000m)까지는 평지, 목표를 확실히 지난 지점부터 가파르게 오른다.
+        //          명목 거리(i×2.8)와 실측 거리의 오차가 경계를 넘지 않게 +20m 여유를 둔다
+        List<TrackPoint> points = new ArrayList<>();
+        for (int i = 0; i < 1_800; i++) {
+            double meters = i * 2.8;
+            double altitude = meters < TARGET + 20 ? 10.0 : 10.0 + (meters - TARGET - 20) * 2.0;
+            points.add(point(i, 37.5 + meters / METERS_PER_DEGREE, altitude,
+                    START.plusSeconds(i)));
+        }
+
+        // when
+        TrackAnalysis analysis = analyze(points);
+
+        // then -> 거리·시간·경로처럼 목표 지점에서 끊는다. 넘긴 뒤의 오르막은 기록 밖이다
+        assertThat(analysis.totalDistanceMeters()).isEqualTo(TARGET);
+        assertThat(analysis.totalElevationGainMeters()).isZero();
     }
 
     @Test
@@ -139,7 +190,7 @@ public class TrackAnalyzerTest {
         // given -> 약 50m (최소 100m 미만)
         List<TrackPoint> points = track(20, 2.8, null);
 
-        // when & then -> 기록 없이 상태만 확정하는 경로다(api-spec 5-D)
+        // when & then -> 기록 없이 상태만 확정하는 경로다
         assertThat(TrackAnalyzer.analyze(points, TARGET, WEIGHT, PROPERTIES)).isEmpty();
     }
 

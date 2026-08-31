@@ -10,7 +10,7 @@ public record GetRunningSplitResultsResult(
         Long runningRoomId,
         // 방 전체가 공유하는 고정 구간 거리 — 운영 설정에서 그대로 나간다
         int splitDistanceMeters,
-        // 아래 넷은 조회하는 본인 기록 기준이다 — 본인 기록이 없으면 null(api-spec 6-2)
+        // 아래 넷은 조회하는 본인 기록 기준이다 — 본인 기록이 없으면 null
         Integer totalDistanceMeters,
         Integer totalElevationGainMeters,
         LocalDateTime startedAt,
@@ -36,7 +36,7 @@ public record GetRunningSplitResultsResult(
             int startDistanceMeters,
             int endDistanceMeters,
             int distanceMeters,
-            // 이 구간의 본인 경로 — 같은 객체의 players가 전원인 것과 다르다(api-spec 6-2)
+            // 이 구간의 본인 경로 — 같은 객체의 players가 전원인 것과 다르다
             List<RoutePoint> routes,
             List<SplitPlayer> players
     ) {

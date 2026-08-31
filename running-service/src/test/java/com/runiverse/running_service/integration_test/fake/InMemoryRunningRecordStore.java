@@ -24,7 +24,7 @@ public class InMemoryRunningRecordStore implements CreateRunningRecordPort {
             throw new IllegalStateException("이미 저장된 기록이다 — 기록은 write-once다");
         }
         Key key = new Key(record.getRunningRoomId().value(), record.getUserId().value());
-        // UNIQUE (running_room_id, user_id) — 유저당 방별 1기록(erd.md).
+        // UNIQUE (running_room_id, user_id) — 유저당 방별 1기록.
         // 종료가 두 번 확정되면 여기서 터진다
         if (records.putIfAbsent(key, record) != null) {
             throw new IllegalStateException("이미 이 방의 기록이 있다");

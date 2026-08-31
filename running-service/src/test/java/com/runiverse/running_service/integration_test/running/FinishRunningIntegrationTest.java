@@ -16,6 +16,8 @@ import com.runiverse.running_service.application.running.port.out.TrackPoint;
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingCommand;
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingHandler;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.runiverse.running_service.domain.running.player.RunningPlayer;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerId;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerStatus;
@@ -127,7 +129,19 @@ public class FinishRunningIntegrationTest extends IntegrationTestSupport {
             points.add(new TrackPoint(i, 37.5 + i * 2.5 / METERS_PER_DEGREE, 127.0,
                     null, 5.0, null, null, 168, null, TRACK_START.plusSeconds(i)));
         }
-        // 솔로 방은 목표 거리가 없다(erd.md: target_distance nullable)
+        // 솔로 방은 목표 거리가 없다
+        updateRunningLocationHandler.handle(
+                new UpdateRunningLocationCommand(userId, runningRoomId, null, points));
+    }
+
+    // 센서 이상값 재현용 — 좌표·정확도는 정상이고 케이던스·고도·시각만 주입한다
+    private static TrackPoint sensorPoint(int i, Integer cadenceSpm, Double altitudeMeters,
+                                          LocalDateTime recordedAt) {
+        return new TrackPoint(i, 37.5 + i * 2.5 / METERS_PER_DEGREE, 127.0,
+                altitudeMeters, 5.0, null, null, cadenceSpm, null, recordedAt);
+    }
+
+    private void runWith(UUID userId, Long runningRoomId, List<TrackPoint> points) {
         updateRunningLocationHandler.handle(
                 new UpdateRunningLocationCommand(userId, runningRoomId, null, points));
     }
@@ -161,7 +175,7 @@ public class FinishRunningIntegrationTest extends IntegrationTestSupport {
         assertThat(storedPlayer(runningRoomId).getStatus())
                 .isEqualTo(RunningPlayerStatus.COMPLETED);
         assertThat(storedPlayer(runningRoomId).getDeletedAt()).isPresent();
-        // 혼자 뛰었어도 CANCELLED가 아니라 FINISHED다(feature-spec §2)
+        // 혼자 뛰었어도 CANCELLED가 아니라 FINISHED다
         assertThat(storedRoom(runningRoomId).getStatus()).isEqualTo(RunningRoomStatus.FINISHED);
         assertThat(runningRecordStore.size()).isEqualTo(1);
     }
@@ -190,6 +204,140 @@ public class FinishRunningIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("케이던스 오전송이 섞여도 정상 표본으로 기록을 만든다")
+    void ignoresCadenceOutliers() {
+        // given -> 누적 걸음수(8,500)가 케이던스 필드로 온다 — 안드로이드 오전송의 전형
+        UUID userId = onboardedUser(EMAIL, NICKNAME);
+        Long runningRoomId = runningRoom(userId);
+        List<TrackPoint> points = new ArrayList<>();
+        for (int i = 0; i < 400; i++) {
+            points.add(sensorPoint(i, i % 100 == 0 ? 8_500 : 168, null, TRACK_START.plusSeconds(i)));
+        }
+        runWith(userId, runningRoomId, points);
+
+        // when
+        finish(userId, runningRoomId);
+
+        // then -> 값 하나 때문에 기록이 사라지면 안 된다 — 케이던스는 정상 표본의 평균이다
+        RunningRecord record = runningRecordStore.find(runningRoomId, new UserId(userId))
+                .orElseThrow();
+        assertThat(record.getAvgCadence().orElseThrow().stepsPerMinute()).isEqualTo(168);
+    }
+
+    @Test
+    @DisplayName("케이던스 표본이 전부 범위 밖이면 케이던스만 비운다")
+    void dropsCadenceWhenEverySampleIsOutOfRange() {
+        // given
+        UUID userId = onboardedUser(EMAIL, NICKNAME);
+        Long runningRoomId = runningRoom(userId);
+        List<TrackPoint> points = new ArrayList<>();
+        for (int i = 0; i < 400; i++) {
+            points.add(sensorPoint(i, 8_500, null, TRACK_START.plusSeconds(i)));
+        }
+        runWith(userId, runningRoomId, points);
+
+        // when
+        finish(userId, runningRoomId);
+
+        // then -> 거리·시간·경로는 산다
+        RunningRecord record = runningRecordStore.find(runningRoomId, new UserId(userId))
+                .orElseThrow();
+        assertThat(record.getAvgCadence()).isEmpty();
+        assertThat(record.getTotalDistance().meters()).isEqualTo(990);
+    }
+
+    @Test
+    @DisplayName("고도 글리치는 고도 지표만 비우고 기록은 만든다")
+    void dropsElevationOnGlitch() {
+        // given -> 기압계 튐 — 한 좌표만 고도 10,000,000m
+        UUID userId = onboardedUser(EMAIL, NICKNAME);
+        Long runningRoomId = runningRoom(userId);
+        List<TrackPoint> points = new ArrayList<>();
+        for (int i = 0; i < 400; i++) {
+            points.add(sensorPoint(i, 168, i == 200 ? 10_000_000.0 : 10.0,
+                    TRACK_START.plusSeconds(i)));
+        }
+        runWith(userId, runningRoomId, points);
+
+        // when
+        finish(userId, runningRoomId);
+
+        // then
+        RunningRecord record = runningRecordStore.find(runningRoomId, new UserId(userId))
+                .orElseThrow();
+        assertThat(record.getTotalElevationGain()).isEmpty();
+        assertThat(record.getTotalDistance().meters()).isEqualTo(990);
+    }
+
+    @Test
+    @DisplayName("int 범위를 넘는 고도 글리치도 래핑되지 않고 비워진다")
+    void dropsElevationOnIntOverflowGlitch() {
+        // given -> 2^32 + 정상값. int로 먼저 자르는 잘못된 구현은 0으로 래핑돼 검증을 통과해버린다
+        UUID userId = onboardedUser(EMAIL, NICKNAME);
+        Long runningRoomId = runningRoom(userId);
+        List<TrackPoint> points = new ArrayList<>();
+        for (int i = 0; i < 400; i++) {
+            points.add(sensorPoint(i, 168, i == 200 ? 4_294_967_306.0 : 10.0,
+                    TRACK_START.plusSeconds(i)));
+        }
+        runWith(userId, runningRoomId, points);
+
+        // when
+        finish(userId, runningRoomId);
+
+        // then
+        RunningRecord record = runningRecordStore.find(runningRoomId, new UserId(userId))
+                .orElseThrow();
+        assertThat(record.getTotalElevationGain()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("시계가 미래로 튄 트랙은 기록 없이 상태만 확정한다")
+    void confirmsStatusWhenClockJumps() {
+        // given -> 뒤쪽 좌표의 시각이 이틀 뒤다 — 단말 재부팅·시간대 변경의 전형.
+        // 경계 시각은 경계를 감싸는 두 점만 표본하므로, 경계(980m) 위의 점(392)에서 튀게 한다 —
+        // 표본되지 않는 점의 점프는 수학에 안 실려 기록이 정상으로 만들어지는 게 맞다
+        UUID userId = onboardedUser(EMAIL, NICKNAME);
+        Long runningRoomId = runningRoom(userId);
+        List<TrackPoint> points = new ArrayList<>();
+        for (int i = 0; i < 400; i++) {
+            points.add(sensorPoint(i, 168, null,
+                    i == 392 ? TRACK_START.plusDays(2) : TRACK_START.plusSeconds(i)));
+        }
+        runWith(userId, runningRoomId, points);
+
+        // when -> 예외가 새면 세션이 죽고 6시간 동안 종료가 안 된다
+        finish(userId, runningRoomId);
+
+        // then
+        assertThat(runningRecordStore.size()).isZero();
+        assertThat(storedPlayer(runningRoomId).getStatus())
+                .isEqualTo(RunningPlayerStatus.COMPLETED);
+    }
+
+    @Test
+    @DisplayName("중간만 미래로 튀었다 돌아온 트랙도 기록 없이 상태만 확정한다")
+    void confirmsStatusWhenClockJumpsMidway() {
+        // given -> 단조화가 중간의 튐을 이후 전 구간에 보존한다 — 끝 시각만 보는 잘못된 검사가 놓치는 모양
+        UUID userId = onboardedUser(EMAIL, NICKNAME);
+        Long runningRoomId = runningRoom(userId);
+        List<TrackPoint> points = new ArrayList<>();
+        for (int i = 0; i < 400; i++) {
+            points.add(sensorPoint(i, 168, null,
+                    i == 200 ? TRACK_START.plusDays(2) : TRACK_START.plusSeconds(i)));
+        }
+        runWith(userId, runningRoomId, points);
+
+        // when
+        finish(userId, runningRoomId);
+
+        // then
+        assertThat(runningRecordStore.size()).isZero();
+        assertThat(storedPlayer(runningRoomId).getStatus())
+                .isEqualTo(RunningPlayerStatus.COMPLETED);
+    }
+
+    @Test
     @DisplayName("종료하면 원본 트랙을 올리고 Redis 버퍼를 비운다")
     void uploadsTrackAndClearsBuffer() {
         // given
@@ -204,6 +352,55 @@ public class FinishRunningIntegrationTest extends IntegrationTestSupport {
         assertThat(gpsTrackUploader.uploads()).hasSize(1);
         assertThat(gpsTrackUploader.uploads().get(0).raw()).startsWith("[[0,");
         assertThat(runningTrackStore.isEmpty(runningRoomId, new UserId(userId))).isTrue();
+    }
+
+    @Test
+    @DisplayName("트랜잭션 동기화가 활성이면 트랙 삭제를 커밋 뒤로 미룬다")
+    void deletesTrackOnlyAfterCommit() {
+        // given
+        UUID userId = onboardedUser(EMAIL, NICKNAME);
+        Long runningRoomId = runningRoom(userId);
+        runFor(userId, runningRoomId, 400);
+        // 페이크 조립엔 트랜잭션이 없다 — 동기화만 수동으로 켜서 커밋 경계를 흉내 낸다
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            // when
+            finish(userId, runningRoomId);
+
+            // then -> 커밋 전에 지우면 커밋 실패 시 재시도가 빈 트랙으로 0m 확정한다
+            assertThat(runningTrackStore.isEmpty(runningRoomId, new UserId(userId))).isFalse();
+
+            // when -> 커밋 성공을 흉내 낸다
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+
+            // then
+            assertThat(runningTrackStore.isEmpty(runningRoomId, new UserId(userId))).isTrue();
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    @DisplayName("롤백되면 트랙을 지우지 않는다 — 재시도가 같은 트랙으로 다시 확정한다")
+    void keepsTrackOnRollback() {
+        // given
+        UUID userId = onboardedUser(EMAIL, NICKNAME);
+        Long runningRoomId = runningRoom(userId);
+        runFor(userId, runningRoomId, 400);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            finish(userId, runningRoomId);
+
+            // when -> 커밋 실패를 흉내 낸다
+            TransactionSynchronizationManager.getSynchronizations().forEach(synchronization ->
+                    synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
+
+            // then
+            assertThat(runningTrackStore.isEmpty(runningRoomId, new UserId(userId))).isFalse();
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test

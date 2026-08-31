@@ -17,7 +17,7 @@ cd running-service
 ## 문서 인덱스 — 구현 전 반드시 해당 문서를 읽을 것
 
 - `docs/architecture.md` — 클린 아키텍처 + DDD 레이어 규칙·구현 스타일 (코드 작성 전 필독)
-- `docs/code-convention.md` — 네이밍·테스트 규칙 / `docs/git-convention.md` — 커밋·브랜치·PR 규칙 / `docs/api-convention.md` — API 표면 규칙 (에러 포맷·페이지네이션·인증·단위 접미사)
+- `docs/code-convention.md` — 네이밍·주석·테스트 규칙 / `docs/git-convention.md` — 커밋·브랜치·PR 규칙 / `docs/api-convention.md` — API 표면 규칙 (에러 포맷·페이지네이션·인증·단위 접미사)
 - `docs/api-spec.md` — API 명세 / `docs/erd.md` — DB 스키마 / `docs/feature-spec.md` — 기능 명세·도메인 제약
   - 자주 바뀐다 — 구현 전 다시 읽고, 코드와 어긋나면 사용자에게 확인한다.
   - 길다 — 통째로 읽지 말고 해당 기능의 섹션만 찾아 읽는다.
