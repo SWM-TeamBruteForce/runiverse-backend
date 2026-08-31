@@ -998,7 +998,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 1. `scheduledStartAt` 직전(리드타임은 운영값)에 클라가 WS를 연결한다
 2. 기기 시각으로 **시작 3초 전부터 3-2-1 카운트다운**(화면·음성·햅틱)을 표시하고 뒤로가기를 차단한다
-3. 서버가 `scheduledStartAt`에 방을 `STARTED`, 남아 있는 참가자를 `RUNNING`으로 바꾸고 `MATCH_ROOM_UPDATED`를 보낸다. 클라는 이를 받은 뒤 러닝 화면으로 전환해 `RUNNING_START`를 보낸다
+3. 서버가 `scheduledStartAt`에 방을 `STARTED`로 바꾸고 `MATCH_ROOM_UPDATED`를 보낸다. 참가자의 `RUNNING` 전환은 각자의 `RUNNING_START` 몫이다. 클라는 이를 받은 뒤 러닝 화면으로 전환해 `RUNNING_START`를 보낸다
 4. `RUNNING_STARTED` ack를 받으면 SSE 스트림을 닫는다
 
 #### WebSocket 연결 — `/api/v1/ws/running`
