@@ -208,7 +208,7 @@ public class UpdateRunningLocationHandlerTest {
         assertThat(published.userId()).isEqualTo(USER_ID);
         assertThat(published.targetDistanceMeters()).isEqualTo(TARGET_DISTANCE_METERS);
         assertThat(published.distanceMeters()).isEqualTo(captureSaved().metersRounded());
-        // TODO: 일시정지 미구현 — RUNNING_PAUSE/RESUME을 만들 때 실제 상태 검증으로 교체한다
+        // TODO: 일시정지 고정값 — RUNNING_PAUSE/RESUME을 만들 때 실제 상태 검증으로 교체한다
         assertThat(published.paused()).isFalse();
     }
 

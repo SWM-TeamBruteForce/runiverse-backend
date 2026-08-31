@@ -43,7 +43,7 @@ public class UpdateRunningLocationHandler implements UpdateRunningLocationUsecas
                 updated.metersRounded(),
                 command.targetDistanceMeters(),
                 latestPace(command),
-                false));   // TODO: 일시정지 미구현 — RUNNING_PAUSE/RESUME을 만들 때 실제 상태로 교체한다
+                false));   // TODO: 일시정지 고정값 — RUNNING_PAUSE/RESUME을 만들 때 실제 상태로 교체한다
     }
 
     // 마지막 좌표의 값을 그대로 옮긴다 — 단말이 못 재면 null이다
