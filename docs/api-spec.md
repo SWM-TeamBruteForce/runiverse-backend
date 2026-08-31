@@ -1303,11 +1303,11 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 ```
 
 - **참가자 메타데이터는 최상위 `players`에 한 번만 싣고, `splits[].players`에는 `userId`와 수치만 둔다.** 구간이 목표 5,000m 기준 500개라 `nickname`·`profileImageUrl`을 구간마다 반복하면 응답이 MB 단위가 된다(presigned URL만 500×인원×수백 바이트). 클라는 `userId`로 조인한다
-- **구간 경계는 방 전체가 공유한다** — `running_rooms.target_distance`를 10m로 나눈 고정 경계라, `splitNumber` N은 모든 참가자에게 같은 거리 구간이다. 목표에 못 미치고 끝난 참가자는 도달하지 못한 구간의 `players`에서 빠진다
+- **구간 경계는 방 전체가 공유한다** — 0m부터 10m씩 자르는 고정 경계라, `splitNumber` N은 모든 참가자에게 같은 거리 구간이다. 목표에 못 미치고 끝난 참가자는 도달하지 못한 구간의 `players`에서 빠진다
 - `running_records` 행이 없는 참가자는 `splits[].players`와 최상위 `players` 양쪽에서 제외한다. 탈퇴한 참가자는 공통 탈퇴 유저 형식과 `isDeleted=true`로 표시한다
 - 구간의 `averageCadenceSpm`·`elevationChangeMeters`도 유효 표본이 부족하면 null이다 — **10m 구간의 `elevationChangeMeters`는 대체로 null이다**(GPS 수직 오차가 구간 길이에 맞먹어 노이즈 임계값을 넘는 표본이 거의 없다)
 - 최상위 `totalElevationGainMeters`도 유효 고도 표본이 부족하면 null이다
-- 조회하는 본인의 기록이 없으면 `totalDistanceMeters`·`totalElevationGainMeters`·`startedAt`·`finishedAt`는 null이고 `splits[].routes`도 없다 — 자를 폴리라인이 없다. **다른 참가자의 구간 기록은 그대로 내려간다** — 본인 기록이 없어도 다른 참가자의 결과는 보이는 6-1과 같은 규칙이다
+- 조회하는 본인의 기록이 없으면 `totalDistanceMeters`·`totalElevationGainMeters`·`startedAt`·`finishedAt`는 null이고 `splits[].routes`도 null이다 — 자를 폴리라인이 없다. **다른 참가자의 구간 기록은 그대로 내려간다** — 본인 기록이 없어도 다른 참가자의 결과는 보이는 6-1과 같은 규칙이다
 - **경로는 최상위가 아니라 구간마다 실린다.** 이 화면은 구간별로 색을 달리해 그리므로 자른 조각이 곧 그리는 단위다. 전체 경로 하나가 필요하면 6-1의 `routes`를 쓴다 — 같은 값을 두 응답에 중복해 싣지 않는다
 - **`splits[].routes`는 조회하는 본인의 경로다.** 같은 객체의 `players`가 참가자 전원인 것과 다르다 — `running_splits.route_start_index`·`route_end_index`가 각자 자기 `route_polyline`의 위치를 가리키므로 남의 구간 좌표는 이 배열에 섞이지 않는다
 - **이어붙일 때 경계점이 겹친다.** N번 구간의 끝 원소와 N+1번의 첫 원소는 같은 점이다 — 전체 경로를 만들려면 두 번째 구간부터 첫 원소를 건너뛴다
