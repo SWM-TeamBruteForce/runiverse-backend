@@ -1069,7 +1069,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
   | | 하는 일 | 이미 그 상태면 |
   |---|---|---|
-  | 1 | 활성 신청이 있고 이 방 참가자인지 확인 | 아니면 `NOT_ROOM_PLAYER` — **나간 사람은 신청이 닫혀 여기서 걸린다** |
+  | 1 | 끝나지 않은 신청(`deleted_at` 없음)이 있고 이 방 참가자인지 확인 | 아니면 `NOT_ROOM_PLAYER` — **나간 사람은 신청이 닫혀 여기서 걸린다** |
   | 2 | 배정(`is_connected`)이 끊겨 있으면 거부한다 | `INVALID_ROOM_STATE` — 1번을 통과한 뒤 남는 방어선이다 |
   | 3 | 방이 `MATCHED`면 `STARTED`로 올린다 | 통과 |
   | 4 | 참가자가 `JOINED`면 `RUNNING`으로 올린다 | 통과 |
