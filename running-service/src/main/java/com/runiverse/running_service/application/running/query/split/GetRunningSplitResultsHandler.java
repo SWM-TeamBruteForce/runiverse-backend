@@ -40,7 +40,7 @@ public class GetRunningSplitResultsHandler implements GetRunningSplitResultsUsec
     private static final String STATUS_RUNNING = "RUNNING";
     private static final String STATUS_COMPLETED = "COMPLETED";
 
-    // 러닝 단계에 들어간 참가자만 남긴다 — 시작 전 이탈자는 제외한다(api-spec 6-2)
+    // 러닝 단계에 들어간 참가자만 남긴다 — 시작 전 이탈자는 제외한다
     private static final Set<RunningPlayerStatus> RUNNING_STAGE = Set.of(
             RunningPlayerStatus.RUNNING,
             RunningPlayerStatus.RUNNING_LEFT_PENALTY,
@@ -71,7 +71,7 @@ public class GetRunningSplitResultsHandler implements GetRunningSplitResultsUsec
         }
         // 2. 방 전체 구간을 한 번에 긁는다 — 구간마다 조회하면 500번 나간다
         List<RunningSplitRow> splitRows = loadRunningSplitsPort.loadSplits(roomId);
-        // 3. 기록이 없는 참가자는 양쪽 players에서 모두 뺀다(api-spec 6-2).
+        // 3. 기록이 없는 참가자는 양쪽 players에서 모두 뺀다.
         //    구간은 기록에 딸린 행이라, 구간이 하나도 없으면 기록이 없는 것이다
         Set<UUID> recorded = splitRows.stream()
                 .map(RunningSplitRow::userId)
@@ -121,7 +121,7 @@ public class GetRunningSplitResultsHandler implements GetRunningSplitResultsUsec
                                                        List<RunningSplitRow> rows,
                                                        List<RoutePoint> decoded,
                                                        UUID viewerId) {
-        // 경로는 본인 것만이다 — route_start_index는 각자 자기 폴리라인을 가리킨다(api-spec 6-2)
+        // 경로는 본인 것만이다 — route_start_index는 각자 자기 폴리라인을 가리킨다
         Optional<RunningSplitRow> mine = rows.stream()
                 .filter(row -> row.userId().equals(viewerId))
                 .findFirst();

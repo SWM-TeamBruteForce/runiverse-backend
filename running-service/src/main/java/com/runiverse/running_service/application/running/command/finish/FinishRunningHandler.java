@@ -84,11 +84,11 @@ public class FinishRunningHandler implements FinishRunningUsecase {
                 .orElseThrow(OnboardingNotCompletedException::new);
 
         // 3. 마지막 수신 좌표까지로 지표를 낸다.
-        //    산출할 수 없는 트랙이면 실제 거리를 0으로 보고 상태만 확정한다(feature-spec §2)
+        //    산출할 수 없는 트랙이면 실제 거리를 0으로 보고 상태만 확정한다
         RunningTrack track = loadRunningTrackPort.load(command.runningRoomId(), userId);
         Optional<TrackAnalysis> analysis = TrackAnalyzer.analyze(
                 track.points(), analysisTargetMeters(room), weightKg, properties);
-        // 4. 기록은 만들 수 있을 때만 남긴다 — 상태 확정과 기록 생성은 별개다(erd.md running_records)
+        // 4. 기록은 만들 수 있을 때만 남긴다 — 상태 확정과 기록 생성은 별개다
         analysis.ifPresent(result -> createRecord(command, track, result, weightKg));
 
         // 5. 상태를 확정한다
@@ -108,7 +108,7 @@ public class FinishRunningHandler implements FinishRunningUsecase {
 
     private void createRecord(FinishRunningCommand command, RunningTrack track,
                               TrackAnalysis analysis, BigDecimal weightKg) {
-        // 원본 트랙은 목표 이후 좌표까지 그대로 올린다 — 끊는 것은 기록뿐이다(erd.md).
+        // 원본 트랙은 목표 이후 좌표까지 그대로 올린다 — 끊는 것은 기록뿐이다.
         // 키가 러닝 시작 시각으로 정해져 재시도해도 같은 객체를 덮어쓴다
         String gpsTrackKey = saveGpsTrackPort.save(new GpsTrackUpload(
                 command.runningRoomId(), command.userId(),
@@ -123,7 +123,7 @@ public class FinishRunningHandler implements FinishRunningUsecase {
                 .avgPace(analysis.avgPaceSecondsPerKm())
                 .totalDistance(analysis.totalDistanceMeters())
                 .totalDuration(analysis.totalDurationSeconds())
-                // 구간 칼로리의 합이 아니라 확정 거리·시간으로 다시 낸다(erd.md running_records)
+                // 구간 칼로리의 합이 아니라 확정 거리·시간으로 다시 낸다
                 .totalCalories(CalorieCalculator.kcal(
                         analysis.avgPaceSecondsPerKm(), analysis.totalDurationSeconds(), weightKg))
                 .gpsTrackKey(gpsTrackKey)
@@ -154,7 +154,7 @@ public class FinishRunningHandler implements FinishRunningUsecase {
     }
 
     // 확정 거리로만 판정한다. command.forced()는 조기 종료 '의사'일 뿐
-    // 최종 상태를 정하지 않는다(api-spec 5-D)
+    // 최종 상태를 정하지 않는다
     private void finish(RunningPlayer player, RunningRoom room, int totalDistanceMeters) {
         LocalDateTime finishedAt = LocalDateTime.now();
         Optional<Distance> target = room.getTargetDistance();
@@ -167,9 +167,9 @@ public class FinishRunningHandler implements FinishRunningUsecase {
         player.leave(ratio < properties.penaltyDistanceRatio(), finishedAt);
     }
 
-    // 시작 때 RUNNING이 된 참가자가 전원 종료되면 방도 끝난다(api-spec 5-D).
+    // 시작 때 RUNNING이 된 참가자가 전원 종료되면 방도 끝난다.
     // 1인 방도 같은 규칙이다 — 인원이 0이 됐다고 CANCELLED로 닫지 않는다.
-    // 닫으면 CANCELLED가 terminal이라 FINISHED에 못 가고 결과 조회 경로가 무너진다(feature-spec §2)
+    // 닫으면 CANCELLED가 terminal이라 FINISHED에 못 가고 결과 조회 경로가 무너진다
     private void closeRoomIfLastPlayer(RunningRoom room) {
         // 타임아웃이 먼저 닫았을 수 있다 — 끝난 방에 finish()를 다시 부르면 도메인 예외다
         if (room.getStatus() != RunningRoomStatus.STARTED

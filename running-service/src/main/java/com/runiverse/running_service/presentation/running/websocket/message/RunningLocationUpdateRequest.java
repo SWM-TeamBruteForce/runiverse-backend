@@ -19,7 +19,7 @@ public record RunningLocationUpdateRequest(List<Location> locations) {
             Long sequence,
             Double latitude,
             Double longitude,
-            Double altitudeMeters,            // 단말이 못 재면 비어 온다(api-spec)
+            Double altitudeMeters,            // 단말이 못 재면 비어 온다
             Double accuracyMeters,
             Double speedMetersPerSecond,
             Double headingDegrees,

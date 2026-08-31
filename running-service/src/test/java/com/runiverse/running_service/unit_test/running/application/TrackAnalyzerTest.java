@@ -67,7 +67,7 @@ public class TrackAnalyzerTest {
         // given
         TrackAnalysis analysis = analyze(track(1_800, 2.8, null));
 
-        // then -> erd.md가 total_duration을 구간 duration의 합으로 정의한다
+        // then -> total_duration은 구간 duration의 합이다
         assertThat(analysis.totalDurationSeconds())
                 .isEqualTo(analysis.splits().stream().mapToInt(SplitDraft::duration).sum());
     }
@@ -190,7 +190,7 @@ public class TrackAnalyzerTest {
         // given -> 약 50m (최소 100m 미만)
         List<TrackPoint> points = track(20, 2.8, null);
 
-        // when & then -> 기록 없이 상태만 확정하는 경로다(api-spec 5-D)
+        // when & then -> 기록 없이 상태만 확정하는 경로다
         assertThat(TrackAnalyzer.analyze(points, TARGET, WEIGHT, PROPERTIES)).isEmpty();
     }
 

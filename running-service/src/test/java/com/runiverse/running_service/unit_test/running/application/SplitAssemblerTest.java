@@ -90,7 +90,7 @@ public class SplitAssemblerTest {
         // when
         int sum = drafts.stream().mapToInt(SplitDraft::duration).sum();
 
-        // then -> erd.md가 total_duration을 구간 duration의 합으로 정의한다.
+        // then -> total_duration은 구간 duration의 합이다.
         // 구간마다 따로 반올림하면 500개에서 오차가 쌓여 여기가 어긋난다
         SplitDraft last = drafts.get(drafts.size() - 1);
         assertThat(sum).isEqualTo(

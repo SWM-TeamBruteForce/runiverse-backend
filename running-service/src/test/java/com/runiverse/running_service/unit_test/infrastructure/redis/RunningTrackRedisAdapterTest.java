@@ -144,7 +144,7 @@ class RunningTrackRedisAdapterTest {
         // when
         adapter.append(ROOM_ID, userId, List.of(pointWithoutOptionalFields(0)));
 
-        // then -> 값이 없다는 사실이 남아야 읽는 쪽이 표본에서 제외할 수 있다(erd.md avg_cadence)
+        // then -> 값이 없다는 사실이 남아야 읽는 쪽이 표본에서 제외할 수 있다
         assertThat(scriptArgs()[3]).isEqualTo(
                 "[0,35.17955,129.07564,null,6.2,null,null,null,null,%d]".formatted(EPOCH_SECOND));
     }
@@ -172,7 +172,7 @@ class RunningTrackRedisAdapterTest {
                 .willThrow(new RedisConnectionFailureException("redis down"));
 
         // when & then -> 인프라 예외가 그대로 새면 presentation이 Redis를 알아야 하고,
-        // BusinessException이 아니라 ERROR 통지도 못 나간다(api-spec 5-D)
+        // BusinessException이 아니라 ERROR 통지도 못 나간다
         assertThatThrownBy(() -> adapter.append(ROOM_ID, userId, List.of(point(0))))
                 .isInstanceOf(RunningTrackUnavailableException.class);
     }
@@ -262,7 +262,7 @@ class RunningTrackRedisAdapterTest {
         // when
         TrackPoint restored = adapter.load(ROOM_ID, userId).points().getFirst();
 
-        // then -> 0으로 되살리면 평균 계산에서 없던 표본이 생긴다(erd.md avg_cadence)
+        // then -> 0으로 되살리면 평균 계산에서 없던 표본이 생긴다
         assertThat(restored).isEqualTo(original);
         assertThat(restored.altitudeMeters()).isNull();
         assertThat(restored.cadenceSpm()).isNull();
@@ -271,7 +271,7 @@ class RunningTrackRedisAdapterTest {
     @Test
     @DisplayName("좌표를 한 번도 못 받았으면 빈 트랙을 돌려준다")
     void returnsEmptyTrackWhenNothingStored() {
-        // given -> 시작하자마자 끊긴 러닝. 기록 없이 상태만 확정한다(api-spec 5-D)
+        // given -> 시작하자마자 끊긴 러닝. 기록 없이 상태만 확정한다
         givenStoredBatches();
 
         // when

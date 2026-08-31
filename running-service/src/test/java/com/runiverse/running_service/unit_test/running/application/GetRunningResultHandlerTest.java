@@ -226,7 +226,7 @@ public class GetRunningResultHandlerTest {
         GetRunningResultsResult.Player other = playerOf(
                 handler.handle(new GetRunningResultsQuery(ROOM_ID, ME)), OTHER);
 
-        // then -> userId는 유지하고 기록 지표도 그대로 남는다(api-spec §0)
+        // then -> userId는 유지하고 기록 지표도 그대로 남는다
         assertThat(other.userId()).isEqualTo(OTHER);
         assertThat(other.nickname()).isEqualTo("탈퇴한 사용자");
         assertThat(other.profileImageUrl()).isNull();

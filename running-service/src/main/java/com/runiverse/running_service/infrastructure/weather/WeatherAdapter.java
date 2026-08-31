@@ -37,7 +37,7 @@ public class WeatherAdapter implements LoadWeatherPort {
                 log.warn("날씨 조회 실패 {}/{}", attempt, properties.maxAttempts(), e);
             }
         }
-        // 한 시간짜리 러닝 기록이 외부 API 하나 때문에 날아가면 안 된다(feature-spec §2)
+        // 한 시간짜리 러닝 기록이 외부 API 하나 때문에 날아가면 안 된다
         return new Weather(properties.defaultCode(), properties.defaultTemperature());
     }
 }

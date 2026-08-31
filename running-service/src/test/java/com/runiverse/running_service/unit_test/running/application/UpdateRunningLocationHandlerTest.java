@@ -177,7 +177,7 @@ public class UpdateRunningLocationHandlerTest {
     @Test
     @DisplayName("이미 반영한 순번은 다시 더하지 않는다")
     void skipsAlreadyAccumulatedSequences() {
-        // given -> 재연결하면 클라는 로컬 트랙 전체를 순번 0부터 다시 보낸다(api-spec 5-D).
+        // given -> 재연결하면 클라는 로컬 트랙 전체를 순번 0부터 다시 보낸다.
         // 그대로 더하면 거리가 두 배가 된다
         TrackPoint previous = trackPoint(2L);
         RunningDistance stored =
@@ -208,7 +208,7 @@ public class UpdateRunningLocationHandlerTest {
         assertThat(published.userId()).isEqualTo(USER_ID);
         assertThat(published.targetDistanceMeters()).isEqualTo(TARGET_DISTANCE_METERS);
         assertThat(published.distanceMeters()).isEqualTo(captureSaved().metersRounded());
-        // RUNNING_PAUSE/RESUME 구현 전까지 항상 false다(api-spec 5-D)
+        // TODO: 일시정지 미구현 — RUNNING_PAUSE/RESUME을 만들 때 실제 상태 검증으로 교체한다
         assertThat(published.paused()).isFalse();
     }
 
@@ -239,7 +239,7 @@ public class UpdateRunningLocationHandlerTest {
     @Test
     @DisplayName("목표 없는 방이면 목표 거리를 null로 싣는다")
     void publishesNullTargetForRoomWithoutGoal() {
-        // given -> 솔로 방은 target_distance가 nullable이다(erd.md)
+        // given -> 솔로 방은 target_distance가 nullable이다
         // when
         updateRunningLocationHandler.handle(
                 new UpdateRunningLocationCommand(USER_ID, ROOM_ID, null, List.of(trackPoint(0L))));
@@ -255,7 +255,7 @@ public class UpdateRunningLocationHandlerTest {
         willThrow(new RunningTrackUnavailableException())
                 .given(appendRunningTrackPort).append(anyLong(), any(), anyList());
 
-        // when & then -> 예외는 그대로 나가야 클라가 ERROR를 받는다(api-spec 5-D)
+        // when & then -> 예외는 그대로 나가야 클라가 ERROR를 받는다
         assertThatThrownBy(() -> updateRunningLocationHandler.handle(
                 command(List.of(trackPoint(0L)))))
                 .isInstanceOf(RunningTrackUnavailableException.class);

@@ -45,7 +45,7 @@ public class InMemoryPlayerProfileStore implements LoadPlayerProfilesPort {
         return profiles;
     }
 
-    // 테스트 준비 — 탈퇴하면 users 행이 지워져 조회에서 빠진다(erd.md §0)
+    // 테스트 준비 — 탈퇴하면 users 행이 지워져 조회에서 빠진다
     public void withdraw(UUID userId) {
         withdrawn.add(userId);
     }

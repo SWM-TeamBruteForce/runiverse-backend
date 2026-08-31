@@ -274,7 +274,7 @@ public class RunningPersistenceAdapter implements CreateRunningPlayerPort, Creat
 
     private RunningResultPlayer toResultPlayer(RunningPlayerJpaEntity player,
                                                RunningRecordJpaEntity record) {
-        // 아직 안 끝난 참가자 — 사용자 정보와 status만 채워 "기록 없음"으로 보낸다(api-spec 6-1)
+        // 아직 안 끝난 참가자 — 사용자 정보와 status만 채워 "기록 없음"으로 보낸다
         if (record == null) {
             return new RunningResultPlayer(player.getUserId(), player.getStatus(),
                     null, null, null, null, null, null);

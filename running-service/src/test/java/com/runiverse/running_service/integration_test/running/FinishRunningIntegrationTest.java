@@ -129,7 +129,7 @@ public class FinishRunningIntegrationTest extends IntegrationTestSupport {
             points.add(new TrackPoint(i, 37.5 + i * 2.5 / METERS_PER_DEGREE, 127.0,
                     null, 5.0, null, null, 168, null, TRACK_START.plusSeconds(i)));
         }
-        // 솔로 방은 목표 거리가 없다(erd.md: target_distance nullable)
+        // 솔로 방은 목표 거리가 없다
         updateRunningLocationHandler.handle(
                 new UpdateRunningLocationCommand(userId, runningRoomId, null, points));
     }
@@ -175,7 +175,7 @@ public class FinishRunningIntegrationTest extends IntegrationTestSupport {
         assertThat(storedPlayer(runningRoomId).getStatus())
                 .isEqualTo(RunningPlayerStatus.COMPLETED);
         assertThat(storedPlayer(runningRoomId).getDeletedAt()).isPresent();
-        // 혼자 뛰었어도 CANCELLED가 아니라 FINISHED다(feature-spec §2)
+        // 혼자 뛰었어도 CANCELLED가 아니라 FINISHED다
         assertThat(storedRoom(runningRoomId).getStatus()).isEqualTo(RunningRoomStatus.FINISHED);
         assertThat(runningRecordStore.size()).isEqualTo(1);
     }

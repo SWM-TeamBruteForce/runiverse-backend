@@ -61,7 +61,7 @@ public final class SplitAssembler {
     }
 
     // 시작점부터의 경과 초를 미리 확정한다. 구간마다 따로 반올림하면 500개에서 오차가 쌓여
-    // 구간 시간의 합이 총 시간과 어긋난다(erd.md — total_duration은 구간 duration의 합이다).
+    // 구간 시간의 합이 총 시간과 어긋난다 — total_duration은 구간 duration의 합이다.
     // 최소 1초씩 벌리는 이유는 좌표 시각이 초 단위라 경계 둘이 같은 초에 걸릴 수 있어서다 —
     // 그대로 두면 ElapsedTime(MIN 1)과 RunningPeriod(끝 > 시작)가 둘 다 터진다.
     private static long[] elapsedSeconds(List<BoundaryPoint> boundaries, LocalDateTime origin) {

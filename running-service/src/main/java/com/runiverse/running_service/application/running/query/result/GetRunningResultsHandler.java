@@ -35,7 +35,7 @@ public class GetRunningResultsHandler implements GetRunningResultsUsecase {
     private static final String STATUS_RUNNING = "RUNNING";
     private static final String STATUS_COMPLETED = "COMPLETED";
 
-    // 러닝 단계에 들어간 참가자만 남긴다 — 시작 전 이탈자(MATCHED_LEFT_*)는 제외한다(api-spec 6-1)
+    // 러닝 단계에 들어간 참가자만 남긴다 — 시작 전 이탈자(MATCHED_LEFT_*)는 제외한다
     private static final Set<RunningPlayerStatus> RUNNING_STAGE = Set.of(
             RunningPlayerStatus.RUNNING,
             RunningPlayerStatus.RUNNING_LEFT_PENALTY,
@@ -64,7 +64,7 @@ public class GetRunningResultsHandler implements GetRunningResultsUsecase {
             throw new NotRoomPlayerException();
         }
 
-        // 3. 최상위 세 값은 본인 기록에서만 나온다 — 아직 뛰는 중이면 비어 있다(api-spec 6-1).
+        // 3. 최상위 세 값은 본인 기록에서만 나온다 — 아직 뛰는 중이면 비어 있다.
         //    권한 판정을 통과한 뒤에 읽는다
         Optional<RunningResultRecord> record =
                 loadRunningResultRecordPort.loadRecord(roomId, viewerId);
@@ -92,7 +92,7 @@ public class GetRunningResultsHandler implements GetRunningResultsUsecase {
     private GetRunningResultsResult.Player toPlayer(RunningResultPlayer player,
                                                     Map<UUID, PlayerProfile> profiles,
                                                     UUID viewerId) {
-        // 기록은 남고 사용자만 사라진다 — users 행이 없으면 탈퇴다(api-spec §0)
+        // 기록은 남고 사용자만 사라진다 — users 행이 없으면 탈퇴다
         PlayerProfile profile = profiles.get(player.userId());
         boolean deleted = profile == null;
         return new GetRunningResultsResult.Player(

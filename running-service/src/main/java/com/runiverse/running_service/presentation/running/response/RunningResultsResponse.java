@@ -24,7 +24,7 @@ public record RunningResultsResponse(
                 result.players().stream().map(PlayerResponse::from).toList());
     }
 
-    // [위도, 경도] 두 칸 배열로 내린다 — 점마다 키 이름을 반복하지 않는다(api-spec §0).
+    // [위도, 경도] 두 칸 배열로 내린다 — 점마다 키 이름을 반복하지 않는다.
     // GeoJSON은 경도가 먼저라 반대이므로 뒤집지 않는다
     private static List<double[]> routes(List<RoutePoint> points) {
         return points == null

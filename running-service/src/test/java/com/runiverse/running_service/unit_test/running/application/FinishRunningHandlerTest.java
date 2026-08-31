@@ -316,7 +316,7 @@ public class FinishRunningHandlerTest {
             givenRoom(room(RunningRoomType.MATCH, TARGET));
             givenTrack(new RunningTrack("", List.of()));
 
-            // when -> 상태는 확정한다. 기록만 남기지 않는다(feature-spec §2)
+            // when -> 상태는 확정한다. 기록만 남기지 않는다
             finish();
 
             // then
@@ -376,7 +376,7 @@ public class FinishRunningHandlerTest {
             // when
             RunningRecord record = finishAndCapture(track(1_801, 2.8));
 
-            // then -> 목표를 넘겨 뛰었으므로 목표 지점에서 끊긴다(erd.md running_records)
+            // then -> 목표를 넘겨 뛰었으므로 목표 지점에서 끊긴다
             assertThat(record.getTotalDistance().meters()).isEqualTo(TARGET);
             assertThat(record.getSplits()).hasSize(TARGET / PROPERTIES.splitDistanceMeters());
             assertThat(record.getRoutePolyline().value()).isNotBlank();
@@ -389,7 +389,7 @@ public class FinishRunningHandlerTest {
             // when
             RunningRecord record = finishAndCapture(track(1_801, 2.8));
 
-            // then -> erd.md가 total_duration을 구간 duration의 합으로 정의한다
+            // then -> total_duration은 구간 duration의 합이다
             assertThat(record.getTotalDuration().seconds()).isEqualTo(
                     record.getSplits().stream()
                             .mapToInt(split -> split.getDuration().seconds())
@@ -448,7 +448,7 @@ public class FinishRunningHandlerTest {
             // when
             RunningRecord record = finishAndCapture(track(1_801, 2.8));
 
-            // then -> 목표 이후 좌표까지 남기는 것이 원본 트랙의 역할이다(erd.md)
+            // then -> 목표 이후 좌표까지 남기는 것이 원본 트랙의 역할이다
             verify(saveGpsTrackPort).save(uploadCaptor.capture());
             GpsTrackUpload upload = uploadCaptor.getValue();
             assertThat(upload.raw()).isEqualTo("raw");
@@ -469,7 +469,7 @@ public class FinishRunningHandlerTest {
             // when
             finish();
 
-            // then -> 상태만 확정하고 기록은 남기지 않는다(feature-spec §2)
+            // then -> 상태만 확정하고 기록은 남기지 않는다
             verifyNoInteractions(saveGpsTrackPort, loadWeatherPort, createRunningRecordPort);
         }
 
@@ -535,7 +535,7 @@ public class FinishRunningHandlerTest {
             // when
             RunningRoom room = finishIn(room(RunningRoomType.SOLO, null));
 
-            // then -> CANCELLED로 닫으면 terminal이라 결과 조회 경로가 무너진다(feature-spec §2)
+            // then -> CANCELLED로 닫으면 terminal이라 결과 조회 경로가 무너진다
             assertThat(room.getStatus()).isEqualTo(RunningRoomStatus.FINISHED);
         }
 

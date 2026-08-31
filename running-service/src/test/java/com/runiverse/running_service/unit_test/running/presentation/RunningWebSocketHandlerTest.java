@@ -169,7 +169,7 @@ class RunningWebSocketHandlerTest {
                 "accuracyMeters":6.2,"recordedAt":"2026-07-25T19:10:30"}""".formatted(sequence);
     }
 
-    // api-spec 5-D의 좌표 한 개 — 단말이 모두 측정한 정상 배치.
+    // 위치 배치의 좌표 한 개 — 단말이 모두 측정한 정상 배치.
     // Long.MAX_VALUE까지 실어 보낼 수 있어야 커서를 끝으로 미는 좌표를 재현한다
     private static String point(long sequence) {
         return """
@@ -359,7 +359,7 @@ class RunningWebSocketHandlerTest {
     @Test
     @DisplayName("목표 거리가 없는 솔로 방도 RUNNING_STARTED로 응답한다")
     void respondsRunningStartedForRoomWithoutTarget() throws Exception {
-        // given -> 솔로 방은 target_distance가 nullable이다(erd.md).
+        // given -> 솔로 방은 target_distance가 nullable이다.
         // 세션 attribute는 ConcurrentHashMap이라 null을 그대로 넣으면 NPE가 나고,
         // 그 예외가 핸들러 밖으로 새면 Spring이 세션을 1011로 닫는다
         given(startRunningUsecase.handle(any())).willReturn(new StartRunningResult(ROOM_ID, null));
@@ -391,7 +391,7 @@ class RunningWebSocketHandlerTest {
     @Test
     @DisplayName("RUNNING_START 없이 좌표를 보내면 RUNNING_NOT_STARTED로 응답하고 적재하지 않는다")
     void rejectsLocationBeforeStart() throws Exception {
-        // when -> 방은 RUNNING_START가 정한다(api-spec 5-D). 세션에 방이 없으면 쓸 곳을 모른다
+        // when -> 방은 RUNNING_START가 정한다. 세션에 방이 없으면 쓸 곳을 모른다
         handler.handleMessage(session, locationUpdate("""
                 {"locations":[%s]}""".formatted(point(0))));
 
@@ -465,7 +465,7 @@ class RunningWebSocketHandlerTest {
         handler.handleMessage(session, locationUpdate("""
                 {"locations":[%s]}""".formatted(pointWithoutOptionalFields(0))));
 
-        // then -> 배치 하나가 통째로 사라지면 그 10초가 빈다(api-spec 5-D)
+        // then -> 배치 하나가 통째로 사라지면 그 10초가 빈다
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<TrackPoint>> captor = ArgumentCaptor.forClass(List.class);
         verify(appendRunningTrackPort).append(eq(ROOM_ID), eq(new UserId(USER_ID)), captor.capture());
@@ -548,7 +548,7 @@ class RunningWebSocketHandlerTest {
         handler.handleMessage(session, locationUpdate("""
                 {"locations":[%s]}""".formatted(point(Long.MAX_VALUE))));
 
-        // when -> 클라는 ERROR를 받아도 러닝을 계속하며 다음 배치를 보낸다(api-spec 5-D)
+        // when -> 클라는 ERROR를 받아도 러닝을 계속하며 다음 배치를 보낸다
         handler.handleMessage(session, locationUpdate("""
                 {"locations":[%s,%s]}""".formatted(point(12), point(13))));
 
@@ -562,7 +562,7 @@ class RunningWebSocketHandlerTest {
     @Test
     @DisplayName("좌표 저장에 실패하면 코드로 알리되 러닝을 끊지 않는다")
     void respondsTrackUnavailableWithoutClosing() throws Exception {
-        // given -> 원본은 클라 로컬 트랙에 남아 있어 재연결로 복구된다(api-spec 5-D).
+        // given -> 원본은 클라 로컬 트랙에 남아 있어 재연결로 복구된다.
         // 저장소 장애 하나로 달리는 사람을 끊어서는 안 된다
         given(startRunningUsecase.handle(any())).willReturn(new StartRunningResult(ROOM_ID, TARGET_DISTANCE_METERS));
         handler.handleMessage(session, runningStart("""
@@ -642,7 +642,7 @@ class RunningWebSocketHandlerTest {
         handler.handleMessage(session, runningFinish("""
                 {"forced":false}"""));
 
-        // then -> 클라는 이 ack를 받고 로컬 트랙을 지운 뒤 REST로 결과를 본다(api-spec 5-D)
+        // then -> 클라는 이 ack를 받고 로컬 트랙을 지운 뒤 REST로 결과를 본다
         assertThat(captureLastSent(session).event()).isEqualTo("RUNNING_FINISHED");
         verify(finishRunningUsecase).handle(new FinishRunningCommand(ROOM_ID, USER_ID, false));
     }

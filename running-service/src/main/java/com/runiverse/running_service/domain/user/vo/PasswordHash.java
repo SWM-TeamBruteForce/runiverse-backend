@@ -5,7 +5,6 @@ import com.runiverse.running_service.domain.user.exception.PasswordHashRequiredE
 
 import java.util.regex.Pattern;
 
-// 나중에
 public record PasswordHash(String value) {
 
     private static final Pattern ARGON2_PATTERN = Pattern.compile(

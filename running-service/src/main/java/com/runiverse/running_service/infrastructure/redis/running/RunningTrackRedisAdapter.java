@@ -81,7 +81,7 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
                     args.toArray());
             return appended == null ? 0 : appended.intValue();
         } catch (RuntimeException e) {
-            // 이 배치는 못 담았지만 원본은 클라 로컬 트랙에 남아 있다(api-spec 5-D).
+            // 이 배치는 못 담았지만 원본은 클라 로컬 트랙에 남아 있다.
             // 재연결하면 처음 sequence부터 다시 오므로 러닝을 끊지 않고 통지만 한다
             log.warn("러닝 트랙 저장 실패 — roomId={}, userId={}", runningRoomId, userId, e);
             throw new RunningTrackUnavailableException();
@@ -90,7 +90,7 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
 
     // 필드명을 빼고 배열로 적는다 - 좌표 하나가 230B에서 60B가 된다.
     // 좌표는 소수점 5자리(약 1m)로 자른다: GPS 실측 오차가 수 m라 그 아래는 노이즈고,
-    // route_polyline도 precision 5라 다운샘플 때 정밀도가 어긋나지 않는다(erd.md)
+    // route_polyline도 precision 5라 다운샘플 때 정밀도가 어긋나지 않는다
     private String compact(TrackPoint point) {
         return String.format(
                 Locale.ROOT,
@@ -124,7 +124,7 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
             throw new RunningTrackUnavailableException();
         }
         if (batches == null || batches.isEmpty()) {
-            // 좌표를 한 번도 못 받은 러닝 — 기록 없이 상태만 확정한다(api-spec 5-D)
+            // 좌표를 한 번도 못 받은 러닝 — 기록 없이 상태만 확정한다
             return new RunningTrack("[]", List.of());
         }
         // 배치마다 바깥 [ ]를 벗겨 잇는다 - 이미 압축 포맷이라 풀었다 다시 만들 이유가 없다.

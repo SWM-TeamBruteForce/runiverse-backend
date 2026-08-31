@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Optional;
 
 // 실측 트랙 하나를 기록에 넣을 값들로 바꾼다.
-// 결과가 비면 "거리·시간·경로를 산출할 수 없는 트랙"이라 기록 없이 상태만 확정한다(api-spec 5-D).
+// 결과가 비면 "거리·시간·경로를 산출할 수 없는 트랙"이라 기록 없이 상태만 확정한다.
 public final class TrackAnalyzer {
 
     private static final int METERS_PER_KM = 1_000;
@@ -67,7 +67,7 @@ public final class TrackAnalyzer {
     }
 
     // 누적 상승은 실측점으로 낸다 — 경계점은 직선 보간이라 오르내림이 뭉개진다.
-    // 구간의 순고도차(끝 − 시작)와 달리 올라간 것만 더하므로 구간 합과 일치하지 않는다(erd.md)
+    // 구간의 순고도차(끝 − 시작)와 달리 올라간 것만 더하므로 구간 합과 일치하지 않는다
     private static Integer elevationGain(List<TrackPoint> points, double noiseThresholdMeters) {
         Double previous = null;
         double gain = 0;

@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public record GetRunningResultsResult(
         Long runningRoomId,
-        // 아래 셋은 조회하는 본인 기록 기준이다 — 본인 기록이 없으면 null(api-spec 6-1)
+        // 아래 셋은 조회하는 본인 기록 기준이다 — 본인 기록이 없으면 null
         LocalDateTime startedAt,
         LocalDateTime finishedAt,
         // 저장은 encoded polyline이지만 응답은 좌표 배열이다.

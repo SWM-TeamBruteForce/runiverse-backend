@@ -80,7 +80,7 @@ class BroadcastRunningProgressHandlerTest {
     @Test
     @DisplayName("본인에게는 보내지 않는다")
     void doesNotSendToSender() {
-        // given -> 본인 진행은 클라가 이미 계산해 화면에 띄우고 있다(api-spec 5-D)
+        // given -> 본인 진행은 클라가 이미 계산해 화면에 띄우고 있다
         given(loadRunningRoomMembersPort.usersIn(ROOM_ID))
                 .willReturn(Set.of(new UserId(SENDER_ID)));
 

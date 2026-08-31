@@ -143,7 +143,7 @@ public class RunningWebSocketHandler extends TextWebSocketHandler {
         send(session, RunningMessageType.RUNNING_STARTED.message());
     }
 
-    // 위치 배치에는 ack가 없다 — 실패만 ERROR로 돌려준다(api-spec 5-D)
+    // 위치 배치에는 ack가 없다 — 실패만 ERROR로 돌려준다
     private void handleLocationUpdate(WebSocketSession session, WebSocketEnvelope envelope)
             throws IOException {
         RunningLocationUpdateRequest request;
@@ -158,7 +158,7 @@ public class RunningWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         Long startedRoomId = (Long) session.getAttributes().get(RUNNING_ROOM_ID);
-        // RUNNING_START 없이 온 좌표는 검증된 방이 없다(api-spec 5-C: START가 첫 메시지)
+        // RUNNING_START 없이 온 좌표는 검증된 방이 없다 — START가 첫 메시지다
         if (startedRoomId == null) {
             sendError(session, RunningWebSocketErrorCode.RUNNING_NOT_STARTED, envelope.event());
             return;
@@ -190,7 +190,7 @@ public class RunningWebSocketHandler extends TextWebSocketHandler {
                 .toList();
     }
 
-    // 상태가 걸린 요청이라 ack가 있다 — 클라는 이걸 받고 로컬 트랙을 지운 뒤 REST로 결과를 본다(api-spec 5-D)
+    // 상태가 걸린 요청이라 ack가 있다 — 클라는 이걸 받고 로컬 트랙을 지운 뒤 REST로 결과를 본다
     private void handleRunningFinish(WebSocketSession session, WebSocketEnvelope envelope)
             throws IOException {
         RunningFinishRequest request;

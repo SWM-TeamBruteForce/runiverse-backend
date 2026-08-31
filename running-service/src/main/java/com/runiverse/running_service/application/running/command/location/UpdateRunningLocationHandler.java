@@ -43,10 +43,10 @@ public class UpdateRunningLocationHandler implements UpdateRunningLocationUsecas
                 updated.metersRounded(),
                 command.targetDistanceMeters(),
                 latestPace(command),
-                false));   // RUNNING_PAUSE/RESUME 구현 전까지 항상 false다(api-spec 5-D)
+                false));   // TODO: 일시정지 미구현 — RUNNING_PAUSE/RESUME을 만들 때 실제 상태로 교체한다
     }
 
-    // 마지막 좌표의 값을 그대로 옮긴다 — 단말이 못 재면 null이다(api-spec 5-D)
+    // 마지막 좌표의 값을 그대로 옮긴다 — 단말이 못 재면 null이다
     private Integer latestPace(UpdateRunningLocationCommand command) {
         return command.points().stream()
                 .max(Comparator.comparingLong(TrackPoint::sequence))

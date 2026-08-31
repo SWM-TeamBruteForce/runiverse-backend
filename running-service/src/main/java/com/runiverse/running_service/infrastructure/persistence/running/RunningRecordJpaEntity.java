@@ -56,7 +56,7 @@ public class RunningRecordJpaEntity extends BaseTimeEntity {
     @JoinColumn(name = "running_room_id", nullable = false, updatable = false,
             foreignKey = @ForeignKey(name = "fk_running_record_room"))
     private RunningRoomJpaEntity room;
-    // 논리 참조(FK 제약 없음) — 탈퇴해도 기록은 남는다(erd.md §0)
+    // 논리 참조(FK 제약 없음) — 탈퇴해도 기록은 남는다
     @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
     @Column(name = "avg_pace", nullable = false, updatable = false)
