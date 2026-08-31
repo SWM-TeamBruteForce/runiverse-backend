@@ -13,6 +13,11 @@ public record ElapsedTime(int seconds) {
         }
     }
 
+    // 시계가 튄 트랙인지 조립 전에 묻는다 — int로 자르기 전에 long으로 물어야 오버플로가 안 숨는다
+    public static boolean isValid(long seconds) {
+        return seconds >= MIN && seconds <= MAX;
+    }
+
     public ElapsedTime plus(ElapsedTime other) {
         return new ElapsedTime(seconds + other.seconds);
     }

@@ -1,6 +1,9 @@
 package com.runiverse.running_service.application.running.command.finish;
 
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
+import com.runiverse.running_service.domain.running.metric.vo.Cadence;
+import com.runiverse.running_service.domain.running.metric.vo.ElapsedTime;
+import com.runiverse.running_service.domain.running.metric.vo.ElevationChange;
 import com.runiverse.running_service.domain.running.record.SplitDraft;
 
 import java.math.BigDecimal;
@@ -27,6 +30,11 @@ public final class SplitAssembler {
         }
         LocalDateTime origin = boundaries.get(0).recordedAt();
         long[] elapsed = elapsedSeconds(boundaries, origin);
+        // 시계가 튄 트랙은 구간을 만들지 않는다 — 단조화된 마지막 경과가 곧 조립에 쓰는 값이라
+        // 중간만 튀었다 돌아온 트랙도 여기서 걸린다. 빈 결과는 "산출 불가 → 기록 없이 상태만 확정"의 기존 경로다
+        if (!ElapsedTime.isValid(elapsed[elapsed.length - 1])) {
+            return List.of();
+        }
 
         List<SplitDraft> drafts = new ArrayList<>(boundaries.size() - 1);
         for (int number = 1; number < boundaries.size(); number++) {
@@ -74,13 +82,14 @@ public final class SplitAssembler {
         int count = 0;
         for (int i = fromExclusive + 1; i <= toInclusive; i++) {
             Integer cadence = points.get(i).cadenceSpm();
-            if (cadence != null) {
+            // 범위 밖 표본은 오전송(누적 걸음수 등)이다 — 쓰레기 하나가 평균을 오염시키지 않게 버린다.
+            // 남은 표본이 전부 범위 안이면 평균도 범위 안이라 결과 재검은 필요 없다
+            if (cadence != null && Cadence.isValid(cadence)) {
                 sum += cadence;
                 count++;
             }
         }
-        int average = count == 0 ? 0 : sum / count;
-        return average < 1 ? null : average;   // Cadence VO는 1 이상만 받는다
+        return count == 0 ? null : sum / count;
     }
 
     private static Integer elevationChange(List<TrackPoint> points, int fromExclusive,
@@ -90,7 +99,7 @@ public final class SplitAssembler {
         int count = 0;
         for (int i = fromExclusive + 1; i <= toInclusive; i++) {
             Double altitude = points.get(i).altitudeMeters();
-            if (altitude == null) {
+            if (altitude == null || !Double.isFinite(altitude)) {
                 continue;
             }
             if (first == null) {
@@ -104,6 +113,11 @@ public final class SplitAssembler {
         }
         double change = last - first;
         // 임계값 이하는 GPS 수직 오차로 본다 — 10m 구간에서는 대체로 여기 걸려 null이 된다
-        return Math.abs(change) <= noiseThresholdMeters ? null : (int) Math.round(change);
+        if (Math.abs(change) <= noiseThresholdMeters) {
+            return null;
+        }
+        // 캐스트로 자르기 전에 long으로 검사한다 — 글리치 고도는 측정 실패와 같다
+        long rounded = Math.round(change);
+        return ElevationChange.isValid(rounded) ? (int) rounded : null;
     }
 }

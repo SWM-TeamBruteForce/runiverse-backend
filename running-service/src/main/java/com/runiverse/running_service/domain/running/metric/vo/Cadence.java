@@ -12,4 +12,10 @@ public record Cadence(int stepsPerMinute) {
             throw new CadenceOutOfRangeException();
         }
     }
+
+    // 기록에 담을 수 있는 케이던스인지 미리 묻는다 — 센서 오전송 표본 하나가 기록을 못 막게.
+    // 범위를 밖에 한 번 더 적으면 어긋나므로 VO가 직접 답한다
+    public static boolean isValid(int stepsPerMinute) {
+        return stepsPerMinute >= MIN && stepsPerMinute <= MAX;
+    }
 }

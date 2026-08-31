@@ -1,6 +1,7 @@
 package com.runiverse.running_service.application.running.command.finish;
 
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
+import com.runiverse.running_service.domain.running.metric.vo.ElevationGain;
 import com.runiverse.running_service.domain.running.metric.vo.Pace;
 import com.runiverse.running_service.domain.running.record.SplitDraft;
 
@@ -60,7 +61,7 @@ public final class TrackAnalyzer {
         int samples = 0;
         for (TrackPoint point : points) {
             Double altitude = point.altitudeMeters();
-            if (altitude == null) {
+            if (altitude == null || !Double.isFinite(altitude)) {
                 continue;
             }
             samples++;
@@ -69,6 +70,11 @@ public final class TrackAnalyzer {
             }
             previous = altitude;
         }
-        return samples < 2 ? null : (int) Math.round(gain);
+        if (samples < 2) {
+            return null;
+        }
+        // 캐스트로 자르기 전에 long으로 검사한다 — 글리치가 만든 초과 상승은 측정 실패와 같다
+        long rounded = Math.round(gain);
+        return ElevationGain.isValid(rounded) ? (int) rounded : null;
     }
 }
