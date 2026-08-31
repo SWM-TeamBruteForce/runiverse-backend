@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.SequenceGenerator;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
@@ -47,7 +48,10 @@ import java.time.LocalDateTime;
 public class RunningSplitJpaEntity extends BaseCreatedAtEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    // IDENTITY는 Hibernate가 INSERT 배칭을 끈다 — batch_size 설정과 100건 flush 청크가 전부 무효였다.
+    // 채번을 시퀀스에서 미리 받아 와야 배치가 산다. allocationSize는 batch_size와 정합이라 시퀀스 왕복도 100건당 1회다
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "running_split_seq")
+    @SequenceGenerator(name = "running_split_seq", sequenceName = "running_split_seq", allocationSize = 100)
     @Column(name = "running_split_id", nullable = false, updatable = false)
     private Long runningSplitId;
     // 기록과 같은 애그리거트라 객체로 참조한다. 기록이 지워지면 구간도 함께 사라진다
