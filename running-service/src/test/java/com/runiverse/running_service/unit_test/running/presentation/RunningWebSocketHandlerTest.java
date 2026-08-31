@@ -21,6 +21,7 @@ import com.runiverse.running_service.application.running.port.out.SaveRunningDis
 import com.runiverse.running_service.application.running.port.out.RunningSessionPort;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.domain.running.metric.exception.CadenceOutOfRangeException;
 import com.runiverse.running_service.application.running.port.out.RunningRoomMembershipPort;
 import com.runiverse.running_service.infrastructure.websocket.RunningSessionRegistryAdapter;
 import com.runiverse.running_service.presentation.common.security.JwtHandshakeInterceptor;
@@ -787,6 +788,55 @@ class RunningWebSocketHandlerTest {
         verify(target, atLeastOnce()).sendMessage(captor.capture());
         List<TextMessage> sent = captor.getAllValues();
         return jsonMapper.readValue(sent.get(sent.size() - 1).getPayload(), WebSocketEnvelope.class);
+    }
+
+    @Test
+    @DisplayName("본문이 JSON null이면 MISSING_MESSAGE_TYPE으로 응답한다")
+    void respondsMissingMessageTypeOnNullBody() throws Exception {
+        // when -> 파싱은 성공하지만 봉투 자체가 없다 — 형식 오류지 서버 오류가 아니다
+        handler.handleMessage(session, text("null"));
+
+        // then
+        assertThatError(captureSent(), "MISSING_MESSAGE_TYPE", null);
+        verify(session, never()).close(any());
+    }
+
+    @Test
+    @DisplayName("도메인 예외가 새도 연결을 끊지 않고 INTERNAL_SERVER_ERROR로 마스킹한다")
+    void masksLeakedDomainException() throws Exception {
+        // given -> 선검사를 지나친 도메인 검증 예외 — 위생처리가 못 거른 미지의 독을 흉내 낸다
+        given(startRunningUsecase.handle(any())).willReturn(new StartRunningResult(ROOM_ID, TARGET_DISTANCE_METERS));
+        handler.handleMessage(session, runningStart("""
+                {"runningRoomId":125}"""));
+        willThrow(new CadenceOutOfRangeException())
+                .given(finishRunningUsecase).handle(any());
+
+        // when
+        handler.handleMessage(session, runningFinish("""
+                {"forced":false}"""));
+
+        // then -> 내부 코드·문구를 흘리지 않는다
+        assertThatError(captureLastSent(session), "INTERNAL_SERVER_ERROR", "RUNNING_FINISH");
+        verify(session, never()).close(any());
+    }
+
+    @Test
+    @DisplayName("인프라 런타임 예외가 새도 연결을 끊지 않고 INTERNAL_SERVER_ERROR로 응답한다")
+    void masksLeakedRuntimeException() throws Exception {
+        // given
+        given(startRunningUsecase.handle(any())).willReturn(new StartRunningResult(ROOM_ID, TARGET_DISTANCE_METERS));
+        handler.handleMessage(session, runningStart("""
+                {"runningRoomId":125}"""));
+        willThrow(new RuntimeException("s3 down"))
+                .given(finishRunningUsecase).handle(any());
+
+        // when
+        handler.handleMessage(session, runningFinish("""
+                {"forced":false}"""));
+
+        // then
+        assertThatError(captureLastSent(session), "INTERNAL_SERVER_ERROR", "RUNNING_FINISH");
+        verify(session, never()).close(any());
     }
 
     private void assertThatError(WebSocketEnvelope sent, String code, String sourceType) {

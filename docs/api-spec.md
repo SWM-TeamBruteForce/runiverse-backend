@@ -1050,6 +1050,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   | `ROOM_NOT_FOUND` | 방 없음 |
   | `NOT_ROOM_PLAYER` | 이 방 참가자가 아님 |
   | `INVALID_ROOM_STATE` | 현재 상태에서 불가한 요청 |
+  | `INTERNAL_SERVER_ERROR` | 예기치 못한 서버 오류 — 러닝은 계속된다. 표에 없는 오류는 이 코드로 마스킹된다 |
 
 - **`ERROR`로는 연결을 끊지 않는다.** 잘못된 메시지 하나 때문에 러닝 전체가 끊기면 안 되므로, 오류를 돌려주고 연결은 유지한다
 

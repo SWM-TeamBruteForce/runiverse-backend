@@ -72,6 +72,11 @@ public class RunningWebSocketHandler extends TextWebSocketHandler {
         }
         // 위치 좌표가 실려 오므로 payload는 개인정보다. INFO로 남기지 않는다.
         log.debug("러닝 WebSocket 수신 — userId={}, payload={}", userId(session), message.getPayload());
+        // 본문이 JSON null이면 봉투 자체가 없다 — 알려진 형식 오류를 서버 오류로 오분류하지 않게 먼저 가른다
+        if (envelope == null) {
+            sendError(session, RunningWebSocketErrorCode.MISSING_MESSAGE_TYPE, null);
+            return;
+        }
         String event = envelope.event();
         // from()은 null에도 empty를 돌려줘 UNSUPPORTED와 구분이 안 된다 — 여기서 먼저 가른다
         if (event == null || event.isBlank()) {
@@ -83,13 +88,20 @@ public class RunningWebSocketHandler extends TextWebSocketHandler {
             sendError(session, RunningWebSocketErrorCode.UNSUPPORTED_MESSAGE_TYPE, envelope.event());
             return;
         }
-        switch (type) {
-            case HEALTH_CHECK -> send(session, RunningMessageType.HEALTH_CHECKED.message());
-            case RUNNING_START -> handleRunningStart(session, envelope);
-            case RUNNING_LOCATION_UPDATE -> handleLocationUpdate(session, envelope);
-            case RUNNING_FINISH -> handleRunningFinish(session, envelope);
-            // HEALTH_CHECKED·RUNNING_STARTED·ERROR는 S→C 전용 — 클라가 보내면 처리 대상이 아니다.
-            default -> sendError(session, RunningWebSocketErrorCode.UNSUPPORTED_MESSAGE_TYPE, event);
+        try {
+            switch (type) {
+                case HEALTH_CHECK -> send(session, RunningMessageType.HEALTH_CHECKED.message());
+                case RUNNING_START -> handleRunningStart(session, envelope);
+                case RUNNING_LOCATION_UPDATE -> handleLocationUpdate(session, envelope);
+                case RUNNING_FINISH -> handleRunningFinish(session, envelope);
+                // HEALTH_CHECKED·RUNNING_STARTED·ERROR는 S→C 전용 — 클라가 보내면 처리 대상이 아니다.
+                default -> sendError(session, RunningWebSocketErrorCode.UNSUPPORTED_MESSAGE_TYPE, event);
+            }
+        } catch (RuntimeException e) {
+            // 마지막 그물 — 계약된 코드로 답한 예외는 여기 안 온다. 원인은 스택째 남기고
+            // 클라에는 고정 문구만 보낸다. 전송마저 실패하면 그대로 올려보내 컨테이너가 연결을 정리한다
+            log.error("러닝 WebSocket 처리 실패 — userId={}, event={}", userId(session), event, e);
+            sendError(session, RunningWebSocketErrorCode.INTERNAL_SERVER_ERROR, event);
         }
     }
 
