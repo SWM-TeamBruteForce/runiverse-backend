@@ -94,7 +94,7 @@
 | status | enum | NOT NULL, default MATCHING | 진행 단계 — [§6 enum 사전](#6-enum-사전) |
 | start_at | timestamp | NOT NULL | 예약 시작 시각 |
 | close_at | timestamp | nullable | **방이 닫힌 시각.** `FINISHED`·`CANCELLED`로 갈 때 찍고, 그 전까지는 null이다 — 종류와 무관하게 열려 있는 방은 전부 null. 모집 마감 시각이 아니다(그건 `start_at - 오프셋`으로 계산한다) |
-| target_distance | int | nullable | 방의 목표 거리(미터). 매칭 조건이라 **정해진 뒤에는 바뀌지 않는다**. 참가자에게서 유추하지 않고 방이 직접 가져 후보 방 조회가 단일 테이블에서 끝난다 |
+| target_distance | int | nullable | 방의 목표 거리(미터). **솔로 방은 null** — 목표가 없어야 조기 종료 페널티 판정을 건너뛴다. 매칭 조건이라 **정해진 뒤에는 바뀌지 않는다**. 참가자에게서 유추하지 않고 방이 직접 가져 후보 방 조회가 단일 테이블에서 끝난다 |
 | avg_pace | int | nullable | 참가자 평균 페이스(초/km). 참가·이탈마다 갱신. 배정 시 페이스가 가까운 방을 고르는 데 쓰고, `RoomInfo.teamAveragePaceSecondsPerKm`로도 나간다. **nullable인 이유는 참가자가 0이면 평균 낼 대상이 없기 때문이다** — 마지막 값을 남기지 않고 지운다(그 방은 같은 순간 닫힌다 — `FINISHED`·`CANCELLED` 판정은 아래 `current_player_count`) |
 | max_player_count | int | NOT NULL | 자리 수 — 매칭 `4`, 솔로 `1`, **[MVP 제외]** 초대 `4`. 생성 시 확정·불변 |
 | current_player_count | int | NOT NULL | 현재 인원. 생성 시 `1`, 참가·이탈마다 갱신한다. `current_player_count < max_player_count`면 들어갈 수 있다. **`1`은 정상 상태다** — 마감 전이면 계속 모집하고 마감 후면 혼자 뛴다. `0`이 되면 방을 닫는다. **시작 전이면 항상 `CANCELLED`**(빈 방이 후보로 남지 않게), **시작 후면 유효 기록 유무로 갈린다** — 저장된 기록이 하나라도 있으면 `FINISHED`, 없으면 `CANCELLED`. 이탈 페널티 면제 판정에도 쓴다 |
@@ -112,7 +112,7 @@
 | user_id | UUID | → users, NOT NULL | 논리 참조(FK 제약 없음). 탈퇴 시 조건부 유지·삭제 — [§0](#0-공통-규칙) |
 | status | enum | NOT NULL, default JOINED | 참가·진행 상태 — [§6 enum 사전](#6-enum-사전) |
 | start_at | timestamp | NOT NULL | 희망 시작 시각 |
-| target_distance | int | nullable | 목표 거리(미터, API `targetDistanceMeters`). 솔로 방은 사용자가 끝내야 끝나므로 null. `running_records.total_distance`(실제 이동 거리)와 이름으로 갈린다 |
+| target_distance | int | NOT NULL | 목표 거리(미터, API `targetDistanceMeters`). 솔로는 목표가 없어 도달 불가능한 상한(500000)으로 "끝은 유저가 정한다"를 표현한다 — 판정 기준은 이 값이 아니라 방(`running_rooms.target_distance`)이다. `running_records.total_distance`(실제 이동 거리)와 이름으로 갈린다 |
 | avg_pace | int | NOT NULL | 신청 시점의 사용자 평균 페이스(초/km). **입력받지 않는다** — 매칭 조건에 페이스 항목이 없어(5-A) 서버가 `user_onboardings.avg_pace`에서 복사한다. 배정 시 방 평균과의 근접도 판정에 쓴다 |
 | desired_player_count | int | nullable | **[MVP 제외]** 향후 사용자가 선택할 희망 매칭 인원 |
 | created_at / updated_at | timestamp | NOT NULL | |
