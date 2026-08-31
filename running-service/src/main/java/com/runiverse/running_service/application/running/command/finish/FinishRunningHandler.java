@@ -32,6 +32,8 @@ import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -65,7 +67,7 @@ public class FinishRunningHandler implements FinishRunningUsecase {
                 .orElseThrow(NotRoomPlayerException::new);
         // 이미 확정된 참가자 - 기록을 덮어쓰지 않고 트랙만 정리한 뒤 ack를 다시 보낸다
         if (!player.isActive()) {
-            deleteRunningTrackPort.delete(command.runningRoomId(), userId);
+            deleteTrackAfterCommit(command.runningRoomId(), userId);
             return;
         }
         // RUNNING_START를 거치지 않은 참가자는 확정할 러닝이 없다.
@@ -96,7 +98,7 @@ public class FinishRunningHandler implements FinishRunningUsecase {
         // 6. 방은 마지막 한 사람이 끝낼 때 닫힌다.
         //    참가자 갱신을 먼저 반영해야 방금 끝낸 자신이 RUNNING으로 세어지지 않는다
         closeRoomIfLastPlayer(room);
-        deleteRunningTrackPort.delete(command.runningRoomId(), userId); // 맨 아래 두는 것은 트랜잭션이 안됨으로
+        deleteTrackAfterCommit(command.runningRoomId(), userId);
     }
 
     // 솔로 방은 목표 거리가 없다 — 상한을 넘겨 실측 트랙을 자르지 않고 그대로 분석한다
@@ -176,5 +178,21 @@ public class FinishRunningHandler implements FinishRunningUsecase {
         }
         room.finish(LocalDateTime.now());
         updateRunningRoomPort.update(room);
+    }
+
+    // 커밋이 실패하면 재시도가 같은 트랙으로 다시 확정해야 한다 — 삭제는 커밋 뒤로 미룬다.
+    // 동기화가 없으면(트랜잭션 없이 페이크로 조립하는 테스트) 바로 지운다 —
+    // 이 앱에서 트랜잭션이 열려 있는데 동기화가 없는 상태는 없다
+    private void deleteTrackAfterCommit(Long runningRoomId, UserId userId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    deleteRunningTrackPort.delete(runningRoomId, userId);
+                }
+            });
+            return;
+        }
+        deleteRunningTrackPort.delete(runningRoomId, userId);
     }
 }

@@ -16,6 +16,8 @@ import com.runiverse.running_service.application.running.port.out.TrackPoint;
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingCommand;
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingHandler;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.runiverse.running_service.domain.running.player.RunningPlayer;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerId;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerStatus;
@@ -204,6 +206,55 @@ public class FinishRunningIntegrationTest extends IntegrationTestSupport {
         assertThat(gpsTrackUploader.uploads()).hasSize(1);
         assertThat(gpsTrackUploader.uploads().get(0).raw()).startsWith("[[0,");
         assertThat(runningTrackStore.isEmpty(runningRoomId, new UserId(userId))).isTrue();
+    }
+
+    @Test
+    @DisplayName("트랜잭션 동기화가 활성이면 트랙 삭제를 커밋 뒤로 미룬다")
+    void deletesTrackOnlyAfterCommit() {
+        // given
+        UUID userId = onboardedUser(EMAIL, NICKNAME);
+        Long runningRoomId = runningRoom(userId);
+        runFor(userId, runningRoomId, 400);
+        // 페이크 조립엔 트랜잭션이 없다 — 동기화만 수동으로 켜서 커밋 경계를 흉내 낸다
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            // when
+            finish(userId, runningRoomId);
+
+            // then -> 커밋 전에 지우면 커밋 실패 시 재시도가 빈 트랙으로 0m 확정한다
+            assertThat(runningTrackStore.isEmpty(runningRoomId, new UserId(userId))).isFalse();
+
+            // when -> 커밋 성공을 흉내 낸다
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+
+            // then
+            assertThat(runningTrackStore.isEmpty(runningRoomId, new UserId(userId))).isTrue();
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    @DisplayName("롤백되면 트랙을 지우지 않는다 — 재시도가 같은 트랙으로 다시 확정한다")
+    void keepsTrackOnRollback() {
+        // given
+        UUID userId = onboardedUser(EMAIL, NICKNAME);
+        Long runningRoomId = runningRoom(userId);
+        runFor(userId, runningRoomId, 400);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            finish(userId, runningRoomId);
+
+            // when -> 커밋 실패를 흉내 낸다
+            TransactionSynchronizationManager.getSynchronizations().forEach(synchronization ->
+                    synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
+
+            // then
+            assertThat(runningTrackStore.isEmpty(runningRoomId, new UserId(userId))).isFalse();
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test
