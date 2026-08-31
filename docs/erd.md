@@ -147,7 +147,7 @@
 | running_room_id | bigint | FK → running_rooms, NOT NULL | 솔로 러닝도 방을 만드므로 항상 값이 있다 |
 | user_id | UUID | → users, NOT NULL | |
 | avg_pace | int | NOT NULL | 초/km |
-| total_distance | int | NOT NULL | 미터. **목표 거리에서 끊는다** — 목표를 넘겨 뛰어도 `running_rooms.target_distance` 지점을 보간해 그 값으로 확정하고 `end_at`·`total_duration`도 같은 지점 기준으로 맞춘다(거리만 자르면 페이스가 틀어진다). 참가자 전원이 같은 구간 경계를 갖게 하려는 것이다 — 6-2 응답은 구간 경계를 참가자별이 아니라 구간 레벨에 둔다. 목표에 못 미치면 실제 거리를 그대로 쓴다. **S3 원본 트랙에는 목표 이후 좌표도 전부 남긴다**(재계산용) |
+| total_distance | int | NOT NULL | 미터. **목표 거리에서 끊는다** — 목표를 넘겨 뛰어도 `running_rooms.target_distance` 지점을 보간해 그 값으로 확정하고 `end_at`·`total_duration`도 같은 지점 기준으로 맞춘다(거리만 자르면 페이스가 틀어진다). 참가자 전원이 같은 구간 경계를 갖게 하려는 것이다 — 6-2 응답은 구간 경계를 참가자별이 아니라 구간 레벨에 둔다. 목표에 못 미치면 마지막 10m 경계까지로 확정한다 — 10m 미만 꼬리는 버려 구간 합과 어긋나지 않게 한다. **S3 원본 트랙에는 목표 이후 좌표도 전부 남긴다**(재계산용) |
 | total_duration | int | NOT NULL | 초. 구간(`running_splits.duration`)의 합. **일시정지 시간은 빠진다** — 멈춘 동안은 어느 구간에도 쌓이지 않으므로 `end_at - start_at`보다 작을 수 있다 |
 | avg_cadence | int | nullable | spm (선택). 러닝 전체 평균 — 점별 순간 케이던스(`cadenceSpm`)는 저장하지 않는다 |
 | total_elevation_gain | int | nullable | 누적 상승 고도(미터). 기기 GPS 고도를 운영 임계값으로 필터링해 계산하며 유효 표본이 부족하면 null. 구간(`running_splits.elevation_change`)의 합과는 다르다 |
@@ -171,7 +171,7 @@
 | running_record_id | bigint | FK → running_records, NOT NULL | |
 | split_number | int | NOT NULL | 구간 번호(1부터). API `splitNumber` |
 | avg_pace | int | NOT NULL | 초/km |
-| distance | int | NOT NULL | 구간 거리(미터) — **10m 고정**. 경계는 0-10, 10-20…으로 목표 거리까지 끊고, 정확히 10m가 되도록 경계 지점을 보간해 만든다. 목표 5,000m면 구간이 500개다. 목표 미달로 끝난 참가자는 도달한 구간까지만 행이 생긴다 |
+| distance | int | NOT NULL | 구간 거리(미터) — **10m 고정**. 경계는 0-10, 10-20…으로 끊고, 정확히 10m가 되도록 경계 지점을 보간해 만든다. 목표 5,000m면 구간이 500개다. 목표 미달로 끝난 참가자는 도달한 구간까지만 행이 생긴다 |
 | duration | int | NOT NULL | 구간 소요 시간(초) |
 | avg_cadence | int | nullable | spm (선택). 구간 평균 |
 | elevation_change | int | nullable | 필터링한 기기 GPS 고도의 **순고도차**(미터) — 끝 고도 − 시작 고도라 음수가 될 수 있다. 유효 표본이 부족하면 null이며 `total_elevation_gain`과는 다른 값이다. **10m 구간에서는 대체로 null이다** — 구간에 실측점이 3~4개뿐인데 GPS 수직 오차가 수 m라 노이즈 임계값을 넘는 표본이 거의 없다 |
