@@ -300,19 +300,24 @@
 
 ## 5. delete_* (스냅샷/이력 테이블)
 
-FK 강제 없는 독립 테이블(원본 삭제/수정된 row를 참조하므로 FK 미설정). 컬럼은 스냅샷 당시 값 그대로, `created_at`(NOT NULL) = 스냅샷 시각.
+FK 강제 없는 독립 테이블(원본 삭제/수정된 row를 참조하므로 FK 미설정). 컬럼은 스냅샷 당시 값 그대로, `created_at`(NOT NULL) = 스냅샷 시각. 단 `delete_users`의 `birth_year`·`bmi`는 식별성을 낮춘 가공값이다.
 
 > **스냅샷은 앱이 남긴다.** `ON DELETE CASCADE`는 DB가 처리하므로 애플리케이션을 거치지 않는다 — 탈퇴로 지워지는 row를 남기려면 탈퇴 유스케이스에서 **명시적으로 INSERT**해야 한다.
 
 ### delete_users
 
-회원탈퇴 스냅샷(최소 정보만).
+회원탈퇴 스냅샷. **한 테이블에 두 목적이 있고 보관 기간이 다르다** — `email`·`nickname`은 신고 대응용이라 90일 뒤 `NULL`이 되고, 나머지는 통계용으로 남는다.
 | 컬럼 | 타입 | 제약 | 비고 |
 |---|---|---|---|
-| user_id | UUID | PK, → users | 탈퇴 유저 |
-| email | varchar | | |
-| alert_consent | boolean | | |
-| created_at | timestamp | NOT NULL | 스냅샷 시각 |
+| user_id | UUID | PK, → users | 탈퇴 유저. 논리 참조(`users` 하드delete 후 값 유지) |
+| email | varchar | nullable | 탈퇴 시점 이메일 — 신고 대상의 신원을 특정한다. **90일 뒤 `NULL`로 갱신**하고 행은 남긴다 |
+| nickname | varchar | nullable | 탈퇴 시점 닉네임 — 신고가 닉네임으로 들어오므로 탈퇴자를 찾는 고리다. 변경 이력이 없어 마지막 값만 남는다. `email`과 함께 **90일 뒤 `NULL`** |
+| gender | enum | nullable | 온보딩 스냅샷. 온보딩 전에 탈퇴하면 null |
+| birth_year | int | nullable | **생년월일이 아니라 연도만** — 성별·체형과 겹치면 소수 표본에서 특정된다 |
+| avg_pace | int | nullable | 초/km |
+| bmi | numeric(5,1) | nullable | **체중·신장이 아니라 파생값** — 원값을 복원할 수 없다 |
+| joined_at | timestamp | NOT NULL | **`users.created_at`**(가입 시각) — `user_onboardings.created_at`(온보딩 완료 시각)이 아니다 |
+| created_at | timestamp | NOT NULL | 스냅샷 시각 = 탈퇴 시각. `created_at - joined_at`이 체류 기간이다 |
 
 ### delete_feeds [MVP 제외]
 
