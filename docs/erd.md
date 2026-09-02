@@ -316,6 +316,7 @@ FK 강제 없는 독립 테이블(원본 삭제/수정된 row를 참조하므로
 | birth_year | int | nullable | **생년월일이 아니라 연도만** — 성별·체형과 겹치면 소수 표본에서 특정된다 |
 | avg_pace | int | nullable | 초/km |
 | bmi | numeric(5,1) | nullable | **체중·신장이 아니라 파생값** — 원값을 복원할 수 없다 |
+| login_type | enum | NOT NULL | 가입 수단. `oauth_users`에 row가 있으면 그 `provider`, 없으면 `LOCAL`. 가입 시점에 정해지므로 온보딩 전에 탈퇴해도 값이 있다 |
 | joined_at | timestamp | NOT NULL | **`users.created_at`**(가입 시각) — `user_onboardings.created_at`(온보딩 완료 시각)이 아니다 |
 | created_at | timestamp | NOT NULL | 스냅샷 시각 = 탈퇴 시각. `created_at - joined_at`이 체류 기간이다 |
 
@@ -361,6 +362,7 @@ FK 강제 없는 독립 테이블(원본 삭제/수정된 row를 참조하므로
 | running_rooms.type | SOLO / MATCH / INVITE | 솔로 러닝 / 랜덤 매칭 / 친구 초대. `INVITE`는 **[MVP 제외]** 예약값 |
 | running_rooms.status | MATCHING / MATCHED / STARTED / FINISHED / CANCELLED | 모집 중(마감 전) / 마감 시점 확정(인원 무관, 1인도 확정) / 시작 / **유효 기록을 남기고** 종료 / 남길 기록 없이 방이 빔 — 시작 전이면 항상, 시작 후면 유효 기록이 하나도 없을 때 |
 | oauth_users.provider | GOOGLE / KAKAO | |
+| delete_users.login_type | LOCAL / GOOGLE / KAKAO | `oauth_users.provider`에 `LOCAL`을 더한 값 — 소셜 연동이 없는 계정도 표현해야 한다 |
 
 ---
 

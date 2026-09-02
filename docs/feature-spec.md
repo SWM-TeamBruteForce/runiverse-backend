@@ -348,7 +348,7 @@
 - 탈퇴를 막지 않는다. 삭제 전에 대기 중이면 취소하고 확정 방이면 이탈한다. 러닝 중이면 마지막 수신 데이터로 일반 종료 판정을 적용해 목표 달성은 `COMPLETED`, 미달은 거리 비율에 따른 `RUNNING_LEFT_*`로 바꾸며 생성 가능한 기록은 확정한다. 방 인원·상태를 갱신하고 남은 참가자에게 알린 뒤 계정을 삭제한다.
 - **유지**: `feeds`, `comments`, `running_records`(+`running_splits`) — 같은 방 참가자의 기록 비교를 위해 탈퇴해도 남긴다. `user_id`는 DB FK 없이 애플리케이션에서 처리하며, 응답의 탈퇴 사용자는 `{ userId, nickname: "탈퇴한 사용자", profileImageUrl: null, isDeleted: true }`로 대체한다.
 - **유지 (카운트 재계산 안 함)**: `feed_likes`, `comment_likes` — 탈퇴자가 누른 좋아요는 남겨두고 `like_count` 그대로(인스타그램 방식).
-- **즉시 삭제**: `friendships`와 개인 데이터 테이블(`user_onboardings`, `user_devices`, `oauth_users`, `user_colors`). 시작 전 신청의 `running_players`와 세션도 삭제한다. 온보딩 값은 지우기 전에 `delete_users`로 옮긴다 — **닉네임 중복 검사는 `delete_users`를 보지 않으므로 탈퇴 즉시 그 닉네임을 다른 사람이 쓸 수 있다.**
+- **즉시 삭제**: `friendships`와 개인 데이터 테이블(`user_onboardings`, `user_devices`, `oauth_users`, `user_colors`). 시작 전 신청의 `running_players`와 세션도 삭제한다. 온보딩 값과 로그인 수단은 지우기 전에 `delete_users`로 옮긴다 — **닉네임 중복 검사는 `delete_users`를 보지 않으므로 탈퇴 즉시 그 닉네임을 다른 사람이 쓸 수 있다.**
 - **러닝 참가 이력 유지**: 이미 시작한 방의 `running_players`와 `running_room_sessions`는 기록이 없는 참가자도 과거 결과에 남기기 위해 유지한다. 사용자 정보는 탈퇴 유저 형식으로 대체한다.
 - 친구 수는 집계 컬럼이 아니라 `friendships` COUNT라 **재계산이 필요 없다** — row가 사라지면 수도 함께 줄어든다. (`feed_likes`는 row를 유지해 카운트도 유지 — 기준이 다름.)
 - **DB 밖도 함께 지운다**: Redis의 리프레시 토큰·액세스 토큰 블랙리스트는 즉시 삭제 — 남기면 탈퇴 후에도 재발급된다. S3 프로필 사진은 `profiles/{userId}/` **프리픽스 전체**를 90일 뒤 삭제한다(사진을 바꿀 때마다 객체가 쌓여 `profile_image_key` 하나로는 과거 것이 남는다). **GPS 원본 트랙은 유지** — `route_polyline`이 DB에 남아 경로는 어차피 보관되고 재계산에 쓴다.
