@@ -110,6 +110,20 @@ public class ProfileRequestValidationTest {
     }
 
     @Test
+    @DisplayName("만 14세가 되는 날은 통과시키고 하루라도 모자라면 거부한다")
+    void checksMinimumAge() {
+        // given -> 고정 날짜로 적으면 시간이 지나며 통과 여부가 바뀐다
+        LocalDate turnsFourteenToday = LocalDate.now().minusYears(14);
+
+        // when & then
+        assertThat(validate(new ProfileUpdateRequest(null, null, turnsFourteenToday, null, null)))
+                .isEmpty();
+        assertThat(firstMessage(validate(
+                new ProfileUpdateRequest(null, null, turnsFourteenToday.plusDays(1), null, null))))
+                .isEqualTo("만 14세 미만은 서비스를 이용할 수 없습니다.");
+    }
+
+    @Test
     @DisplayName("몸무게 범위를 벗어나면 명세 문구로 거부한다")
     void checksWeightRange() {
         // when & then

@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.Period;
 
 // 부분 수정이라 전부 선택이다. 소개글은 빈 문자열로 지울 수 있어 @NotBlank를 붙이지 않는다
 public record ProfileUpdateRequest(
@@ -39,8 +40,16 @@ public record ProfileUpdateRequest(
     // Birthday VO의 하한을 옮긴 값 — 내장 제약에는 날짜 하한이 없어 @AssertTrue로 표현한다
     private static final LocalDate BIRTHDAY_MIN = LocalDate.of(1900, 1, 1);
 
+    // 온보딩과 같은 기준이다 — 가입 후 생년월일을 바꿔 우회할 수 있어 여기도 막는다
+    private static final int MIN_AGE = 14;
+
     @AssertTrue(message = "생년월일은 1900년 1월 1일 이후여야 합니다.")
     public boolean isBirthdayInRange() {
         return birthday == null || !birthday.isBefore(BIRTHDAY_MIN);
+    }
+
+    @AssertTrue(message = "만 14세 미만은 서비스를 이용할 수 없습니다.")
+    public boolean isOldEnough() {
+        return birthday == null || Period.between(birthday, LocalDate.now()).getYears() >= MIN_AGE;
     }
 }
