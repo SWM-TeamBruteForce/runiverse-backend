@@ -1171,6 +1171,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **ack**: `RUNNING_FINISHED` — 수신 후 클라는 REST `GET /running-rooms/{id}/results`로 대시보드 진입
 - `RUNNING_FINISH`는 멱등이다. 타임아웃이나 이전 요청으로 이미 확정됐으면 기록을 덮어쓰지 않고 `RUNNING_FINISHED`를 다시 보내 로컬 트랙을 정리하게 한다
 - 방 시작 때 `RUNNING`으로 전환된 참가자 전원이 종료 상태가 되고 기록 확정이 끝나면 방을 `FINISHED`로 바꾼다. 타임아웃에는 남은 참가자를 먼저 같은 규칙으로 종료 처리한다
+- **부수효과 — 기록을 확정할 때 시작 좌표가 외부로 나간다.** 서버가 날씨를 조회하려고 `api.open-meteo.com`(`OpenMeteo GmbH`, 스위스)에 위도·경도와 시각을 보낸다. 개인위치정보의 국외 이전이라 개인정보처리방침 고지 대상이고 Google Play 데이터 보안에는 `공유됨`으로 신고한다. 상세는 `feature-spec.md`의 날씨 절에 있다
 
 ## 6. 러닝 중 / 러닝 후 대시보드 (REST)
 
