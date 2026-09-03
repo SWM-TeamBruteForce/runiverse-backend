@@ -6,12 +6,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -28,6 +30,9 @@ public abstract class E2eTestSupport {
             System.getenv().getOrDefault("E2E_BASE_URL", "http://localhost:8080/api/v1");
     private static final String APP_CONTAINER =
             System.getenv().getOrDefault("E2E_APP_CONTAINER", "runiverse-e2e-app");
+    // 핸들러가 등록된 경로(application.properties의 websocket.running-endpoint)를 컨텍스트 경로 뒤에 붙인다
+    private static final String RUNNING_WEBSOCKET_URL =
+            BASE_URL.replaceFirst("^http", "ws") + "/ws/running";
     private static final String MAIL_LOG_MARKER = "[메일 발송 생략]";
     private static final Pattern VERIFICATION_CODE = Pattern.compile("\\d{6}");
     private static final int CODE_LOOKUP_RETRIES = 10;
@@ -42,23 +47,36 @@ public abstract class E2eTestSupport {
         public String text(String field) {
             return (String) body.get(field);
         }
+
+        // JSON 숫자는 크기에 따라 Integer·Long·Double로 흩어져 온다 — 읽는 쪽에서 캐스팅하지 않게 모은다
+        public Integer number(String field) {
+            Object value = body.get(field);
+            return value == null ? null : ((Number) value).intValue();
+        }
+
+        public Boolean bool(String field) {
+            return (Boolean) body.get(field);
+        }
+
+        @SuppressWarnings("unchecked")
+        public List<Map<String, Object>> objects(String field) {
+            return (List<Map<String, Object>>) body.get(field);
+        }
+
+        // routes처럼 객체가 아니라 [위도, 경도] 배열이 담긴 목록은 원소 타입을 못 박지 않는다
+        public List<?> list(String field) {
+            return (List<?>) body.get(field);
+        }
+    }
+
+    /** 가입·온보딩까지 마친 사용자. 러닝처럼 온보딩이 전제인 흐름은 전부 여기서 출발한다. */
+    public record TestUser(String userId, String email, String password, String nickname,
+                           String accessToken) {
+
     }
 
     protected Response post(String path, Map<String, ?> request) {
         return post(path, request, null);
-    }
-
-    protected Response post(String path, Map<String, ?> request, String accessToken) {
-        HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(BASE_URL + path))
-                .timeout(Duration.ofSeconds(10))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(toJson(request), StandardCharsets.UTF_8));
-        if (accessToken != null) {
-            builder.header("Authorization", "Bearer " + accessToken);
-        }
-        HttpResponse<String> response = send(builder.build());
-        return new Response(response.statusCode(), parse(response.body()));
     }
 
     // DB를 비울 수 없으므로 테스트마다 겹치지 않는 값을 쓴다
@@ -69,6 +87,75 @@ public abstract class E2eTestSupport {
     // 닉네임은 2~16자에 한글·영문·숫자·_ 만 허용된다
     protected String uniqueNickname() {
         return "runner" + shortId();
+    }
+
+    private Response exchange(String method, String path, Map<String, ?> request,
+                              String accessToken) {
+        // 본문 없는 메서드에 빈 문자열을 실으면 Content-Type만 남아 서버가 파싱을 시도한다
+        HttpRequest.BodyPublisher body = request == null
+                ? HttpRequest.BodyPublishers.noBody()
+                : HttpRequest.BodyPublishers.ofString(toJson(request), StandardCharsets.UTF_8);
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + path))
+                .timeout(Duration.ofSeconds(10))
+                .method(method, body);
+        if (request != null) {
+            builder.header("Content-Type", "application/json");
+        }
+        if (accessToken != null) {
+            builder.header("Authorization", "Bearer " + accessToken);
+        }
+        HttpResponse<String> response = send(builder.build());
+        return new Response(response.statusCode(), parse(response.body()));
+    }
+
+    protected Response get(String path, String accessToken) {
+        return exchange("GET", path, null, accessToken);
+    }
+
+    protected Response post(String path, Map<String, ?> request, String accessToken) {
+        return exchange("POST", path, request, accessToken);
+    }
+
+    protected Response patch(String path, Map<String, ?> request, String accessToken) {
+        return exchange("PATCH", path, request, accessToken);
+    }
+
+    protected Response delete(String path, String accessToken) {
+        return exchange("DELETE", path, null, accessToken);
+    }
+
+    /** 러닝 WebSocket에 붙는다. 토큰이 null이면 핸드셰이크가 401로 막히는지 확인하는 용도다. */
+    protected RunningWebSocket connectRunningWebSocket(String accessToken) {
+        return RunningWebSocket.connect(HTTP_CLIENT, RUNNING_WEBSOCKET_URL, accessToken);
+    }
+
+    /**
+     * 메일 인증 → 가입 → 온보딩까지 한 번에 끝낸다.
+     * 러닝은 온보딩의 평균 페이스·몸무게가 없으면 시작조차 못 해 대부분의 흐름이 여기서 출발한다.
+     */
+    protected TestUser signUpAndOnboard() {
+        String email = uniqueEmail();
+        String password = "Password123!";
+        post("/auth/email/verifications", Map.of("email", email));
+        Response verified = post("/auth/email/verifications/confirm",
+                Map.of("email", email, "code", sentVerificationCode(email)));
+        Response signedUp = post("/auth/signup", Map.of(
+                "verificationTicket", verified.text("verificationTicket"),
+                "password", password));
+        String accessToken = signedUp.text("accessToken");
+        String nickname = uniqueNickname();
+        post("/users/onboarding", Map.of(
+                "nickname", nickname,
+                "gender", "MALE",
+                "birthday", "1998-03-21",
+                "averagePaceSecondsPerKm", 330,
+                "weightKg", new BigDecimal("68.5"),
+                "heightCm", new BigDecimal("176.2")
+        ), accessToken);
+        // userId는 토큰을 파싱하지 않고 API로 받는다 — 서명 검증 없이 sub를 믿을 이유가 없다
+        String userId = get("/users/me", accessToken).text("userId");
+        return new TestUser(userId, email, password, nickname, accessToken);
     }
 
     /**

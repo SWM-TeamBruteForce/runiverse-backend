@@ -23,6 +23,33 @@ services:
       timeout: 5s
       retries: 12
 
+  # 러닝 종료가 GPS 원본 트랙을 S3에 올리고, 프로필 사진 반영이 업로드 여부를 확인한다.
+  # 더미 키로 실제 AWS를 치면 그대로 실패하므로 S3만 컨테이너로 세운다.
+  # 앱은 AWS_ENDPOINT_URL_S3만 보고 여기로 온다 — 프로덕션 코드는 건드리지 않는다.
+  localstack:
+    image: localstack/localstack:3
+    environment:
+      SERVICES: s3
+      AWS_DEFAULT_REGION: ap-northeast-2
+      # init 스크립트가 만들 버킷 — .env.test의 S3_*_BUCKET과 반드시 같아야 한다
+      E2E_GPS_TRACK_BUCKET: runiverse-e2e-gps-track
+      E2E_USER_ASSET_BUCKET: runiverse-e2e-user-asset
+    networks:
+      default:
+        aliases:
+          # SDK는 엔드포인트를 갈아끼워도 가상 호스트 주소(<버킷>.<호스트>)로 요청한다.
+          # 이 별칭이 없으면 컨테이너 DNS가 그 이름을 못 풀어 PutObject가 죽는다
+          - runiverse-e2e-gps-track.localstack
+          - runiverse-e2e-user-asset.localstack
+    volumes:
+      - ./localstack/init-s3.sh:/etc/localstack/init/ready.d/init-s3.sh:ro
+    healthcheck:
+      # 기동만이 아니라 버킷 생성까지 끝났는지를 본다 — 앱이 그 전에 붙으면 의미가 없다
+      test: ["CMD-SHELL", "awslocal s3api head-bucket --bucket runiverse-e2e-gps-track"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   app:
     image: ${E2E_IMAGE:-runiverse-backend:e2e}
     container_name: runiverse-e2e-app
@@ -32,6 +59,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      localstack:
         condition: service_healthy
     ports:
       - "8080:8080"
