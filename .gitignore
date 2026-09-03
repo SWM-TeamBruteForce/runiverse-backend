@@ -6,6 +6,7 @@
 
 ### Claude Code ###
 .claude/settings.local.json
+.context/
 CLAUDE.local.md
 
 ### Secrets ###
@@ -16,7 +17,3 @@ CLAUDE.local.md
 !e2e_test/.env.test
 *.pem
 *.key
-
-### Local tooling ###
-# codex 세션 ID 등 로컬 도구 캐시
-.context/
