@@ -599,6 +599,7 @@
 
 - **키·몸무게는 소수점 첫째 자리로 정규화한다** — 둘째 자리 이하는 반올림해 저장하며 범위는 20 이상 300 이하다(11-6과 같다)
 - **약관 동의**: 별도 요청 필드 없음 — **가입 흐름 첫 화면**에서 받고 가입 자체를 동의로 갈음한다(근거는 `feature-spec.md` 약관 동의 화면 절)
+- **만 14세 미만은 받지 않는다** — 법정대리인 동의 절차가 없어 개인정보를 처리할 수 없다. 생년월일로 만 나이를 계산해 400으로 막고, 프로필 수정(11-6)에서 생년월일을 바꿀 때도 같은 기준이다
 
 - **Response `201 Created`**
 
@@ -664,6 +665,11 @@
 {
   "code": "INVALID_REQUEST",
   "message": "생년월일은 1900년 1월 1일 이후여야 합니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "만 14세 미만은 서비스를 이용할 수 없습니다."
 }
 
 {
@@ -1171,6 +1177,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **ack**: `RUNNING_FINISHED` — 수신 후 클라는 REST `GET /running-rooms/{id}/results`로 대시보드 진입
 - `RUNNING_FINISH`는 멱등이다. 타임아웃이나 이전 요청으로 이미 확정됐으면 기록을 덮어쓰지 않고 `RUNNING_FINISHED`를 다시 보내 로컬 트랙을 정리하게 한다
 - 방 시작 때 `RUNNING`으로 전환된 참가자 전원이 종료 상태가 되고 기록 확정이 끝나면 방을 `FINISHED`로 바꾼다. 타임아웃에는 남은 참가자를 먼저 같은 규칙으로 종료 처리한다
+- **부수효과 — 기록을 확정할 때 시작 좌표가 외부로 나간다.** 서버가 날씨를 조회하려고 `api.open-meteo.com`(`OpenMeteo GmbH`, 스위스)에 위도·경도와 시각을 보낸다. 개인위치정보의 국외 이전이라 개인정보처리방침 고지 대상이고 Google Play 데이터 보안에는 `공유됨`으로 신고한다. 상세는 `feature-spec.md`의 날씨 절에 있다
 
 ## 6. 러닝 중 / 러닝 후 대시보드 (REST)
 
@@ -2495,7 +2502,9 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   - 탈퇴는 활성 상태 때문에 막지 않는다. `MATCHING`이면 5-A의 대기 취소, `MATCHED`이면 방 나가기, `STARTED`이면 마지막 수신 데이터로 5-D의 종료 처리를 먼저 적용한다. 방 인원·상태를 갱신하고 남은 참가자에게 이벤트를 보낸다.
   - `delete_users` 스냅샷 후 `users`를 하드 삭제한다. `delete_users.created_at`은 스냅샷 시각이다.
   - **유지**: `feeds`/`comments`/`running_records`(+splits)/좋아요. 이미 시작한 방의 `running_players`와 `running_room_sessions`도 기록 없는 참가자를 결과에 남기기 위해 유지한다. 사용자는 공통 탈퇴 유저 형식으로 표시한다.
-  - **CASCADE 삭제**: `user_onboardings`/`user_devices`/`oauth_users`/`friendships`/`user_colors`.
+  - **삭제**: `user_onboardings`(값은 `delete_users`로 스냅샷 후)/`user_devices`/`oauth_users`(`login_type` 판정 후 — 먼저 지우면 `LOCAL`로 보인다)/`friendships`/`user_colors`.
   - **명시적 삭제**: 시작 전 신청의 `running_players`; 연결된 `running_room_sessions`는 CASCADE 삭제한다.
+  - **DB 밖**: Redis 토큰 즉시 삭제, S3 프로필 사진 90일 뒤 삭제, GPS 원본 유지, 카카오 unlink(`provider_id` 선확보).
+  - `delete_users`의 `email`·`nickname`은 90일 뒤 `NULL`로 갱신한다(행은 유지).
 - **Response**: `204 No Content` (토큰 즉시 무효화)
 - **인증**: 필요

@@ -13,6 +13,7 @@ import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.Period;
 
 public record OnboardingRequest(
         @NotBlank(message = "닉네임은 필수입니다.")
@@ -57,8 +58,22 @@ public record OnboardingRequest(
     // Birthday VO의 하한을 옮긴 값 — 내장 제약에는 날짜 하한이 없어 @AssertTrue로 표현한다
     private static final LocalDate BIRTHDAY_MIN = LocalDate.of(1900, 1, 1);
 
+    // 만 14세 미만은 법정대리인 동의 없이 개인정보를 처리할 수 없어 받지 않는다.
+    // Birthday VO가 아니라 여기 두는 이유는 도메인 불변식이 아니라 정책이라서다 —
+    // 1900년 하한은 바뀔 일이 없지만 연령 기준은 바뀔 수 있다
+    private static final int MIN_AGE = 14;
+
     @AssertTrue(message = "생년월일은 1900년 1월 1일 이후여야 합니다.")
     public boolean isBirthdayInRange() {
         return birthday == null || !birthday.isBefore(BIRTHDAY_MIN);
+    }
+
+    @AssertTrue(message = "만 14세 미만은 서비스를 이용할 수 없습니다.")
+    public boolean isOldEnough() {
+        // 미래 날짜는 @PastOrPresent가 잡는다 — 여기서 겹쳐 거부하면 메시지가 둘 나간다
+        LocalDate today = LocalDate.now();
+        return birthday == null
+                || birthday.isAfter(today)
+                || Period.between(birthday, today).getYears() >= MIN_AGE;
     }
 }
