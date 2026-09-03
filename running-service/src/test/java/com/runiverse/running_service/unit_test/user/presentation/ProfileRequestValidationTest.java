@@ -93,10 +93,12 @@ public class ProfileRequestValidationTest {
     @Test
     @DisplayName("미래 생년월일은 거부한다")
     void rejectsFutureBirthday() {
-        // when & then
+        // when & then -> 나이 검증까지 겹쳐 걸리면 메시지 순서가 흔들려 테스트가 깨진다
         ProfileUpdateRequest request =
                 new ProfileUpdateRequest(null, null, LocalDate.now().plusDays(1), null, null);
-        assertThat(firstMessage(validate(request))).isEqualTo("생년월일은 미래일 수 없습니다.");
+        Set<ConstraintViolation<ProfileUpdateRequest>> violations = validate(request);
+        assertThat(violations).hasSize(1);
+        assertThat(firstMessage(violations)).isEqualTo("생년월일은 미래일 수 없습니다.");
     }
 
     @Test

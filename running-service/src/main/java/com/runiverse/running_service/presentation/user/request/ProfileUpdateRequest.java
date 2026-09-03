@@ -50,6 +50,10 @@ public record ProfileUpdateRequest(
 
     @AssertTrue(message = "만 14세 미만은 서비스를 이용할 수 없습니다.")
     public boolean isOldEnough() {
-        return birthday == null || Period.between(birthday, LocalDate.now()).getYears() >= MIN_AGE;
+        // 미래 날짜는 @PastOrPresent가 잡는다 — 여기서 겹쳐 거부하면 메시지가 둘 나간다
+        LocalDate today = LocalDate.now();
+        return birthday == null
+                || birthday.isAfter(today)
+                || Period.between(birthday, today).getYears() >= MIN_AGE;
     }
 }
