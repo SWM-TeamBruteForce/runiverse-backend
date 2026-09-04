@@ -154,7 +154,11 @@ public final class RunningWebSocket implements AutoCloseable {
                 received.add(parse(buffer.toString()));
                 buffer.setLength(0);
             }
-            // null을 돌려주면 HttpClient가 알아서 다음 메시지를 요청한다
+            // JDK WebSocket은 request(n)만큼만 콜백을 부른다. onOpen 기본 구현이 1을 요청하고
+            // onText 기본 구현이 매번 1을 다시 요청하는데, 오버라이드하면 그게 사라진다 —
+            // 여기서 직접 요청하지 않으면 서버 메시지를 딱 하나만 받고 그 뒤로는 조용해진다.
+            // 반환하는 null은 "이 메시지 처리 끝"이지 다음 메시지 요청이 아니다
+            webSocket.request(1);
             return null;
         }
 
