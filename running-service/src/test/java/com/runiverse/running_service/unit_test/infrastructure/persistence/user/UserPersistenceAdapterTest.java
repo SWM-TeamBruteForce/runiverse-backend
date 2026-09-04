@@ -592,6 +592,35 @@ public class UserPersistenceAdapterTest {
                 .isInstanceOf(UserNotFoundException.class);
     }
 
+    @Test
+    @DisplayName("소셜 연동이 있으면 그 provider를 반환한다")
+    void loadProviderReturnsLinkedProvider() {
+        // given
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        OauthUserJpaEntity entity = OauthUserJpaEntity.create(userId, Provider.KAKAO, PROVIDER_ID);
+        when(entityManager.find(OauthUserJpaEntity.class, userId)).thenReturn(entity);
+
+        // when
+        Optional<Provider> provider = userPersistenceAdapter.loadProvider(new UserId(userId));
+
+        // then
+        assertThat(provider).contains(Provider.KAKAO);
+    }
+
+    @Test
+    @DisplayName("소셜 연동이 없으면 빈 Optional을 반환한다")
+    void loadProviderReturnsEmptyWithoutOauth() {
+        // given -> 로컬 계정은 oauth_users에 행이 없다
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        when(entityManager.find(OauthUserJpaEntity.class, userId)).thenReturn(null);
+
+        // when
+        Optional<Provider> provider = userPersistenceAdapter.loadProvider(new UserId(userId));
+
+        // then
+        assertThat(provider).isEmpty();
+    }
+
     private void givenCountQueryReturns(String parameterName, Object value, long count) {
         when(entityManager.createQuery(anyString(), eq(Long.class)))
                 .thenReturn(countQuery);
