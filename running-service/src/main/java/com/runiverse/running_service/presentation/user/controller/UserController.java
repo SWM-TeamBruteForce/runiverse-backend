@@ -21,11 +21,14 @@ import com.runiverse.running_service.application.user.port.in.CompleteOnboarding
 import com.runiverse.running_service.application.user.port.in.CreateProfileImageUploadUrlUsecase;
 import com.runiverse.running_service.application.user.port.in.DeleteProfileImageUsecase;
 import com.runiverse.running_service.application.user.port.in.GetProfileImageUsecase;
+import com.runiverse.running_service.application.user.port.in.GetMyAccountUsecase;
 import com.runiverse.running_service.application.user.port.in.GetMyBasicInfoUsecase;
 import com.runiverse.running_service.application.user.port.in.GetMyProfileUsecase;
 import com.runiverse.running_service.application.user.port.in.GetUserProfileUsecase;
 import com.runiverse.running_service.application.user.query.nickname.CheckNicknameAvailabilityQuery;
 import com.runiverse.running_service.application.user.query.nickname.CheckNicknameAvailabilityResult;
+import com.runiverse.running_service.application.user.query.account.GetMyAccountQuery;
+import com.runiverse.running_service.application.user.query.account.GetMyAccountResult;
 import com.runiverse.running_service.application.user.query.basicinfo.GetMyBasicInfoQuery;
 import com.runiverse.running_service.application.user.query.basicinfo.GetMyBasicInfoResult;
 import com.runiverse.running_service.application.user.query.profile.GetMyProfileQuery;
@@ -47,6 +50,7 @@ import com.runiverse.running_service.presentation.user.response.OnboardingRespon
 import com.runiverse.running_service.presentation.user.response.ProfileImageUpdateResponse;
 import com.runiverse.running_service.presentation.user.response.ProfileImageUploadUrlResponse;
 import com.runiverse.running_service.presentation.user.response.ProfileImageUrlResponse;
+import com.runiverse.running_service.presentation.user.response.MyAccountResponse;
 import com.runiverse.running_service.presentation.user.response.MyBasicInfoResponse;
 import com.runiverse.running_service.presentation.user.response.MyProfileResponse;
 import com.runiverse.running_service.presentation.user.response.UserProfileResponse;
@@ -84,6 +88,7 @@ public class UserController {
     private final DeleteProfileImageUsecase deleteProfileImageUsecase;
     private final CheckNicknameAvailabilityUsecase checkNicknameAvailabilityUsecase;
     private final ChangeNicknameUsecase changeNicknameUsecase;
+    private final GetMyAccountUsecase getMyAccountUsecase;
     private final ChangePasswordUsecase changePasswordUsecase;
 
     @PostMapping("/onboarding")
@@ -225,6 +230,13 @@ public class UserController {
                 new CheckNicknameAvailabilityQuery(request.nickname()));
         return ResponseEntity.ok(
                 new NicknameAvailabilityResponse(result.nickname(), result.available()));
+    }
+
+    @GetMapping("/me/account")
+    public ResponseEntity<MyAccountResponse> getMyAccount(@AuthenticationPrincipal Jwt jwt) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        GetMyAccountResult result = getMyAccountUsecase.handle(new GetMyAccountQuery(userId));
+        return ResponseEntity.ok(new MyAccountResponse(result.email(), result.loginType()));
     }
 
     @PatchMapping("/me/password")
