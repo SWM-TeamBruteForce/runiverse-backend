@@ -15,6 +15,7 @@ import com.runiverse.running_service.application.user.port.out.CheckNicknameDupl
 import com.runiverse.running_service.application.user.port.out.ClearProfileImagePort;
 import com.runiverse.running_service.application.user.port.out.ExistsOnboardingPort;
 import com.runiverse.running_service.application.user.port.out.LoadNicknamePort;
+import com.runiverse.running_service.application.user.port.out.LoadOauthProviderPort;
 import com.runiverse.running_service.application.user.port.out.LoadOnboardingProfilePort;
 import com.runiverse.running_service.application.user.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.port.out.OnboardingProfile;
@@ -56,7 +57,7 @@ public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUser
         LoadUserByProviderPort, LoadUserByIdPort, ExistsOnboardingPort, CheckNicknameDuplicatePort, SaveOnboardingPort,
         UpdateProfileImagePort, ClearProfileImagePort, LoadNicknamePort, UpdateNicknamePort,
         UpdatePasswordPort, LoadUserAvgPacePort, UpdateIntroductionPort, UpdateOnboardingPort, LoadUserWeightPort,
-        LoadOnboardingProfilePort, LoadPlayerProfilesPort {
+        LoadOnboardingProfilePort, LoadPlayerProfilesPort, LoadOauthProviderPort {
 
     private final EntityManager entityManager;
 
@@ -288,6 +289,13 @@ public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUser
                 onboarding.getWeight().value(),
                 onboarding.getHeight().value()
         ));
+    }
+
+    @Override
+    public Optional<Provider> loadProvider(UserId userId) {
+        // 행이 없으면 빈 Optional — 소셜 연동이 없는 로컬 계정이다
+        return Optional.ofNullable(entityManager.find(OauthUserJpaEntity.class, userId.value()))
+                .map(OauthUserJpaEntity::getProvider);
     }
 
     @Override
