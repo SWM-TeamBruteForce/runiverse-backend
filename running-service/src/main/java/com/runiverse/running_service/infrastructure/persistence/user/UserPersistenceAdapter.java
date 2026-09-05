@@ -24,6 +24,7 @@ import com.runiverse.running_service.application.user.port.out.UpdateNicknamePor
 import com.runiverse.running_service.application.user.port.out.UpdateOnboardingPort;
 import com.runiverse.running_service.application.user.port.out.UpdatePasswordPort;
 import com.runiverse.running_service.application.user.port.out.UpdateProfileImagePort;
+import com.runiverse.running_service.application.user.port.out.UpdateSettingsPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.metric.vo.Pace;
 import com.runiverse.running_service.domain.user.aggregate.User;
@@ -35,6 +36,7 @@ import com.runiverse.running_service.domain.user.vo.Introduction;
 import com.runiverse.running_service.domain.user.vo.Nickname;
 import com.runiverse.running_service.domain.user.vo.PasswordHash;
 import com.runiverse.running_service.domain.user.vo.ProfileImageKey;
+import com.runiverse.running_service.domain.user.vo.ProfileVisibility;
 import com.runiverse.running_service.domain.user.vo.Provider;
 import com.runiverse.running_service.domain.user.vo.Weight;
 import jakarta.persistence.EntityManager;
@@ -56,7 +58,7 @@ public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUser
         LoadUserByProviderPort, LoadUserByIdPort, ExistsOnboardingPort, CheckNicknameDuplicatePort, SaveOnboardingPort,
         UpdateProfileImagePort, ClearProfileImagePort, LoadNicknamePort, UpdateNicknamePort,
         UpdatePasswordPort, LoadUserAvgPacePort, UpdateIntroductionPort, UpdateOnboardingPort, LoadUserWeightPort,
-        LoadOnboardingProfilePort, LoadPlayerProfilesPort {
+        LoadOnboardingProfilePort, LoadPlayerProfilesPort, UpdateSettingsPort {
 
     private final EntityManager entityManager;
 
@@ -159,6 +161,22 @@ public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUser
         }
         // 빈 소개글은 컬럼을 비운다 — 가입 시 save()도 같은 방식이라 "없음"의 표현을 하나로 둔다
         entity.changeIntroduction(emptyToNull(introduction.value()));
+    }
+
+    @Override
+    public void updateSettings(UserId userId, Boolean alertConsent,
+                               ProfileVisibility profileVisibility) {
+        UserJpaEntity entity = entityManager.find(UserJpaEntity.class, userId.value());
+        if (entity == null) {
+            throw new UserNotFoundException();
+        }
+        // 담겨 온 값만 바꾼다 — 나머지 컬럼은 건드리지 않는다
+        if (alertConsent != null) {
+            entity.changeAlertConsent(alertConsent);
+        }
+        if (profileVisibility != null) {
+            entity.changeProfileVisibility(profileVisibility);
+        }
     }
 
     @Override

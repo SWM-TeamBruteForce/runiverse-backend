@@ -168,6 +168,7 @@
 - **이미지 업로드 공통(Presigned)**: ① 업로드 URL 발급 API → ② 클라가 S3에 직접 업로드 → ③ 반환받은 `key`(또는 완료 API)를 본 API에 전달
 - **탈퇴 유저 표시**: 작성자·러닝 참가자는 `{ "userId": "550e8400-...", "nickname": "탈퇴한 사용자", "profileImageUrl": null, "isDeleted": true }`로 반환한다(`userId`는 유지).
 - **값이 없는 필드**: 조회 응답에서는 `null`이다(`profileImageUrl`·`introduction`·`friendStatus` 등). 수정 응답(11-2·11-6·11-7)은 보낸 필드만 담아 돌려주므로 그쪽의 `null`은 "보내지 않았다"를 뜻한다.
+- **수정 응답의 범위**: `PATCH`가 본문을 반환하면 저장 후의 리소스 전체 표현을 담는다(12-4). 반환할 표현이 없으면 `204 No Content`다. 위 세 API(11-2·11-6·11-7)는 보낸 필드만 담는 기존 계약이라 그대로 유지한다. 저장 위치가 여러 테이블로 나뉘는지는 기준이 아니다.
 - **`[MVP 제외]` 표기**: 지금 만들지 않는 엔드포인트. 정의는 그대로 두어 확장 시점에 재작성 없이 쓴다. 마커가 없으면 만드는 것이며, 차수(1차·2차)는 적지 않는다.
 
 ### 공통 에러 응답
@@ -2492,7 +2493,41 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 ### 12-4. `PATCH /api/v1/users/me/settings` — 설정 변경
 
-- **Request**: 12-3 필드 부분 수정 / **Response `200 OK`**: 갱신본
+- **화면**: 설정
+- **Request**
+
+```json
+{
+  "alertConsent": false,                 // 선택
+  "profileVisibility": "FRIENDS"         // 선택
+}
+```
+
+| 필드 | 타입 | 제약 |
+|---|---|---|
+| `alertConsent` | Boolean | 선택. 전체 알림 on/off |
+| `profileVisibility` | String | 선택. `FRIENDS` \| `PUBLIC` |
+
+- **Response `200 OK`** — 12-3과 같은 형식으로 저장 후 설정 전체를 담는다
+
+```json
+{
+  "alertConsent": false,
+  "profileVisibility": "FRIENDS"
+}
+```
+
+- **한 필드만 보내도 응답에는 두 필드가 모두 담긴다** — 클라이언트가 이 응답으로 설정 화면 상태를 그대로 갱신하며, 토글을 연달아 눌러도 마지막 응답이 화면을 정리한다
+- **필드를 생략하면 현재 값을 그대로 둔다.** 둘 다 생략한 `{}`는 아무것도 바꾸지 않고 현재 설정을 반환한다
+- **에러 (400 Bad Request)**
+
+```json
+{
+  "code": "INVALID_REQUEST",
+  "message": "프로필 공개 범위는 FRIENDS 또는 PUBLIC이어야 합니다."
+}
+```
+
 - **인증**: 필요
 
 ### 12-5. `DELETE /api/v1/users/me` — 회원탈퇴
