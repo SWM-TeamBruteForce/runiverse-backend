@@ -2,6 +2,8 @@ package com.runiverse.running_service.presentation.user.controller;
 
 import com.runiverse.running_service.application.user.command.nickname.ChangeNicknameCommand;
 import com.runiverse.running_service.application.user.command.profile.ChangeMyProfileCommand;
+import com.runiverse.running_service.application.user.command.settings.ChangeMySettingsCommand;
+import com.runiverse.running_service.application.user.command.settings.ChangeMySettingsResult;
 import com.runiverse.running_service.application.user.command.profile.ChangeMyProfileResult;
 import com.runiverse.running_service.application.user.command.nickname.ChangeNicknameResult;
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingCommand;
@@ -16,6 +18,7 @@ import com.runiverse.running_service.application.user.port.in.ChangeNicknameUsec
 import com.runiverse.running_service.application.user.port.in.ChangePasswordUsecase;
 import com.runiverse.running_service.application.user.port.in.ChangeProfileImageUsecase;
 import com.runiverse.running_service.application.user.port.in.ChangeMyProfileUsecase;
+import com.runiverse.running_service.application.user.port.in.ChangeMySettingsUsecase;
 import com.runiverse.running_service.application.user.port.in.CheckNicknameAvailabilityUsecase;
 import com.runiverse.running_service.application.user.port.in.CompleteOnboardingUsecase;
 import com.runiverse.running_service.application.user.port.in.CreateProfileImageUploadUrlUsecase;
@@ -23,6 +26,7 @@ import com.runiverse.running_service.application.user.port.in.DeleteProfileImage
 import com.runiverse.running_service.application.user.port.in.GetProfileImageUsecase;
 import com.runiverse.running_service.application.user.port.in.GetMyBasicInfoUsecase;
 import com.runiverse.running_service.application.user.port.in.GetMyProfileUsecase;
+import com.runiverse.running_service.application.user.port.in.GetMySettingsUsecase;
 import com.runiverse.running_service.application.user.port.in.GetUserProfileUsecase;
 import com.runiverse.running_service.application.user.query.nickname.CheckNicknameAvailabilityQuery;
 import com.runiverse.running_service.application.user.query.nickname.CheckNicknameAvailabilityResult;
@@ -34,6 +38,8 @@ import com.runiverse.running_service.application.user.query.profile.GetUserProfi
 import com.runiverse.running_service.application.user.query.profile.GetUserProfileResult;
 import com.runiverse.running_service.application.user.query.profileimage.GetProfileImageUrlQuery;
 import com.runiverse.running_service.application.user.query.profileimage.GetProfileImageUrlResult;
+import com.runiverse.running_service.application.user.query.settings.GetMySettingsQuery;
+import com.runiverse.running_service.application.user.query.settings.GetMySettingsResult;
 import com.runiverse.running_service.presentation.user.request.NicknameAvailabilityRequest;
 import com.runiverse.running_service.presentation.user.request.NicknameUpdateRequest;
 import com.runiverse.running_service.presentation.user.request.OnboardingRequest;
@@ -41,6 +47,7 @@ import com.runiverse.running_service.presentation.user.request.PasswordUpdateReq
 import com.runiverse.running_service.presentation.user.request.ProfileImageUpdateRequest;
 import com.runiverse.running_service.presentation.user.request.ProfileImageUploadUrlRequest;
 import com.runiverse.running_service.presentation.user.request.ProfileUpdateRequest;
+import com.runiverse.running_service.presentation.user.request.SettingsUpdateRequest;
 import com.runiverse.running_service.presentation.user.response.NicknameAvailabilityResponse;
 import com.runiverse.running_service.presentation.user.response.NicknameUpdateResponse;
 import com.runiverse.running_service.presentation.user.response.OnboardingResponse;
@@ -49,6 +56,7 @@ import com.runiverse.running_service.presentation.user.response.ProfileImageUplo
 import com.runiverse.running_service.presentation.user.response.ProfileImageUrlResponse;
 import com.runiverse.running_service.presentation.user.response.MyBasicInfoResponse;
 import com.runiverse.running_service.presentation.user.response.MyProfileResponse;
+import com.runiverse.running_service.presentation.user.response.MySettingsResponse;
 import com.runiverse.running_service.presentation.user.response.UserProfileResponse;
 import com.runiverse.running_service.presentation.user.response.ProfileUpdateResponse;
 import jakarta.validation.Valid;
@@ -85,6 +93,8 @@ public class UserController {
     private final CheckNicknameAvailabilityUsecase checkNicknameAvailabilityUsecase;
     private final ChangeNicknameUsecase changeNicknameUsecase;
     private final ChangePasswordUsecase changePasswordUsecase;
+    private final GetMySettingsUsecase getMySettingsUsecase;
+    private final ChangeMySettingsUsecase changeMySettingsUsecase;
 
     @PostMapping("/onboarding")
     public ResponseEntity<OnboardingResponse> completeOnboarding(
@@ -239,5 +249,28 @@ public class UserController {
                 request.newPassword()
         ));
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/me/settings")
+    public ResponseEntity<MySettingsResponse> getMySettings(@AuthenticationPrincipal Jwt jwt) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        GetMySettingsResult result = getMySettingsUsecase.handle(new GetMySettingsQuery(userId));
+        return ResponseEntity.ok(
+                new MySettingsResponse(result.alertConsent(), result.profileVisibility()));
+    }
+
+    @PatchMapping("/me/settings")
+    public ResponseEntity<MySettingsResponse> changeMySettings(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody SettingsUpdateRequest request
+    ) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        ChangeMySettingsResult result = changeMySettingsUsecase.handle(new ChangeMySettingsCommand(
+                userId,
+                request.alertConsent(),
+                request.profileVisibility()
+        ));
+        return ResponseEntity.ok(
+                new MySettingsResponse(result.alertConsent(), result.profileVisibility()));
     }
 }
