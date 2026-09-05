@@ -617,6 +617,58 @@ public class UserPersistenceAdapterTest {
                 .thenReturn(found);
     }
 
+    @Test
+    @DisplayName("설정을 바꾸면 담겨 온 컬럼만 갱신한다")
+    void updateSettingsChangesOnlyGivenColumns() {
+        // given -> 알림만 바꾸고 공개 범위는 건드리지 않는 요청이다
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        UserJpaEntity entity = UserJpaEntity.create(
+                userId, "runner@runiverse.com", PASSWORD_HASH, true,
+                null, ProfileVisibility.PUBLIC, ""
+        );
+        when(entityManager.find(UserJpaEntity.class, userId)).thenReturn(entity);
+
+        // when
+        userPersistenceAdapter.updateSettings(new UserId(userId), false, null);
+
+        // then -> 별도 저장 호출 없이 변경 감지로 반영한다
+        assertThat(entity.isAlertConsent()).isFalse();
+        assertThat(entity.getProfileVisibility()).isEqualTo(ProfileVisibility.PUBLIC);
+    }
+
+    @Test
+    @DisplayName("두 값을 함께 넘기면 둘 다 갱신한다")
+    void updateSettingsChangesBothColumns() {
+        // given
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        UserJpaEntity entity = UserJpaEntity.create(
+                userId, "runner@runiverse.com", PASSWORD_HASH, true,
+                null, ProfileVisibility.PUBLIC, ""
+        );
+        when(entityManager.find(UserJpaEntity.class, userId)).thenReturn(entity);
+
+        // when
+        userPersistenceAdapter.updateSettings(
+                new UserId(userId), false, ProfileVisibility.FRIENDS);
+
+        // then
+        assertThat(entity.isAlertConsent()).isFalse();
+        assertThat(entity.getProfileVisibility()).isEqualTo(ProfileVisibility.FRIENDS);
+    }
+
+    @Test
+    @DisplayName("설정을 바꿀 사용자가 없으면 예외를 던진다")
+    void updateSettingsThrowsWhenUserNotFound() {
+        // given
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        when(entityManager.find(UserJpaEntity.class, userId)).thenReturn(null);
+
+        // when & then
+        assertThatThrownBy(() -> userPersistenceAdapter.updateSettings(
+                new UserId(userId), false, null))
+                .isInstanceOf(UserNotFoundException.class);
+    }
+
     private void givenUserQueryReturns(String email, Stream<UserJpaEntity> found) {
         when(entityManager.createQuery(anyString(), eq(UserJpaEntity.class)))
                 .thenReturn(userQuery);

@@ -8,10 +8,12 @@ import com.runiverse.running_service.application.user.exception.UserNotFoundExce
 import com.runiverse.running_service.application.user.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.port.out.UpdateIntroductionPort;
 import com.runiverse.running_service.application.user.port.out.UpdatePasswordPort;
+import com.runiverse.running_service.application.user.port.out.UpdateSettingsPort;
 import com.runiverse.running_service.domain.user.aggregate.User;
 import com.runiverse.running_service.domain.user.vo.Introduction;
 import com.runiverse.running_service.domain.user.vo.PasswordHash;
 import com.runiverse.running_service.domain.user.vo.ProfileImageKey;
+import com.runiverse.running_service.domain.user.vo.ProfileVisibility;
 import com.runiverse.running_service.domain.user.vo.Provider;
 import com.runiverse.running_service.domain.common.vo.UserId;
 
@@ -21,7 +23,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 public class InMemoryUserStore implements SaveUserPort, CheckEmailDuplicatePort, LoadUserByEmailPort,
-        LoadUserByProviderPort, LoadUserByIdPort, UpdatePasswordPort, UpdateIntroductionPort {
+        LoadUserByProviderPort, LoadUserByIdPort, UpdatePasswordPort, UpdateIntroductionPort,
+        UpdateSettingsPort {
 
     private final Map<UUID, User> users = new LinkedHashMap<>();
     private final Map<UUID, PasswordHash> updatedPasswords = new LinkedHashMap<>();
@@ -85,6 +88,28 @@ public class InMemoryUserStore implements SaveUserPort, CheckEmailDuplicatePort,
                 user.getProfileImageKey().map(ProfileImageKey::value).orElse(null),
                 user.getProfileVisibility(),
                 introduction.value()
+        );
+        user.getOauthUser().ifPresent(oauth ->
+                replaced.linkOauth(oauth.getProvider(), oauth.getProviderId().value()));
+        users.put(userId.value(), replaced);
+    }
+
+    // alertConsent·profileVisibility도 final이라 같은 이유로 애그리거트를 갈아끼운다
+    @Override
+    public void updateSettings(UserId userId, Boolean alertConsent,
+                               ProfileVisibility profileVisibility) {
+        User user = users.get(userId.value());
+        if (user == null) {
+            throw new UserNotFoundException();
+        }
+        User replaced = new User(
+                user.getUserId().value(),
+                user.getEmail().value(),
+                user.getPasswordHash().value(),
+                alertConsent == null ? user.isAlertConsent() : alertConsent,
+                user.getProfileImageKey().map(ProfileImageKey::value).orElse(null),
+                profileVisibility == null ? user.getProfileVisibility() : profileVisibility,
+                user.getIntroduction().value()
         );
         user.getOauthUser().ifPresent(oauth ->
                 replaced.linkOauth(oauth.getProvider(), oauth.getProviderId().value()));

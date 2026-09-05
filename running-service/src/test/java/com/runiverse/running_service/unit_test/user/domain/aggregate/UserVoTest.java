@@ -11,11 +11,14 @@ import com.runiverse.running_service.domain.common.exception.InvalidUserIdFormat
 import com.runiverse.running_service.domain.user.exception.PasswordHashRequiredException;
 import com.runiverse.running_service.domain.user.exception.ProfileImageKeyRequiredException;
 import com.runiverse.running_service.domain.user.exception.ProfileImageKeyTooLongException;
+import com.runiverse.running_service.domain.user.exception.ProfileVisibilityRequiredException;
+import com.runiverse.running_service.domain.user.exception.UnsupportedProfileVisibilityException;
 import com.runiverse.running_service.domain.common.exception.UserIdRequiredException;
 import com.runiverse.running_service.domain.user.vo.Email;
 import com.runiverse.running_service.domain.user.vo.Introduction;
 import com.runiverse.running_service.domain.user.vo.PasswordHash;
 import com.runiverse.running_service.domain.user.vo.ProfileImageKey;
+import com.runiverse.running_service.domain.user.vo.ProfileVisibility;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -478,6 +481,48 @@ public class UserVoTest {
                     .hasSameHashCodeAs(second);
 
             assertThat(first).isNotSameAs(second);
+        }
+    }
+
+    @Nested
+    @DisplayName("프로필 공개 범위 테스트")
+    class ProfileVisibilityTest {
+
+        @Test
+        @DisplayName("대소문자와 공백에 관계없이 공개 범위를 만들 수 있다")
+        void profileVisibilityFromSuccess() {
+            // when & then
+            assertThat(ProfileVisibility.from("PUBLIC")).isEqualTo(ProfileVisibility.PUBLIC);
+            assertThat(ProfileVisibility.from("friends")).isEqualTo(ProfileVisibility.FRIENDS);
+            assertThat(ProfileVisibility.from("  Public  ")).isEqualTo(ProfileVisibility.PUBLIC);
+        }
+
+        @Test
+        @DisplayName("enum이라 from()은 새 객체를 만들지 않는다")
+        void profileVisibilityFromReturnsSameInstance() {
+            // when & then
+            assertThat(ProfileVisibility.from("public")).isSameAs(ProfileVisibility.PUBLIC);
+        }
+
+        @Test
+        @DisplayName("null이거나 공백뿐이면 예외가 발생한다")
+        void profileVisibilityRequiredFails() {
+            // when & then
+            assertThatThrownBy(() -> ProfileVisibility.from(null))
+                    .isInstanceOf(ProfileVisibilityRequiredException.class)
+                    .hasMessage("프로필 공개 범위는 필수입니다.");
+
+            assertThatThrownBy(() -> ProfileVisibility.from("   "))
+                    .isInstanceOf(ProfileVisibilityRequiredException.class);
+        }
+
+        @Test
+        @DisplayName("지원하지 않는 값이면 예외가 발생한다")
+        void profileVisibilityUnsupportedFails() {
+            // when & then -> valueOf()의 예외가 그대로 새어나가면 500이 된다
+            assertThatThrownBy(() -> ProfileVisibility.from("PRIVATE"))
+                    .isInstanceOf(UnsupportedProfileVisibilityException.class)
+                    .hasMessage("지원하지 않는 프로필 공개 범위입니다.");
         }
     }
 }
