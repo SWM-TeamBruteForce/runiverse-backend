@@ -95,4 +95,12 @@ public class UserJpaEntity extends BaseTimeEntity {
     public void changePasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
     }
+
+    public void changeAlertConsent(boolean alertConsent) {
+        this.alertConsent = alertConsent;
+    }
+
+    public void changeProfileVisibility(ProfileVisibility profileVisibility) {
+        this.profileVisibility = profileVisibility;
+    }
 }
