@@ -29,7 +29,7 @@ public class SesEmailAdapter implements SendEmailPort {
     public void send(String to, String subject, String body) {
         try {
             sesV2Client.sendEmail(SendEmailRequest.builder()
-                    .fromEmailAddress(properties.from())
+                    .fromEmailAddress(properties.fromName() + " <" + properties.from() + ">")
                     .destination(Destination.builder().toAddresses(to).build())
                     .content(EmailContent.builder()
                             .simple(Message.builder()
