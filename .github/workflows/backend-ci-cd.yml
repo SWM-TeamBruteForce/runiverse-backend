@@ -272,6 +272,10 @@ jobs:
               --username AWS \
               --password-stdin "${ECR_REGISTRY}"
 
+          # 이전 배포가 남긴 이미지 정리
+          # 배포가 실패하면 아래 정리 단계에 닿지 못하므로 pull 전에도 걷어낸다
+          docker image prune -a -f
+
           # 이미지 Pull
           echo "Pulling Docker image..."
           docker pull "${IMAGE_URI}"
