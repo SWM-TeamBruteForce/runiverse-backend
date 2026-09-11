@@ -24,6 +24,7 @@ import static org.mockito.Mockito.when;
 public class SesEmailAdapterTest {
 
     private static final String FROM = "no-reply@runiverse.com";
+    private static final String FROM_NAME = "Runiverse";
     private static final String TO = "runner@runiverse.com";
     private static final String SUBJECT = "[Runiverse] 이메일 인증 코드";
     private static final String BODY = "인증 코드는 123456 입니다.";
@@ -36,7 +37,7 @@ public class SesEmailAdapterTest {
     @BeforeEach
     void setUp() {
         // 자격증명은 비워 둔다. 실제 배포에서는 IAM Role을 쓴다
-        adapter = new SesEmailAdapter(sesV2Client, new SesProperties("ap-northeast-2", FROM, null, null));
+        adapter = new SesEmailAdapter(sesV2Client, new SesProperties("ap-northeast-2", FROM, FROM_NAME, null, null));
     }
 
     @Test
@@ -51,13 +52,26 @@ public class SesEmailAdapterTest {
         // then
         verify(sesV2Client).sendEmail(captor.capture());
         SendEmailRequest request = captor.getValue();
-        assertThat(request.fromEmailAddress()).isEqualTo(FROM);
         assertThat(request.destination().toAddresses()).containsExactly(TO);
         // 한글 제목과 본문이 깨지지 않으려면 charset이 반드시 붙어야 한다
         assertThat(request.content().simple().subject().data()).isEqualTo(SUBJECT);
         assertThat(request.content().simple().subject().charset()).isEqualTo("UTF-8");
         assertThat(request.content().simple().body().text().data()).isEqualTo(BODY);
         assertThat(request.content().simple().body().text().charset()).isEqualTo("UTF-8");
+    }
+
+    @Test
+    @DisplayName("발신자를 이름과 주소를 묶은 형식으로 넘긴다")
+    void sendCombinesDisplayNameWithAddress() {
+        // given
+        ArgumentCaptor<SendEmailRequest> captor = ArgumentCaptor.forClass(SendEmailRequest.class);
+
+        // when
+        adapter.send(TO, SUBJECT, BODY);
+
+        // then -> 상수를 조합해 검증하면 구현과 같은 식이 되어 형식이 틀려도 통과한다
+        verify(sesV2Client).sendEmail(captor.capture());
+        assertThat(captor.getValue().fromEmailAddress()).isEqualTo("Runiverse <no-reply@runiverse.com>");
     }
 
     @Test
