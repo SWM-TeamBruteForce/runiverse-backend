@@ -2,6 +2,7 @@ package com.runiverse.running_service.unit_test.running.presentation;
 
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.running.command.finish.FinishRunningCommand;
+import com.runiverse.running_service.application.running.command.combo.UpdateRunningComboJudge;
 import com.runiverse.running_service.application.running.command.location.UpdateRunningLocationHandler;
 import com.runiverse.running_service.application.running.command.session.RegisterRunningSessionHandler;
 import com.runiverse.running_service.application.running.command.session.RemoveRunningSessionHandler;
@@ -108,6 +109,10 @@ class RunningWebSocketHandlerTest {
     @Mock
     private PublishRunningProgressPort publishRunningProgressPort;
 
+    // 콤보 판정은 Redis를 여러 번 오가며 자기 안에서 실패를 삼킨다 — 이 테스트의 관심사가 아니다
+    @Mock
+    private UpdateRunningComboJudge updateRunningComboJudge;
+
     // 종료 확정은 DB·S3·Redis를 한꺼번에 건드리는 일이라 유스케이스째로 가짜다
     @Mock
     private FinishRunningUsecase finishRunningUsecase;
@@ -125,7 +130,7 @@ class RunningWebSocketHandlerTest {
                 new RegisterRunningSessionHandler(sessionPort, runningRoomMembershipPort, publishSupersedePort),
                 new RemoveRunningSessionHandler(sessionPort, runningRoomMembershipPort),
                 new UpdateRunningLocationHandler(appendRunningTrackPort, loadRunningDistancePort,
-                        saveRunningDistancePort, publishRunningProgressPort),
+                        saveRunningDistancePort, publishRunningProgressPort, updateRunningComboJudge),
                 finishRunningUsecase);
         // 좌표를 한 번도 못 받은 상태에서 시작한다 — 누적 거리는 이 테스트의 관심사가 아니다
         given(loadRunningDistancePort.loadDistance(anyLong(), any()))

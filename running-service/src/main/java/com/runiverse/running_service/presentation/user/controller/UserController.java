@@ -1,39 +1,42 @@
 package com.runiverse.running_service.presentation.user.controller;
 
+import com.runiverse.running_service.application.running.port.in.GetUserStatusUsecase;
+import com.runiverse.running_service.application.running.query.status.GetUserStatusQuery;
+import com.runiverse.running_service.application.running.query.status.GetUserStatusResult;
+import com.runiverse.running_service.application.user.command.accountdeletion.DeleteAccountCommand;
 import com.runiverse.running_service.application.user.command.nickname.ChangeNicknameCommand;
-import com.runiverse.running_service.application.user.command.profile.ChangeMyProfileCommand;
-import com.runiverse.running_service.application.user.command.settings.ChangeMySettingsCommand;
-import com.runiverse.running_service.application.user.command.settings.ChangeMySettingsResult;
-import com.runiverse.running_service.application.user.command.profile.ChangeMyProfileResult;
 import com.runiverse.running_service.application.user.command.nickname.ChangeNicknameResult;
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingCommand;
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingResult;
 import com.runiverse.running_service.application.user.command.password.ChangePasswordCommand;
+import com.runiverse.running_service.application.user.command.profile.ChangeMyProfileCommand;
+import com.runiverse.running_service.application.user.command.profile.ChangeMyProfileResult;
 import com.runiverse.running_service.application.user.command.profileimage.ChangeProfileImageCommand;
 import com.runiverse.running_service.application.user.command.profileimage.ChangeProfileImageResult;
 import com.runiverse.running_service.application.user.command.profileimage.CreateProfileImageUploadUrlCommand;
 import com.runiverse.running_service.application.user.command.profileimage.CreateProfileImageUploadUrlResult;
 import com.runiverse.running_service.application.user.command.profileimage.DeleteProfileImageCommand;
-import com.runiverse.running_service.application.user.command.accountdeletion.DeleteAccountCommand;
-import com.runiverse.running_service.application.user.port.in.DeleteAccountUsecase;
+import com.runiverse.running_service.application.user.command.settings.ChangeMySettingsCommand;
+import com.runiverse.running_service.application.user.command.settings.ChangeMySettingsResult;
+import com.runiverse.running_service.application.user.port.in.ChangeMyProfileUsecase;
+import com.runiverse.running_service.application.user.port.in.ChangeMySettingsUsecase;
 import com.runiverse.running_service.application.user.port.in.ChangeNicknameUsecase;
 import com.runiverse.running_service.application.user.port.in.ChangePasswordUsecase;
 import com.runiverse.running_service.application.user.port.in.ChangeProfileImageUsecase;
-import com.runiverse.running_service.application.user.port.in.ChangeMyProfileUsecase;
-import com.runiverse.running_service.application.user.port.in.ChangeMySettingsUsecase;
 import com.runiverse.running_service.application.user.port.in.CheckNicknameAvailabilityUsecase;
 import com.runiverse.running_service.application.user.port.in.CompleteOnboardingUsecase;
 import com.runiverse.running_service.application.user.port.in.CreateProfileImageUploadUrlUsecase;
+import com.runiverse.running_service.application.user.port.in.DeleteAccountUsecase;
 import com.runiverse.running_service.application.user.port.in.DeleteProfileImageUsecase;
-import com.runiverse.running_service.application.user.port.in.GetProfileImageUsecase;
 import com.runiverse.running_service.application.user.port.in.GetMyBasicInfoUsecase;
 import com.runiverse.running_service.application.user.port.in.GetMyProfileUsecase;
 import com.runiverse.running_service.application.user.port.in.GetMySettingsUsecase;
+import com.runiverse.running_service.application.user.port.in.GetProfileImageUsecase;
 import com.runiverse.running_service.application.user.port.in.GetUserProfileUsecase;
-import com.runiverse.running_service.application.user.query.nickname.CheckNicknameAvailabilityQuery;
-import com.runiverse.running_service.application.user.query.nickname.CheckNicknameAvailabilityResult;
 import com.runiverse.running_service.application.user.query.basicinfo.GetMyBasicInfoQuery;
 import com.runiverse.running_service.application.user.query.basicinfo.GetMyBasicInfoResult;
+import com.runiverse.running_service.application.user.query.nickname.CheckNicknameAvailabilityQuery;
+import com.runiverse.running_service.application.user.query.nickname.CheckNicknameAvailabilityResult;
 import com.runiverse.running_service.application.user.query.profile.GetMyProfileQuery;
 import com.runiverse.running_service.application.user.query.profile.GetMyProfileResult;
 import com.runiverse.running_service.application.user.query.profile.GetUserProfileQuery;
@@ -50,17 +53,18 @@ import com.runiverse.running_service.presentation.user.request.ProfileImageUpdat
 import com.runiverse.running_service.presentation.user.request.ProfileImageUploadUrlRequest;
 import com.runiverse.running_service.presentation.user.request.ProfileUpdateRequest;
 import com.runiverse.running_service.presentation.user.request.SettingsUpdateRequest;
+import com.runiverse.running_service.presentation.user.response.MyBasicInfoResponse;
+import com.runiverse.running_service.presentation.user.response.MyProfileResponse;
+import com.runiverse.running_service.presentation.user.response.MySettingsResponse;
 import com.runiverse.running_service.presentation.user.response.NicknameAvailabilityResponse;
 import com.runiverse.running_service.presentation.user.response.NicknameUpdateResponse;
 import com.runiverse.running_service.presentation.user.response.OnboardingResponse;
 import com.runiverse.running_service.presentation.user.response.ProfileImageUpdateResponse;
 import com.runiverse.running_service.presentation.user.response.ProfileImageUploadUrlResponse;
 import com.runiverse.running_service.presentation.user.response.ProfileImageUrlResponse;
-import com.runiverse.running_service.presentation.user.response.MyBasicInfoResponse;
-import com.runiverse.running_service.presentation.user.response.MyProfileResponse;
-import com.runiverse.running_service.presentation.user.response.MySettingsResponse;
-import com.runiverse.running_service.presentation.user.response.UserProfileResponse;
 import com.runiverse.running_service.presentation.user.response.ProfileUpdateResponse;
+import com.runiverse.running_service.presentation.user.response.UserProfileResponse;
+import com.runiverse.running_service.presentation.user.response.UserStatusResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -98,6 +102,7 @@ public class UserController {
     private final GetMySettingsUsecase getMySettingsUsecase;
     private final ChangeMySettingsUsecase changeMySettingsUsecase;
     private final DeleteAccountUsecase deleteAccountUsecase;
+    private final GetUserStatusUsecase getUserStatusUsecase;
 
     @PostMapping("/onboarding")
     public ResponseEntity<OnboardingResponse> completeOnboarding(
@@ -288,5 +293,18 @@ public class UserController {
                 jwt.getId()
         ));
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/me/status")
+    public ResponseEntity<UserStatusResponse> getMyStatus(@AuthenticationPrincipal Jwt jwt) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        GetUserStatusResult result = getUserStatusUsecase.handle(new GetUserStatusQuery(userId));
+        return ResponseEntity.ok(new UserStatusResponse(
+                result.status(),
+                result.type(),
+                result.runningRoomId(),
+                result.scheduledStartAt(),
+                result.targetDistanceMeters(),
+                result.cooldownUntil()));
     }
 }

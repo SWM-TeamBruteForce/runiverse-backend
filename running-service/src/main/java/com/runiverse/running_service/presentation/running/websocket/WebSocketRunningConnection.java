@@ -1,9 +1,11 @@
 package com.runiverse.running_service.presentation.running.websocket;
 
+import com.runiverse.running_service.application.running.port.out.RunningComboPeer;
 import com.runiverse.running_service.application.running.port.out.RunningConnection;
 import com.runiverse.running_service.application.running.port.out.RunningProgress;
-import com.runiverse.running_service.presentation.running.websocket.message.PlayerRunningProgressPayload;
+import com.runiverse.running_service.presentation.running.websocket.message.RunningComboUpdatedPayload;
 import com.runiverse.running_service.presentation.running.websocket.message.RunningMessageType;
+import com.runiverse.running_service.presentation.running.websocket.message.RunningProgressPayload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.socket.CloseStatus;
@@ -12,6 +14,7 @@ import org.springframework.web.socket.WebSocketSession;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
+import java.util.List;
 
 public record WebSocketRunningConnection(WebSocketSession session, JsonMapper jsonMapper) implements RunningConnection {
 
@@ -37,11 +40,23 @@ public record WebSocketRunningConnection(WebSocketSession session, JsonMapper js
     public void sendProgress(RunningProgress progress) {
         try {
             session.sendMessage(new TextMessage(jsonMapper.writeValueAsString(
-                    RunningMessageType.PLAYER_RUNNING_PROGRESS_UPDATED.message(
-                            PlayerRunningProgressPayload.from(progress)))));
+                    RunningMessageType.RUNNING_PROGRESS_UPDATED.message(
+                            RunningProgressPayload.from(progress)))));
         } catch (IOException | RuntimeException e) {
             // 한 명에게 못 보냈다고 나머지 참가자의 브로드캐스트가 멈추면 안 된다
             log.warn("러닝 진행 통지 전송 실패 — sessionId={}", session.getId(), e);
+        }
+    }
+
+    @Override
+    public void sendCombo(List<RunningComboPeer> peers) {
+        try {
+            session.sendMessage(new TextMessage(jsonMapper.writeValueAsString(
+                    RunningMessageType.RUNNING_COMBO_UPDATED.message(
+                            RunningComboUpdatedPayload.from(peers)))));
+        } catch (IOException | RuntimeException e) {
+            // 한 명에게 못 보냈다고 나머지 참가자의 브로드캐스트가 멈추면 안 된다
+            log.warn("러닝 콤보 통지 전송 실패 — sessionId={}", session.getId(), e);
         }
     }
 }

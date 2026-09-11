@@ -81,7 +81,7 @@ public class GetRunningSplitResultsIntegrationTest extends IntegrationTestSuppor
                 runningStore, runningStore, runningStore, runningStore);
         updateRunningLocationHandler = new UpdateRunningLocationHandler(
                 runningTrackStore, runningDistanceStore, runningDistanceStore,
-                runningProgressPublisher);
+                runningProgressPublisher, newUpdateRunningComboJudge());
         finishRunningHandler = new FinishRunningHandler(
                 runningStore, runningStore, runningTrackStore, onboardingStore, weatherProvider,
                 gpsTrackUploader, runningRecordStore, runningStore, runningTrackStore,

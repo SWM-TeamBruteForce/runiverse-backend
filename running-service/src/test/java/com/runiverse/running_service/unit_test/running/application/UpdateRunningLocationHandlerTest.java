@@ -1,6 +1,7 @@
 package com.runiverse.running_service.unit_test.running.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.running.command.combo.UpdateRunningComboJudge;
 import com.runiverse.running_service.application.running.command.finish.TrackDistance;
 import com.runiverse.running_service.application.running.command.location.UpdateRunningLocationCommand;
 import com.runiverse.running_service.application.running.command.location.UpdateRunningLocationHandler;
@@ -61,6 +62,11 @@ public class UpdateRunningLocationHandlerTest {
 
     @Mock
     private PublishRunningProgressPort publishRunningProgressPort;
+
+    // 콤보 판정은 Redis를 여러 번 오가며 자기 안에서 실패를 삼킨다 — 이 테스트의 관심사가 아니다.
+    // @InjectMocks는 목이 없는 생성자 인자에 null을 넣으므로 선언하지 않으면 NPE가 난다
+    @Mock
+    private UpdateRunningComboJudge updateRunningComboJudge;
 
     @InjectMocks
     private UpdateRunningLocationHandler updateRunningLocationHandler;

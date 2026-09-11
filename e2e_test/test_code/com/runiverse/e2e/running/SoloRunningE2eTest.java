@@ -61,7 +61,7 @@ class SoloRunningE2eTest extends E2eTestSupport {
             socket.await("RUNNING_STARTED");
             sendTrack(socket);
 
-            // 좌표 배치에는 ack가 없고, PLAYER_RUNNING_PROGRESS_UPDATED는 본인에게 오지 않는다
+            // 좌표 배치에는 ack가 없고, RUNNING_PROGRESS_UPDATED는 본인에게 오지 않는다
             // (api-spec.md — 본인 진행은 클라가 이미 계산해 띄우고 있다). 참가자가 본인뿐인
             // 솔로 방에서는 수신자가 0명이라 그걸 기다리면 반드시 타임아웃이다.
             // 좌표가 실제로 누적됐는지는 아래 결과의 totalDistanceMeters·routes로 확인한다
@@ -292,7 +292,9 @@ class SoloRunningE2eTest extends E2eTestSupport {
         }
     }
 
-    /** 정북으로 일정 간격 걸어가는 트랙 한 점. 시작 시각은 러닝 길이만큼 과거로 잡는다. */
+    /**
+     * 정북으로 일정 간격 걸어가는 트랙 한 점. 시작 시각은 러닝 길이만큼 과거로 잡는다.
+     */
     private Map<String, Object> point(int sequence) {
         double latitude = START_LATITUDE
                 + sequence * METERS_PER_STEP / METERS_PER_LATITUDE_DEGREE;

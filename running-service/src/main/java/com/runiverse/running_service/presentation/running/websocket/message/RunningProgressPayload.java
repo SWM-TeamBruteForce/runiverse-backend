@@ -2,7 +2,7 @@ package com.runiverse.running_service.presentation.running.websocket.message;
 
 import com.runiverse.running_service.application.running.port.out.RunningProgress;
 
-public record PlayerRunningProgressPayload(
+public record RunningProgressPayload(
         String userId,
         int distanceMeters,
         Integer targetDistanceMeters,
@@ -10,8 +10,8 @@ public record PlayerRunningProgressPayload(
         boolean paused
 ) {
 
-    public static PlayerRunningProgressPayload from(RunningProgress progress) {
-        return new PlayerRunningProgressPayload(
+    public static RunningProgressPayload from(RunningProgress progress) {
+        return new RunningProgressPayload(
                 progress.userId().toString(),
                 progress.distanceMeters(),
                 progress.targetDistanceMeters(),

@@ -19,6 +19,7 @@ import com.runiverse.running_service.application.running.port.out.LoadRunningRes
 import com.runiverse.running_service.application.running.port.out.LoadRunningResultRecordPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningRoomPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningSplitsPort;
+import com.runiverse.running_service.application.running.port.out.LoadUserStatusPort;
 import com.runiverse.running_service.application.running.port.out.LockRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.LockRunningRoomPort;
 import com.runiverse.running_service.application.running.port.out.RunningResultPlayer;
@@ -26,6 +27,7 @@ import com.runiverse.running_service.application.running.port.out.RunningResultR
 import com.runiverse.running_service.application.running.port.out.RunningSplitRow;
 import com.runiverse.running_service.application.running.port.out.UpdateRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.UpdateRunningRoomPort;
+import com.runiverse.running_service.application.running.port.out.UserStatusRow;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.metric.vo.Distance;
 import com.runiverse.running_service.domain.running.metric.vo.Pace;
@@ -58,7 +60,8 @@ public class RunningPersistenceAdapter implements CreateRunningPlayerPort, Creat
         // 취소·나가기가 쓰는 둘 — 시그니처가 같아 기존 메서드가 그대로 만족시킨다
         LoadActiveApplicationPort, LockMatchApplicationPort, UpdateMatchApplicationPort,
         // 스냅샷 조회 — 잠그지 않는 것만 lockById와 다르다
-        LoadMatchRoomDetailPort {
+        LoadMatchRoomDetailPort,
+        LoadUserStatusPort {
 
     private final EntityManager entityManager;
 
@@ -360,6 +363,27 @@ public class RunningPersistenceAdapter implements CreateRunningPlayerPort, Creat
                 .getResultStream()
                 .findFirst()
                 .map(entity -> toDomain(entity, loadSessions(entity)));
+    }
+
+    // 활성 신청과 현재 배정된 방을 한 번에 읽는다 — 상태 판정에 필요한 값만 뽑아
+    // 애그리거트를 올리지 않는다. 방 미배정 상태는 없으므로 조인이 비면 신청도 없는 것이다
+    @Override
+    public Optional<UserStatusRow> loadStatus(UserId userId) {
+        return entityManager.createQuery("""
+                        SELECT NEW com.runiverse.running_service.application.running.port.out.UserStatusRow(
+                            s.room.runningRoomId, s.room.type, s.room.status,
+                            s.room.startAt, s.room.targetDistance)
+                        FROM RunningPlayerJpaEntity p
+                        JOIN RunningRoomSessionJpaEntity s
+                          ON s.runningPlayerId = p.runningPlayerId
+                        WHERE p.userId = :userId
+                          AND p.deletedAt IS NULL
+                          AND s.connected = TRUE
+                        """, UserStatusRow.class)
+                .setParameter("userId", userId.value())
+                // 활성 신청도 배정 행도 하나씩이다 — 어긋나도 깨지지 않게 첫 건만 쓴다
+                .getResultStream()
+                .findFirst();
     }
 
     private RunningResultPlayer toResultPlayer(RunningPlayerJpaEntity player,
