@@ -1,7 +1,9 @@
 package com.runiverse.running_service.infrastructure.redis.running;
 
+import com.runiverse.running_service.application.running.command.combo.BroadcastRunningComboCommand;
 import com.runiverse.running_service.application.running.command.progress.BroadcastRunningProgressCommand;
 import com.runiverse.running_service.application.running.command.session.CloseSupersededSessionCommand;
+import com.runiverse.running_service.application.running.port.in.BroadcastRunningComboUsecase;
 import com.runiverse.running_service.application.running.port.in.BroadcastRunningProgressUsecase;
 import com.runiverse.running_service.application.running.port.in.CloseSupersededSessionUsecase;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,7 @@ public class RunningRoomListener implements MessageListener {
     private final JsonMapper jsonMapper;
     private final CloseSupersededSessionUsecase closeSupersededSessionUsecase;
     private final BroadcastRunningProgressUsecase broadcastRunningProgressUsecase;
+    private final BroadcastRunningComboUsecase broadcastRunningComboUsecase;
 
     @Override
     public void onMessage(Message message, byte[] pattern) {
@@ -34,6 +37,7 @@ public class RunningRoomListener implements MessageListener {
         switch (envelope.type()) {
             case SUPERSEDE -> handleSupersede(envelope.data());
             case PROGRESS -> handleProgress(envelope.data());
+            case COMBO -> handleCombo(envelope.data());
         }
     }
 
@@ -47,5 +51,11 @@ public class RunningRoomListener implements MessageListener {
         ProgressMessage payload = jsonMapper.convertValue(data, ProgressMessage.class);
         broadcastRunningProgressUsecase.handle(new BroadcastRunningProgressCommand(
                 payload.runningRoomId(), payload.toProgress()));
+    }
+
+    private void handleCombo(Object data) {
+        ComboMessage payload = jsonMapper.convertValue(data, ComboMessage.class);
+        broadcastRunningComboUsecase.handle(new BroadcastRunningComboCommand(
+                payload.runningRoomId(), payload.toUpdate()));
     }
 }

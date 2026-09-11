@@ -90,7 +90,8 @@ public class FinishRunningIntegrationTest extends IntegrationTestSupport {
                 runningTrackStore,     // AppendRunningTrackPort
                 runningDistanceStore,  // LoadRunningDistancePort
                 runningDistanceStore,  // SaveRunningDistancePort
-                runningProgressPublisher // PublishRunningProgressPort
+                runningProgressPublisher, // PublishRunningProgressPort
+                newUpdateRunningComboJudge()
         );
         handler = new FinishRunningHandler(
                 runningStore,       // LoadRunningRoomPort

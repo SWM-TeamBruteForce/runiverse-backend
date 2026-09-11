@@ -4,8 +4,12 @@ import com.runiverse.running_service.application.auth.command.emailverification.
 import com.runiverse.running_service.application.auth.command.emailverification.VerifyEmailCodeHandler;
 import com.runiverse.running_service.application.auth.command.signup.SignUpHandler;
 import com.runiverse.running_service.application.auth.command.signup.SignUpUserRegistrar;
+import com.runiverse.running_service.application.running.command.combo.RunningComboProperties;
+import com.runiverse.running_service.application.running.command.combo.UpdateRunningComboJudge;
 import com.runiverse.running_service.integration_test.fake.FakeEmailSender;
+import com.runiverse.running_service.integration_test.fake.FakeRunningComboPublisher;
 import com.runiverse.running_service.integration_test.fake.FakeRunningProgressPublisher;
+import com.runiverse.running_service.integration_test.fake.InMemoryRunningComboStore;
 import com.runiverse.running_service.integration_test.fake.InMemoryRunningDistanceStore;
 import com.runiverse.running_service.integration_test.fake.FakeGpsTrackUploader;
 import com.runiverse.running_service.integration_test.fake.FakeWeatherProvider;
@@ -28,11 +32,15 @@ import com.runiverse.running_service.integration_test.fake.InMemoryUserStore;
 import com.runiverse.running_service.integration_test.fake.InMemoryVerificationTicketStore;
 import org.junit.jupiter.api.BeforeEach;
 
+import java.time.Duration;
+
 public abstract class IntegrationTestSupport {
 
     // 실제 application.properties와 같은 값으로 맞춘다
     protected static final int MAX_ATTEMPTS = 5;
     protected static final int DAILY_LIMIT = 10;
+    protected static final RunningComboProperties COMBO_PROPERTIES = new RunningComboProperties(
+            30, 30, Duration.ofSeconds(19), Duration.ofSeconds(10), 1);
 
     protected InMemoryUserStore userStore;
     protected InMemoryRefreshTokenStore refreshTokenStore;
@@ -41,6 +49,8 @@ public abstract class IntegrationTestSupport {
     protected InMemoryRunningTrackStore runningTrackStore;
     protected InMemoryRunningDistanceStore runningDistanceStore;
     protected FakeRunningProgressPublisher runningProgressPublisher;
+    protected InMemoryRunningComboStore runningComboStore;
+    protected FakeRunningComboPublisher runningComboPublisher;
     protected InMemoryRunningRecordStore runningRecordStore;
     protected FakeGpsTrackUploader gpsTrackUploader;
     protected FakeWeatherProvider weatherProvider;
@@ -66,6 +76,8 @@ public abstract class IntegrationTestSupport {
         runningTrackStore = new InMemoryRunningTrackStore();
         runningDistanceStore = new InMemoryRunningDistanceStore();
         runningProgressPublisher = new FakeRunningProgressPublisher();
+        runningComboStore = new InMemoryRunningComboStore();
+        runningComboPublisher = new FakeRunningComboPublisher();
         runningRecordStore = new InMemoryRunningRecordStore();
         gpsTrackUploader = new FakeGpsTrackUploader();
         weatherProvider = new FakeWeatherProvider();
@@ -81,6 +93,19 @@ public abstract class IntegrationTestSupport {
         verificationCodeGenerator = new FakeVerificationCodeGenerator();
         verificationCodeHasher = new FakeVerificationCodeHasher();
         emailSender = new FakeEmailSender();
+    }
+
+    // 위치 배치 핸들러가 콤보 판정을 물고 있어 러닝 통합 테스트마다 같은 조립이 필요하다.
+    // 한 저장소가 포트 4개를 겸한다
+    protected UpdateRunningComboJudge newUpdateRunningComboJudge() {
+        return new UpdateRunningComboJudge(
+                runningComboStore,      // LoadRunningComboSnapshotsPort
+                runningComboStore,      // SaveRunningComboSnapshotPort
+                runningComboStore,      // LoadRunningComboPairsPort
+                runningComboStore,      // SaveRunningComboPairsPort
+                runningComboPublisher,  // PublishRunningComboPort
+                COMBO_PROPERTIES
+        );
     }
 
     // 조립할 fake가 많고 여러 테스트가 가입부터 시작하므로 여기서 한 번만 엮는다

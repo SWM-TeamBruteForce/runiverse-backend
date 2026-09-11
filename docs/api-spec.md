@@ -22,11 +22,12 @@
 | 8 | POST | `/api/v1/auth/logout` | 로그아웃 — access 토큰 서버 차단(블랙리스트) + 리프레시 토큰 삭제 — 사용 화면: 설정 페이지 |
 | 9 | POST | `/api/v1/users/onboarding` | 온보딩 입력 (닉네임 포함, 1회성) |
 
-### 2. 공통 — 디바이스/푸시
+### 2. 공통 — 디바이스/푸시 · 유저 상태
 
 | # | Method | Path | 설명 |
 |---|--------|------|------|
 | 10 | POST | `/api/v1/devices` | 디바이스(푸시 토큰) 등록/갱신, `isActive=true` 전환 — 사용 화면: 로그인 직후 전역 |
+| 13 | GET | `/api/v1/users/me/status` | 유저 현재 상태 — 앱 진입·포그라운드 복귀 시 어느 화면으로 갈지 결정 — 사용 화면: 전역 |
 
 ### 3. 홈 화면
 
@@ -49,7 +50,6 @@
 |---|--------|------|------|
 | 11 | POST | `/api/v1/running-matches` | 매칭 신청 (시각+거리) — 409 `MATCH_ALREADY_IN_PROGRESS`·`MATCH_SLOT_CLOSED`·`MATCH_COOLDOWN` |
 | 12 | DELETE | `/api/v1/running-matches` | 대기 취소 + 확정 후 나가기 겸용 (서버가 모집 마감 시각으로 분기) |
-| 13 | GET | `/api/v1/users/me/running-match` | **[MVP 제외]** 현재 매칭 상태 — 매칭·러닝을 함께 다루는 전체 상태 API로 대체 예정 |
 | 14 | GET | `/api/v1/running-matches/slots` | 시간대별 대기 인원 — 매칭 입력 모달의 "3명 대기 중" 표시 |
 | 15 | GET | `/api/v1/running-matches/stream` | 매칭 이벤트 스트림 (SSE) |
 | 16 | POST | `/api/v1/running-rooms/solo` | 솔로 러닝 개시 (매칭 방은 서버가 생성) |
@@ -62,13 +62,14 @@
 | `MATCH_ROOM_UPDATED` | 방 상태 갱신 (`RoomInfo`) — 인원 변동·취소 포함 |
 | `RUNNING_READY` | 곧 시작 통지 — `start_at` 직전(리드타임은 운영값)에 서버가 한 번 보낸다. 클라의 `RUNNING_START` 발사 타이머 기준 (5-C) |
 
-**러닝 WebSocket** — `/api/v1/ws/running`, 메시지 7종. 매칭 러닝과 솔로 러닝이 같은 채널을 쓴다. 이 외에 **ack 2종**(`RUNNING_STARTED`·`RUNNING_FINISHED`)과 **헬스 체크 2종**(`HEALTH_CHECK`·`HEALTH_CHECKED`)이 있다.
+**러닝 WebSocket** — `/api/v1/ws/running`, 메시지 8종. 매칭 러닝과 솔로 러닝이 같은 채널을 쓴다. 이 외에 **ack 2종**(`RUNNING_STARTED`·`RUNNING_FINISHED`)과 **헬스 체크 2종**(`HEALTH_CHECK`·`HEALTH_CHECKED`)이 있다.
 
 | 그룹 | 메시지 | 방향 | 비고 |
 |------|--------|------|------|
 | 카운트 다운 | `RUNNING_START` | C→S | 방의 `STARTED` 확인 후 참가자 시작 통보 |
 | 러닝 중 | `RUNNING_LOCATION_UPDATE` | C→S | 고빈도 — ack 없음 |
-| 러닝 중 | `PLAYER_RUNNING_PROGRESS_UPDATED` | S→C | `paused` 포함 — 멈춘 것과 느려진 것을 구분 |
+| 러닝 중 | `RUNNING_PROGRESS_UPDATED` | S→C | `paused` 포함 — 멈춘 것과 느려진 것을 구분 |
+| 러닝 중 | `RUNNING_COMBO_UPDATED` | S→C | 나란히 달리는 상대와의 콤보 — 참가자 쌍마다 따로 센다 |
 | 러닝 중 | `RUNNING_PAUSE` / `RUNNING_RESUME` | C→S | 일시정지·재개 — 본인 기록만 멈춘다 |
 | 러닝 중 | `RUNNING_FINISH` | C→S | `forced` 플래그로 조기 종료 의사 포함 — 서버가 상태·기록 확정 |
 | 공통 | `ERROR` | S→C | WS 요청 실패 통지 |
@@ -720,7 +721,7 @@
 
 - **인증**: 필요
 
-## 2. 공통 — 디바이스/푸시
+## 2. 공통 — 디바이스/푸시 · 유저 상태
 
 ### 2-1. `POST /api/v1/devices` — 디바이스 등록/갱신
 
@@ -739,6 +740,40 @@
 - **동작**: `deviceId` 기준 upsert(없으면 생성)
 - **Response**: `204 No Content`
 
+- **인증**: 필요
+
+### 2-2. `GET /api/v1/users/me/status` — 유저 현재 상태
+
+- **화면**: 앱 진입·포그라운드 복귀 — 어느 화면으로 갈지, 어떤 채널에 연결할지 정한다
+- **이 경로는 "지금 무엇을 하는 중인가"만 담는다.** 계정 상태·온보딩 여부·설정처럼 활동과 무관한 것은 넣지 않는다(`api-convention.md`)
+- **Response `200 OK`**
+
+```json
+{
+  "status": "RUNNING",                          // IDLE | WAITING | READY | RUNNING
+  "type": "MATCH",                              // MATCH | SOLO — status가 IDLE이면 null
+  "runningRoomId": 125,                         // status가 IDLE이면 null
+  "scheduledStartAt": "2026-07-25T19:00:00",    // status가 IDLE이면 null
+  "targetDistanceMeters": 5000,                 // 목표 없는 솔로 방은 null
+  "cooldownUntil": null                         // 제재 쿨다운이 남아 있으면 그 시각
+}
+```
+
+- **`status`는 저장값이 아니라 파생값이다** — 상태 컬럼을 따로 두지 않고 활성 신청·방 상태·모집 마감 시각으로 계산한다. `feature-spec.md`의 홈 화면 상태 규칙과 같은 판정이며 러닝 구간까지 확장한 것이다
+
+| `status` | 조건 | 클라이언트의 다음 동작 |
+|---|---|---|
+| `IDLE` | 활성 신청이 없음 | 홈. `cooldownUntil`이 있으면 매칭 버튼에 남은 시간을 표시 |
+| `WAITING` | 방이 `MATCHING`이고 모집 마감 전 | 매칭 스트림 연결 — 방 정보는 연결 직후 `RoomInfo` 스냅샷이 나른다 |
+| `READY` | 방이 `MATCHED` | `MATCH`면 스트림 연결 + 카운트다운, `SOLO`면 곧바로 WS `RUNNING_START` |
+| `RUNNING` | 방이 `STARTED` | WS 연결 → `RUNNING_START` → 로컬 트랙 재전송 |
+
+- **마감이 지난 `MATCHING` 방은 `READY`로 답한다.** 확정 예약이 아직 깨지 않은 틈에 조회하면 방은 `MATCHING`이지만 곧 확정될 자리다 — 대기 화면을 그리게 두면 잠시 뒤 화면이 다시 바뀐다. 매칭 취소가 방 상태가 아니라 마감 시각으로 분기하는 것과 같은 이유다
+- **참가자 상태(`running_players.status`)는 보지 않는다.** 방이 `STARTED`인데 본인은 아직 `JOINED`(WS 미접속)일 수 있으나 클라이언트가 할 일은 같고 `RUNNING_START`가 멱등이라 구분할 이유가 없다
+- **방 정보를 담지 않는다.** 참가자 목록·팀 평균 페이스·모집 마감 시각은 방의 속성이고, 매칭 중에는 스트림이 `RoomInfo`로, 러닝 중에는 `RUNNING_STARTED` ack가 나른다. 여기 실으면 같은 값이 두 경로로 내려가 어긋날 여지가 생긴다
+  - 다만 `scheduledStartAt`·`targetDistanceMeters`는 **본인 신청의 속성**(`running_players.start_at`·`target_distance`)이라 담는다. 러닝 중 복구에서 경과 시간·목표를 그리는 데 필요하다
+- **`type`에 `INVITE`는 나가지 않는다** — 미래 예약값이라 계약에 포함하지 않는다
+- **`WAITING`은 `MATCH`만 가능하다** — 솔로는 모집 단계 없이 `MATCHED`로 태어난다
 - **인증**: 필요
 
 ## 3. 홈 화면 — 날씨
@@ -931,36 +966,14 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **에러 (404 Not Found)**: 활성 신청이 없다
 - **인증**: 필요
 
-#### `GET /api/v1/users/me/running-match` — 현재 매칭 상태 조회 **[MVP 제외]**
+#### 매칭 상태 복원 — `GET /api/v1/users/me/status`
 
-> **이 엔드포인트는 만들지 않는다.** 매칭 상태만 따로 묻는 API를 두는 대신, **매칭·러닝을 함께 다루는 전체 상태 API**로 흡수한다. 아래 정의는 그 API를 설계할 때 참고하도록 남긴다.
->
-> 그때까지 앱 재시작·포그라운드 복귀는 **스트림 연결 직후의 `RoomInfo` 스냅샷**으로 복원한다. 신청 직후에는 `POST /running-matches`가 준 `runningRoomId`로 바로 스트림을 연다.
+매칭 상태만 따로 묻는 엔드포인트는 두지 않는다. 앱 진입·포그라운드 복귀 시 **유저 상태 API(2-2)**가 `IDLE`·`WAITING`·`READY`를 돌려주고, 클라이언트는 그 값으로 스트림 연결 여부를 정한다.
 
-- **화면**: 홈 진입·앱 재시작 — 스트림에 연결할지 판단하고 홈 상태를 그린다
-- 스트림도 연결 직후 같은 정보를 보내지만 이 API를 따로 둔다 — **매칭을 걸지 않은 사용자가 대다수인데 전원에게 스트림을 여는 것은 서버 커넥션과 단말 배터리 양쪽에 부담**이라, 활성 신청이 있을 때만 연결한다
-- **Response `200 OK`** — 아래 우선순위로 현재 상태를 반환한다
-
-```json
-{
-  "state": "MATCHED",
-  "room": { ... }        // RoomInfo — 방 ID는 이 안에 있다(최상위에 두면 같은 값이 두 번 내려간다)
-}
-```
-
-- **`state`는 저장값이 아니라 파생값이다** — `running_players`와 방 상태·마감 시각으로 계산한다. `feature-spec.md`의 홈 화면 상태 표와 **같은 규칙**이며 이름만 한글/영문으로 다르다
-
-| `state` | 조건 |
-|---|---|
-| `NONE` | 활성 신청이 없음 |
-| `WAITING` | 방이 `MATCHING`이고 마감 전 |
-| `MATCHED` | 방이 `MATCHED` — **인원 무관, 1인 확정도 여기 해당한다** |
-
-- **`FAILED` 상태는 없다** — 마감은 인원과 무관하게 항상 `MATCHED`로 끝나므로 신청이 저절로 실패하는 경로가 없다. 취소는 사용자가 직접 한 행동이라 그 즉시 `NONE`으로 돌아간다
-- 모집 마감이 지났지만 스케줄러가 아직 닫지 않은 `MATCHING` 방은 `MATCHED`로 판정한다 — 확정은 마감 시각에 일어난 사실이고 스케줄러는 반영이 늦을 뿐이다
-- `room`은 `WAITING`·`MATCHED`일 때 `RoomInfo`로 채우고 `NONE`이면 null이다
-- 클라이언트는 `MATCHED`에서 `players`가 1건인 경우를 **혼자 확정된 상태**로 그린다. 이때 나가기는 페널티가 없다(5-B)
-- **인증**: 필요
+- **전원에게 스트림을 열지 않는 이유**: 매칭을 걸지 않은 사용자가 대다수인데 모두에게 연결을 유지하는 것은 서버 커넥션과 단말 배터리 양쪽에 부담이다. 그래서 상태를 먼저 묻고 활성 신청이 있을 때만 연결한다
+- **방 정보는 스트림이 나른다** — 2-2는 `runningRoomId`까지만 주고, 참가자 목록·마감 시각은 연결 직후의 `RoomInfo` 스냅샷이 채운다. 신청 직후에는 `POST /running-matches`가 준 `runningRoomId`로 바로 스트림을 연다
+- **매칭이 저절로 실패하는 상태는 없다** — 마감은 인원과 무관하게 항상 확정으로 끝나므로 `FAILED`에 해당하는 값이 없다. 취소는 사용자가 직접 한 행동이라 그 즉시 `IDLE`로 돌아간다
+- **1인 확정도 `READY`다.** 클라이언트는 `RoomInfo.players`가 1건인 경우를 혼자 확정된 상태로 그리며, 이때 나가기는 페널티가 없다(5-B)
 
 ### 5-B. 매칭 방 (매칭완료 대기방)
 
@@ -1095,7 +1108,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **ack 규칙**: 상태가 걸린 요청에만 — `RUNNING_START`→`RUNNING_STARTED`, `RUNNING_FINISH`→`RUNNING_FINISHED`
   - **`RUNNING_LOCATION_UPDATE`는 ack 없음**
-  - ack의 `data`는 비운다. `RUNNING_STARTED`에 진입·재연결 화면 복구용 스냅샷을 싣는 예외를 둘 예정이지만 아직 구현 전이다(5-C)
+  - ack의 `data`는 비운다. 예외는 `RUNNING_STARTED` 하나로, 진입·재연결 화면 복구용 스냅샷을 싣는다(5-C)
 - **`ERROR` (S→C)** — WS 요청 실패 통지. REST 에러 포맷과 동일 계열
 
 ```json
@@ -1152,8 +1165,32 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **3번에 `type` 분기가 없다.** 매칭은 `start_at`에 시작 스케줄러가 이미 `STARTED`로 올려놨으니 통과하고, 솔로는 `start_at`이 개시 시각(과거)이라 여기서 올라간다. 같은 코드가 두 종류를 다 덮는다
 - **전 단계가 멱등하다.** 중복 `RUNNING_START`는 아무 상태도 다시 바꾸지 않고 ack만 재전송한다
 - **거부**: `start_at`이 아직 안 됐으면 `INVALID_ROOM_STATE`(매칭에서 미리 쏘는 것 차단). 방이 `FINISHED`·`CANCELLED`여도 같은 코드
-- **ack**: `RUNNING_STARTED` — **현재 `data`는 비어 있다(`{}`).** 재연결마다 REST를 다시 때리지 않도록 방 상태·참가자 스냅샷을 싣는 것이 목표지만 아직 넣지 않았다. 그때까지 클라는 재연결 후 방 정보를 REST로 다시 읽는다
-  - **[미정]** 스냅샷 payload 형태. `RoomInfo`를 재사용할지 별도로 둘지 정하지 않았다
+- **ack**: `RUNNING_STARTED` — 러닝 화면을 그리는 데 필요한 스냅샷을 싣는다
+
+```json
+{
+  "runningRoomId": 125,
+  "startedAt": "2026-07-25T19:00:00",       // 방의 start_at — 경과 시간의 기준
+  "targetDistanceMeters": 5000,             // 목표 없는 솔로 방은 null
+  "players": [
+    {
+      "userId": "550e8400-e29b-41d4-a716-446655440015",
+      "nickname": "완두콩",
+      "profileImageUrl": "https://...",     // 사진이 없으면 null
+      "distanceMeters": 1520,               // 서버가 좌표로 누적한 값
+      "currentPaceSecondsPerKm": 345,       // nullable
+      "paused": false
+    }
+  ]
+}
+```
+
+- **`RoomInfo`를 재사용하지 않는다.** 그쪽은 매칭 대기방을 그리려고 만든 구조라 진행 상황이라는 개념이 없고, 러닝 중에는 `closeAt`·`teamAveragePace`가 의미를 잃는다. 대신 `players[]`가 **`RoomInfo`의 프로필 + `RUNNING_PROGRESS_UPDATED`의 진행**을 합친 모양이라, 클라는 **이 스냅샷으로 채우고 갱신분으로 덮는** 한 쌍으로 다룬다
+- **본인도 `players`에 담는다.** 진행 통지는 본인을 빼지만(클라가 직접 계산한다) 스냅샷은 다르다 — 앱 재설치로 로컬 트랙이 사라지면 본인 누적 거리를 복구할 경로가 이것뿐이다. 다만 **클라는 화면 표시에 로컬 계산값을 우선**하고 이 값은 복구용으로만 쓴다
+- **이미 이탈·완주한 참가자는 담지 않는다.** 러닝 화면에는 그들을 그릴 자리가 없다
+- **`startedAt`은 방의 `start_at`이다** — 참가자가 실제로 `RUNNING`이 된 시각을 쓰면 같은 방에서 사람마다 경과 시간이 달라진다
+- **최초 진입과 재연결에 똑같이 나간다.** 클라가 둘을 구분하지 않는 것이 `RUNNING_START`의 전제이므로 ack만 다르게 하지 않는다
+- 이 스냅샷이 있어야 `RUNNING_PROGRESS_UPDATED`·`RUNNING_COMBO_UPDATED`가 `userId`만 싣는 설계가 성립한다 — 표시 정보는 여기서 받아 둔다
 
 ### 5-D. 러닝 중
 
@@ -1190,7 +1227,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   - 장애가 이어지면 배치마다 `ERROR`가 나간다. 클라는 건별 알림 대신 "저장 실패 중" 상태 표시 하나로 다룬다
 - 재연결하면 클라이언트는 로컬 트랙 전체를 처음 `sequence`부터 다시 보내고, 서버는 `(runningRoomId, userId, sequence)`가 같은 좌표를 무시한다(`runningRoomId`는 재연결 뒤 `RUNNING_START`가 다시 정한다). ack가 없으므로 성공 경계를 추정하지 않으며 로컬 트랙은 `RUNNING_FINISHED` ack 뒤 삭제한다
 
-#### `PLAYER_RUNNING_PROGRESS_UPDATED` (S→C) — 참가자 진행 정보
+#### `RUNNING_PROGRESS_UPDATED` (S→C) — 참가자 진행 정보
 
 ```json
 {
@@ -1204,14 +1241,44 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **갱신된 참가자 한 명만 싣는다.** 좌표 배치를 받아 진행이 바뀐 사람만 알리면 되고, 전원 스냅샷을 매번 보내면 인원수만큼 payload가 커진다
   - 클라는 참가자별 최신값을 로컬에 들고 이 메시지로 덮는다
-  - **[미정]** 최초 진입·재연결 시 다른 참가자의 현재 진행을 받는 경로는 따로 정한다 — 이 메시지는 갱신분만 나르므로 그것만으로는 화면을 복구할 수 없다
+  - **최초 진입·재연결 시 전원의 현재 진행은 `RUNNING_STARTED` 스냅샷이 나른다**(5-C) — 이 메시지는 갱신분만 실으므로 그것만으로는 화면을 복구할 수 없다
   - `runningRoomId`를 싣지 않는다 — 클라는 `RUNNING_START`로 정한 방 하나에만 있다
-  - `profileImageUrl`을 싣지 않는다 — 고빈도 메시지마다 presigned URL을 만들면 비싸다. 프로필은 `RUNNING_STARTED` 스냅샷에서 받는다
+  - 닉네임·`profileImageUrl`을 싣지 않는다 — 10초마다 인원수만큼 나가는 메시지라 presigned URL(수백 자)이 붙으면 payload가 커진다. 표시 정보는 `RUNNING_STARTED` 스냅샷에서 받아 `userId`로 찾는다
 - **본인에게는 보내지 않는다.** 본인 진행은 클라가 이미 계산해 화면에 띄우고 있다
 - `distanceMeters`는 **서버가 수신한 좌표로 누적한 값**이다. 클라 표시용 거리(5-D)와 미세하게 다를 수 있으나 다른 참가자 화면에 쓰는 값이라 서버 기준으로 통일한다
 - `currentPaceSecondsPerKm`는 마지막 좌표의 값을 그대로 옮긴다 — 단말이 못 재면 `null`이다
 - `paused`가 없으면 상대가 멈춘 것과 느려진 것을 구분할 수 없다 — 화면에서 갑자기 뒤처진 것처럼 보인다
   - **[미정]** `RUNNING_PAUSE`/`RUNNING_RESUME` 구현 전까지 항상 `false`로 나간다
+
+#### `RUNNING_COMBO_UPDATED` (S→C) — 콤보 갱신
+
+```json
+{
+  "peers": [
+    {
+      "userId": "550e8400-e29b-41d4-a716-446655440015",
+      "gapMeters": -18,                 // 양수면 상대가 앞, 음수면 뒤
+      "comboCount": 12,                 // 이 상대와 지금 이어지고 있는 콤보
+      "maxComboCount": 30               // 이번 러닝에서 이 상대와 기록한 최고 콤보
+    }
+  ]
+}
+```
+
+- **콤보는 참가자 쌍마다 따로 센다.** `peers`는 받는 사람이 낀 관계 전부이며, 다른 두 참가자끼리의 콤보는 담기지 않는다
+- **받는 사람의 상태 전체를 담는다.** 콤보가 끊긴 상대는 목록에서 빠지므로 **끊김을 알리는 별도 이벤트가 없다** — 클라는 이 목록으로 화면을 갈아끼운다
+  - 통이 유실돼도 다음 통이 현재 상태를 다시 실어 온다. 놓친 이벤트를 되짚을 필요가 없다
+  - 아무와도 겹치지 않으면 `peers`는 빈 배열이다
+- **위치 배치를 받을 때마다 나간다.** 보낸 참가자와 **그와 관계가 얽힌 참가자**(지금 겹친 사람·방금 끊긴 사람)에게 보내며, 무관한 참가자에게는 보내지 않는다
+  - 방금 끊긴 상대에게도 보내야 한다 — 안 보내면 그쪽 화면에 끊긴 콤보가 남는다
+  - 같은 관계를 두고 양쪽의 배치가 각각 통을 만들어 내용이 겹칠 수 있다. `comboCount`는 콤보 시작 시각에서 계산하므로 두 통의 값이 같고, 화면은 같은 값으로 덮여 바뀌지 않는다
+- **`gapMeters`는 누적 주행 거리의 차이다** — 좌표상 거리가 아니다. 참가자들이 각자 다른 장소에서 뛰기 때문이다
+- **`comboCount`는 서버가 시각에서 계산한 값이다.** 클라가 자체적으로 세지 않는다 — 배치 도착 수로 세면 인원과 전송 빈도에 따라 값이 달라진다
+- `runningRoomId`를 싣지 않는다 — 클라는 `RUNNING_START`로 정한 방 하나에만 있다
+- `profileImageUrl`·닉네임을 싣지 않는다 — 고빈도 메시지라 `userId`로만 지목하고 표시 정보는 진입 시 받은 참가자 목록에서 찾는다
+- **ack 없음** — 실패는 `ERROR`로 통지
+- **기록에 남지 않는다.** 러닝이 끝나면 사라지며 결과·기록 상세 응답에 콤보 필드가 없다
+- 판정 규칙(붙는 거리·봐주는 횟수·신선도·보정)은 [feature-spec.md](feature-spec.md)의 러닝 콤보 절이 정본이다
 
 #### `RUNNING_PAUSE` / `RUNNING_RESUME` (C→S) — 일시정지·재개
 
@@ -1221,7 +1288,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **일시정지 동안 경과 시간과 거리 계산이 멈춘다.** 클라는 좌표 전송도 중단한다 — 멈춰 있는 동안의 좌표는 트랙에 남길 이유가 없고, GPS 흔들림이 거리로 잡히면 기록이 부풀려진다
 - **다른 참가자는 계속 진행한다.** 일시정지는 본인 기록에만 영향을 주며 다른 참가자를 멈추지 않는다
-- 서버는 상태를 다른 참가자에게 `PLAYER_RUNNING_PROGRESS_UPDATED`의 `paused` 필드로 알린다
+- 서버는 상태를 다른 참가자에게 `RUNNING_PROGRESS_UPDATED`의 `paused` 필드로 알린다
 - **ack 없음** — 실패는 `ERROR`로 통지
 
 #### `RUNNING_FINISH` (C→S) — 러닝 종료 (정상/강제 통합)

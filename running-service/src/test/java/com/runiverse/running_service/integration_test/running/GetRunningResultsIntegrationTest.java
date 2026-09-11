@@ -96,7 +96,8 @@ public class GetRunningResultsIntegrationTest extends IntegrationTestSupport {
                 runningTrackStore,        // AppendRunningTrackPort
                 runningDistanceStore,     // LoadRunningDistancePort
                 runningDistanceStore,     // SaveRunningDistancePort
-                runningProgressPublisher  // PublishRunningProgressPort
+                runningProgressPublisher, // PublishRunningProgressPort
+                newUpdateRunningComboJudge()
         );
         finishRunningHandler = new FinishRunningHandler(
                 runningStore,       // LoadRunningRoomPort

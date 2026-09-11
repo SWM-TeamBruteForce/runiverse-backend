@@ -1,5 +1,6 @@
 package com.runiverse.running_service.application.running.command.location;
 
+import com.runiverse.running_service.application.running.command.combo.UpdateRunningComboJudge;
 import com.runiverse.running_service.application.running.port.in.UpdateRunningLocationUsecase;
 import com.runiverse.running_service.application.running.port.out.AppendRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningDistancePort;
@@ -22,6 +23,7 @@ public class UpdateRunningLocationHandler implements UpdateRunningLocationUsecas
     private final LoadRunningDistancePort loadRunningDistancePort;
     private final SaveRunningDistancePort saveRunningDistancePort;
     private final PublishRunningProgressPort publishRunningProgressPort;
+    private final UpdateRunningComboJudge updateRunningComboJudge;
 
     @Override
     public void handle(UpdateRunningLocationCommand command) {
@@ -44,6 +46,8 @@ public class UpdateRunningLocationHandler implements UpdateRunningLocationUsecas
                 command.targetDistanceMeters(),
                 latestPace(command),
                 false));   // TODO: 일시정지 고정값 — RUNNING_PAUSE/RESUME을 만들 때 실제 상태로 교체한다
+        // 진행 통지 뒤에 둔다 — 콤보는 곁가지라 앞에 두면 판정이 느려질 때 진행 표시까지 늦어진다
+        updateRunningComboJudge.judge(command.runningRoomId(), userId, updated.meters());
     }
 
     // 마지막 좌표의 값을 그대로 옮긴다 — 단말이 못 재면 null이다

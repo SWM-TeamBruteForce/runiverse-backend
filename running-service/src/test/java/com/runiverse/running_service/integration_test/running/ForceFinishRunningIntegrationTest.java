@@ -95,7 +95,8 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
                 runningTrackStore,       // AppendRunningTrackPort
                 runningDistanceStore,    // LoadRunningDistancePort
                 runningDistanceStore,    // SaveRunningDistancePort
-                runningProgressPublisher // PublishRunningProgressPort
+                runningProgressPublisher, // PublishRunningProgressPort
+                newUpdateRunningComboJudge()
         );
         FinishRunningHandler finishRunningHandler = new FinishRunningHandler(
                 runningStore,       // LoadRunningRoomPort
