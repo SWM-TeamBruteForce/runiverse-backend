@@ -74,3 +74,4 @@ AuthController ──▶ SignUpUsecase ──▶ SignUpHandler ──▶ SaveUse
 
 - **security 직접 참조**: 현재 허용하는 import는 `SecurityConfig` → `JwtAuthenticationEntryPoint`·`JwtAccessDeniedHandler`, `JwtAuthenticationEntryPoint` → `BlockedTokenValidator`·`ExpiredTokenValidator`뿐이다.
 - **`UserOnboarding` 별도 영속화**: `ExistsOnboardingPort`의 별도 존재 확인, `CompleteOnboardingHandler` → `SaveOnboardingPort.saveOnboarding(UserOnboarding)` → `UserPersistenceAdapter`의 별도 저장, `UserPersistenceAdapter.toDomain(UserJpaEntity)`가 `UserOnboarding`을 복원하지 않는 현재 흐름만 허용한다.
+- **`delete_users` 보관 만료 처리**: `RedactDeletedUserPort.redact` → `UserPersistenceAdapter`가 `DeletedUser`를 복원하지 않고 `email`·`nickname`을 직접 비우는 현재 흐름만 허용한다. 스냅샷은 탈퇴 시점의 불변 기록이고 만료 제거는 보관 정책 집행이라 애그리거트 상태 전이로 보지 않는다. `delete_users`를 도메인으로 읽는 유스케이스가 생기면 이 예외는 유지할 수 없다.

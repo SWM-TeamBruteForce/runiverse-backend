@@ -4,6 +4,7 @@ import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.user.exception.GenderRequiredException;
 import com.runiverse.running_service.domain.user.exception.JoinedAtRequiredException;
 import com.runiverse.running_service.domain.user.exception.LoginTypeRequiredException;
+import com.runiverse.running_service.domain.user.exception.OnboardingSnapshotIncompleteException;
 import com.runiverse.running_service.domain.user.vo.AvgPace;
 import com.runiverse.running_service.domain.user.vo.Birthday;
 import com.runiverse.running_service.domain.user.vo.Bmi;
@@ -42,6 +43,8 @@ public class DeletedUser {
                         LoginType loginType, LocalDateTime joinedAt) {
         this.userId = new UserId(userId);
         this.email = new Email(email);
+        // 온보딩 전 탈퇴면 다섯이 모두 비고, 완료 후면 모두 찬다. 섞인 상태는 통계를 망친다
+        requireSnapshotAllOrNothing(nickname, gender, birthYear, avgPace, bmi);
         this.nickname = nickname;
         this.gender = gender;
         this.birthYear = birthYear;
@@ -55,6 +58,17 @@ public class DeletedUser {
             throw new JoinedAtRequiredException();
         }
         this.joinedAt = joinedAt;
+    }
+
+    private static void requireSnapshotAllOrNothing(Nickname nickname, Gender gender,
+                                                    Integer birthYear, AvgPace avgPace, Bmi bmi) {
+        boolean anyPresent = nickname != null || gender != null || birthYear != null
+                || avgPace != null || bmi != null;
+        boolean allPresent = nickname != null && gender != null && birthYear != null
+                && avgPace != null && bmi != null;
+        if (anyPresent && !allPresent) {
+            throw new OnboardingSnapshotIncompleteException();
+        }
     }
 
     // 체중·신장은 BMI로, 생년월일은 연도만 남겨 식별성을 낮춘다

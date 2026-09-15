@@ -386,6 +386,7 @@ FK 강제 없는 독립 테이블(원본 삭제/수정된 row를 참조하므로
 | running_rooms.status | MATCHING / MATCHED / STARTED / FINISHED / CANCELLED | 모집 중(마감 전) / 마감 시점 확정(인원 무관, 1인도 확정) / 시작 / **유효 기록을 남기고** 종료 / 남길 기록 없이 방이 빔 — 시작 전이면 항상, 시작 후면 유효 기록이 하나도 없을 때 |
 | oauth_users.provider | GOOGLE / KAKAO | |
 | scheduled_jobs.job_type | MATCH_CLOSE / RUNNING_READY / RUNNING_START / RUNNING_FORCE_FINISH | 모집 마감 확정(`MATCHING`→`MATCHED`) / 곧 시작 통지(`start_at - 리드타임`에 SSE `RUNNING_READY` 발행 — 방 상태는 바꾸지 않는다) / 정각 시작(`start_at`에 `MATCHED`→`STARTED`. 매칭 방에만 걸고, 참가자 상태는 바꾸지 않는다) / 강제 종료(`start_at + 유예`에 남은 참가자와 방을 닫는다. 매칭 방에만 건다) |
+| delete_users.gender | MALE / FEMALE | 온보딩 스냅샷 — 온보딩 전에 탈퇴하면 null |
 | delete_users.login_type | LOCAL / GOOGLE / KAKAO | `oauth_users.provider`에 `LOCAL`을 더한 값 — 소셜 연동이 없는 계정도 표현해야 한다 |
 
 ---

@@ -13,6 +13,7 @@ import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Check;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -22,9 +23,23 @@ import java.util.UUID;
 @Entity
 @Table(
         name = "delete_users",
-        // 보관 기간 만료 배치가 탄다 — email이 남은 행만 훑어 처리 끝난 대다수를 배제한다
+        // 탈퇴자 신원 조회(email 등가)와 보관 기간 만료 배치가 함께 탄다.
+        // 배포 스키마는 WHERE email IS NOT NULL 부분 인덱스다 — @Index로는 표현할 수 없다
         indexes = @Index(name = "idx_delete_user_pending", columnList = "email, created_at")
 )
+@Check(name = "ck_delete_user_gender", constraints = "gender is null or gender in ('MALE', 'FEMALE')")
+@Check(name = "ck_delete_user_login_type",
+        constraints = "login_type in ('LOCAL', 'GOOGLE', 'KAKAO')")
+@Check(name = "ck_delete_user_birth_year", constraints = "birth_year is null or birth_year >= 1900")
+@Check(name = "ck_delete_user_avg_pace",
+        constraints = "avg_pace is null or avg_pace between 120 and 1800")
+@Check(name = "ck_delete_user_bmi", constraints = "bmi is null or bmi > 0")
+// 온보딩 스냅샷은 함께 차고 함께 빈다. nickname은 90일 뒤 혼자 비워지므로 묶지 않는다
+@Check(name = "ck_delete_user_onboarding_snapshot",
+        constraints = "(gender is null and birth_year is null"
+                + " and avg_pace is null and bmi is null)"
+                + " or (gender is not null and birth_year is not null"
+                + " and avg_pace is not null and bmi is not null)")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class DeleteUserJpaEntity extends BaseCreatedAtEntity {
 
