@@ -17,6 +17,7 @@ public final class RunningDistanceAccumulator {
         long lastSequence = from.lastSequence();
         Double lastLatitude = from.lastLatitude();
         Double lastLongitude = from.lastLongitude();
+        Integer lastPace = from.lastPaceSecondsPerKm();
         // 배치 안이 뒤섞여 와도 이어붙인 거리가 맞으려면 순번 순서로 훑어야 한다
         List<TrackPoint> ordered = points.stream()
                 .sorted(Comparator.comparingLong(TrackPoint::sequence))
@@ -34,7 +35,10 @@ public final class RunningDistanceAccumulator {
             lastSequence = point.sequence();
             lastLatitude = point.latitude();
             lastLongitude = point.longitude();
+            // 거리에 반영한 좌표의 페이스만 남긴다 — 건너뛴 재전송분의 페이스를
+            // 최신값으로 삼으면 화면이 지나간 구간의 속도로 되돌아간다
+            lastPace = point.currentPaceSecondsPerKm();
         }
-        return new RunningDistance(meters, lastSequence, lastLatitude, lastLongitude);
+        return new RunningDistance(meters, lastSequence, lastLatitude, lastLongitude, lastPace);
     }
 }

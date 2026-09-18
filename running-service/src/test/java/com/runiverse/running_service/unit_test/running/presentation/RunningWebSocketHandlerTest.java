@@ -12,7 +12,10 @@ import com.runiverse.running_service.application.running.exception.NotRoomPlayer
 import com.runiverse.running_service.application.running.exception.RunningRoomNotFoundException;
 import com.runiverse.running_service.application.running.exception.RunningTrackUnavailableException;
 import com.runiverse.running_service.application.running.port.in.FinishRunningUsecase;
+import com.runiverse.running_service.application.running.port.in.GetRunningSnapshotUsecase;
 import com.runiverse.running_service.application.running.port.in.StartRunningUsecase;
+import com.runiverse.running_service.application.running.port.out.RunningComboPeer;
+import com.runiverse.running_service.application.running.query.snapshot.GetRunningSnapshotResult;
 import com.runiverse.running_service.application.running.port.out.AppendRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningDistancePort;
 import com.runiverse.running_service.application.running.port.out.PublishRunningProgressPort;
@@ -45,6 +48,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -70,6 +74,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class RunningWebSocketHandlerTest {
 
     private static final UUID USER_ID = UuidCreator.getTimeOrderedEpoch();
+    // 스냅샷에 실려 나가는 콤보 상대 — 본인과 갈라져야 부호 방향까지 볼 수 있다
+    private static final UUID PEER_ID = UuidCreator.getTimeOrderedEpoch();
     private static final long ROOM_ID = 125L;
     // Location.MAX_SEQUENCE와 같은 값 — 구현이 바뀌면 이 상수도 같이 옮긴다
     private static final long MAX_SEQUENCE = 100_000L;
@@ -117,6 +123,10 @@ class RunningWebSocketHandlerTest {
     @Mock
     private FinishRunningUsecase finishRunningUsecase;
 
+    // 스냅샷 조립은 DB와 Redis를 함께 읽는다 — 여기서는 ack에 실려 나가는지만 본다
+    @Mock
+    private GetRunningSnapshotUsecase getRunningSnapshotUsecase;
+
     private RunningWebSocketHandler handler;
 
     @BeforeEach
@@ -131,10 +141,12 @@ class RunningWebSocketHandlerTest {
                 new RemoveRunningSessionHandler(sessionPort, runningRoomMembershipPort),
                 new UpdateRunningLocationHandler(appendRunningTrackPort, loadRunningDistancePort,
                         saveRunningDistancePort, publishRunningProgressPort, updateRunningComboJudge),
-                finishRunningUsecase);
+                finishRunningUsecase,
+                getRunningSnapshotUsecase);
         // 좌표를 한 번도 못 받은 상태에서 시작한다 — 누적 거리는 이 테스트의 관심사가 아니다
         given(loadRunningDistancePort.loadDistance(anyLong(), any()))
                 .willReturn(RunningDistance.empty());
+        given(getRunningSnapshotUsecase.handle(any())).willReturn(snapshot());
         given(session.getId()).willReturn("session-1");
         given(session.getAttributes()).willReturn(authenticated());
         given(other.getId()).willReturn("session-2");
@@ -266,6 +278,58 @@ class RunningWebSocketHandlerTest {
         // then
         WebSocketEnvelope sent = captureSent();
         assertThat(sent.event()).isEqualTo("RUNNING_STARTED");
+    }
+
+    // ack의 data는 비우는 것이 규칙이고 RUNNING_STARTED 하나만 예외다(api-spec 5-C).
+    // 이게 비면 재연결한 클라가 남의 진행·콤보를 복구할 경로가 없다
+    @Test
+    @DisplayName("RUNNING_STARTED ack에 화면 복구용 스냅샷을 싣는다")
+    void carriesSnapshotInRunningStartedAck() throws Exception {
+        // given
+        given(startRunningUsecase.handle(any()))
+                .willReturn(new StartRunningResult(ROOM_ID, TARGET_DISTANCE_METERS));
+
+        // when
+        handler.handleMessage(session, runningStart("""
+                {"runningRoomId":125}"""));
+
+        // then
+        Map<?, ?> data = (Map<?, ?>) captureSent().data();
+        assertThat(data.get("runningRoomId")).isEqualTo((int) ROOM_ID);
+        assertThat(data.get("targetDistanceMeters")).isEqualTo(TARGET_DISTANCE_METERS);
+        List<?> players = (List<?>) data.get("players");
+        assertThat(players).hasSize(1);
+        Map<?, ?> player = (Map<?, ?>) players.get(0);
+        assertThat(player.get("userId")).isEqualTo(USER_ID.toString());
+        assertThat(player.get("distanceMeters")).isEqualTo(1_520);
+        assertThat(player.get("currentPaceSecondsPerKm")).isEqualTo(345);
+        // 콤보는 RUNNING_COMBO_UPDATED의 peers와 같은 모양으로 나가야
+        // 클라가 한 벌의 코드로 스냅샷과 갱신을 다 그린다
+        List<?> comboPeers = (List<?>) data.get("comboPeers");
+        assertThat(comboPeers).hasSize(1);
+        Map<?, ?> peer = (Map<?, ?>) comboPeers.get(0);
+        assertThat(peer.get("userId")).isEqualTo(PEER_ID.toString());
+        assertThat(peer.get("comboCount")).isEqualTo(12);
+        assertThat(peer.get("maxComboCount")).isEqualTo(30);
+        assertThat(peer.get("gapMeters")).isEqualTo(-8);
+    }
+
+    @Test
+    @DisplayName("스냅샷 조회가 튕겨내면 ack 대신 그 에러 코드를 돌려준다")
+    void respondsSnapshotErrorCode() throws Exception {
+        // given -> 거리를 못 읽었는데 0을 실어 보내면 클라가 "거리 0"을 그린다.
+        // RUNNING_START는 멱등이라 재시도시키는 편이 낫다
+        given(startRunningUsecase.handle(any()))
+                .willReturn(new StartRunningResult(ROOM_ID, TARGET_DISTANCE_METERS));
+        given(getRunningSnapshotUsecase.handle(any()))
+                .willThrow(new RunningRoomNotFoundException());
+
+        // when
+        handler.handleMessage(session, runningStart("""
+                {"runningRoomId":125}"""));
+
+        // then
+        assertThatError(captureSent(), "ROOM_NOT_FOUND", "RUNNING_START");
     }
 
     @Test
@@ -775,6 +839,17 @@ class RunningWebSocketHandlerTest {
 
     private TextMessage text(String payload) {
         return new TextMessage(payload);
+    }
+
+    // 조립은 GetRunningSnapshotHandler의 몫이다 — 여기서는 봉투에 실려 나가는지만 본다
+    private static GetRunningSnapshotResult snapshot() {
+        return new GetRunningSnapshotResult(
+                ROOM_ID,
+                LocalDateTime.of(2026, 7, 25, 19, 0),
+                TARGET_DISTANCE_METERS,
+                List.of(new GetRunningSnapshotResult.Player(
+                        USER_ID, "완두콩", "https://example.test/p.png", 1_520, 345, false)),
+                List.of(new RunningComboPeer(PEER_ID, -8, 12, 30)));
     }
 
     private WebSocketEnvelope captureSent() throws Exception {

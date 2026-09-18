@@ -50,6 +50,8 @@ public class UpdateRunningLocationHandlerTest {
     private static final double BASE_LONGITUDE = 126.9780;
     // 좌표 하나당 위도 증분 — 대략 11m 간격이라 사람이 뛰는 속도와 비슷하다
     private static final double LATITUDE_STEP = 0.0001;
+    // 직전 배치가 남겨 둔 페이스 — trackPoint의 기본값(357)과 달라야 덮였는지 구분된다
+    private static final int STORED_PACE = 400;
 
     @Mock
     private AppendRunningTrackPort appendRunningTrackPort;
@@ -166,7 +168,8 @@ public class UpdateRunningLocationHandlerTest {
         // given -> 직전 배치의 마지막 좌표가 순번 2였다
         TrackPoint previous = trackPoint(2L);
         given(loadRunningDistancePort.loadDistance(anyLong(), any())).willReturn(
-                new RunningDistance(100.0, 2L, previous.latitude(), previous.longitude()));
+                new RunningDistance(100.0, 2L, previous.latitude(), previous.longitude(),
+                        previous.currentPaceSecondsPerKm()));
         List<TrackPoint> points = List.of(trackPoint(3L), trackPoint(4L));
 
         // when
@@ -186,8 +189,8 @@ public class UpdateRunningLocationHandlerTest {
         // given -> 재연결하면 클라는 로컬 트랙 전체를 순번 0부터 다시 보낸다.
         // 그대로 더하면 거리가 두 배가 된다
         TrackPoint previous = trackPoint(2L);
-        RunningDistance stored =
-                new RunningDistance(100.0, 2L, previous.latitude(), previous.longitude());
+        RunningDistance stored = new RunningDistance(
+                100.0, 2L, previous.latitude(), previous.longitude(), STORED_PACE);
         given(loadRunningDistancePort.loadDistance(anyLong(), any())).willReturn(stored);
 
         // when -> 0,1,2는 이미 반영된 순번이다
@@ -284,5 +287,52 @@ public class UpdateRunningLocationHandlerTest {
         verify(appendRunningTrackPort).append(anyLong(), any(), anyList());
         verify(saveRunningDistancePort, never()).saveDistance(anyLong(), any(), any());
         verify(publishRunningProgressPort, never()).publish(anyLong(), any());
+    }
+
+    // 페이스는 발행만 하고 흘려보내면 RUNNING_STARTED 스냅샷이 남의 페이스를 복구할 길이 없다.
+    // 누적 거리와 함께 저장해 두는 것이 그 경로다
+    @Test
+    @DisplayName("마지막으로 반영한 좌표의 페이스를 누적 거리와 함께 저장한다")
+    void savesPaceOfLastAccumulatedPoint() {
+        // given -> 순번이 커질수록 페이스가 빨라진다
+        List<TrackPoint> points = List.of(trackPoint(0L, 360), trackPoint(1L, 350));
+
+        // when
+        updateRunningLocationHandler.handle(command(points));
+
+        // then -> 저장과 발행이 같은 값을 봐야 스냅샷과 갱신 통지가 어긋나지 않는다
+        assertThat(captureSaved().lastPaceSecondsPerKm()).isEqualTo(350);
+        assertThat(capturePublished().currentPaceSecondsPerKm()).isEqualTo(350);
+    }
+
+    @Test
+    @DisplayName("단말이 페이스를 못 재면 null로 저장한다")
+    void savesNullPaceWhenDeviceCannotMeasure() {
+        // given -> 속도·방위·케이던스처럼 페이스도 단말이 못 잴 수 있다
+        // when
+        updateRunningLocationHandler.handle(command(List.of(trackPoint(0L, null))));
+
+        // then -> 0으로 바꿔 저장하면 "못 쟀다"가 "멈춰 있다"로 둔갑한다
+        assertThat(captureSaved().lastPaceSecondsPerKm()).isNull();
+        assertThat(capturePublished().currentPaceSecondsPerKm()).isNull();
+    }
+
+    @Test
+    @DisplayName("배치가 통째로 재전송분이면 직전 페이스를 그대로 둔다")
+    void keepsStoredPaceWhenBatchIsAllResent() {
+        // given -> 재연결하면 클라는 로컬 트랙 전체를 순번 0부터 다시 보낸다
+        TrackPoint previous = trackPoint(2L);
+        given(loadRunningDistancePort.loadDistance(anyLong(), any())).willReturn(
+                new RunningDistance(100.0, 2L, previous.latitude(), previous.longitude(),
+                        STORED_PACE));
+
+        // when -> 0,1,2는 이미 거리에 반영된 순번이다
+        updateRunningLocationHandler.handle(
+                command(List.of(trackPoint(0L, 300), trackPoint(1L, 310), trackPoint(2L, 320))));
+
+        // then -> 거리에 안 들어간 좌표의 페이스를 최신값으로 삼으면
+        // 재연결 직후 화면이 지나간 구간의 속도로 되돌아간다
+        assertThat(captureSaved().lastPaceSecondsPerKm()).isEqualTo(STORED_PACE);
+        assertThat(capturePublished().currentPaceSecondsPerKm()).isEqualTo(STORED_PACE);
     }
 }

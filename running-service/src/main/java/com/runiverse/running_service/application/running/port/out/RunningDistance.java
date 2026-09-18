@@ -7,12 +7,16 @@ public record RunningDistance(
         double meters,
         long lastSequence,
         Double lastLatitude,
-        Double lastLongitude
+        Double lastLongitude,
+        // 마지막으로 반영한 좌표의 페이스. 발행만 하고 흘려보내면
+        // 재연결한 클라의 RUNNING_STARTED 스냅샷이 남의 페이스를 복구할 길이 없다.
+        // 단말이 못 재면 null이고, null인 채로 저장해야 스냅샷도 null을 그대로 싣는다
+        Integer lastPaceSecondsPerKm
 ) {
 
     // 좌표를 한 번도 못 받은 상태 — lastSequence가 -1이라 순번 0도 새 좌표로 잡힌다
     public static RunningDistance empty() {
-        return new RunningDistance(0, -1, null, null);
+        return new RunningDistance(0, -1, null, null, null);
     }
 
     public boolean hasLastPoint() {

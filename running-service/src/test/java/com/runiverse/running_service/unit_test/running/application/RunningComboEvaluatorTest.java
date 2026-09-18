@@ -271,6 +271,85 @@ class RunningComboEvaluatorTest {
         assertThat(evaluation.update().recipients()).containsExactly(A.value());
     }
 
+    // ── liveRelations: RUNNING_STARTED 스냅샷이 쓰는 읽기 전용 경로 ──
+    // 재연결한 클라는 다음 배치가 올 때까지 콤보 화면을 복구할 방법이 이것뿐이다
+
+    @Test
+    @DisplayName("살아 있는 관계만 읽어 통에 담는다")
+    void liveRelations_takesOnlyLivingPairs() {
+        // given -> A-B는 이어지고 있고, A-C는 끊겨 startedAt이 없다
+        List<RunningComboSnapshot> snapshots = List.of(
+                snapshot(A, 3_400, NOW, 0),
+                snapshot(B, 3_420, NOW, 0),
+                snapshot(C, 4_000, NOW, 0));
+        List<RunningComboPair> stored = List.of(
+                new RunningComboPair(A, B, NOW.minusSeconds(110), 30, 1),
+                new RunningComboPair(A, C, null, 7, 1));
+
+        // when
+        List<RunningComboRelation> relations =
+                RunningComboEvaluator.liveRelations(snapshots, stored, NOW, PROPERTIES);
+
+        // then -> 끊긴 관계가 빠지는 것이 곧 끊김 통지다
+        assertThat(relations).hasSize(1);
+        assertThat(relations.get(0).first()).isEqualTo(A.value());
+        assertThat(relations.get(0).second()).isEqualTo(B.value());
+        // 시작 이후 110초 = 10초짜리 11칸 + 1
+        assertThat(relations.get(0).comboCount()).isEqualTo(12);
+        assertThat(relations.get(0).maxComboCount()).isEqualTo(30);
+        assertThat(relations.get(0).gapMeters()).isEqualTo(20);
+    }
+
+    @Test
+    @DisplayName("아무 상태도 바꾸지 않아 신선도로 콤보를 끊지 않는다")
+    void liveRelations_doesNotBreakStaleCombo() {
+        // given -> B가 신선도(19초)를 한참 넘겨 조용하다. evaluate였다면 끊겼을 관계다
+        List<RunningComboSnapshot> snapshots = List.of(
+                snapshot(A, 3_400, NOW, 0),
+                snapshot(B, 3_420, NOW.minusSeconds(120), 0));
+        List<RunningComboPair> stored =
+                List.of(new RunningComboPair(A, B, NOW.minusSeconds(110), 30, 1));
+
+        // when
+        List<RunningComboRelation> relations =
+                RunningComboEvaluator.liveRelations(snapshots, stored, NOW, PROPERTIES);
+
+        // then -> 끊는 판정은 배치가 도착할 때만 내린다.
+        // 여기서 빼면 상대 화면에는 붙어 있는 콤보가 내 화면에서만 사라진다
+        assertThat(relations).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("좌표를 한 번도 못 받은 참가자가 낀 관계는 거리차를 못 내 뺀다")
+    void liveRelations_skipsPairWithoutSnapshot() {
+        // given -> C의 스냅샷이 없다 — 보정할 누적이 없어 gapMeters를 만들 수 없다
+        List<RunningComboSnapshot> snapshots = List.of(
+                snapshot(A, 3_400, NOW, 0),
+                snapshot(B, 3_420, NOW, 0));
+        List<RunningComboPair> stored = List.of(
+                new RunningComboPair(A, B, NOW.minusSeconds(10), 2, 1),
+                new RunningComboPair(A, C, NOW.minusSeconds(10), 2, 1));
+
+        // when
+        List<RunningComboRelation> relations =
+                RunningComboEvaluator.liveRelations(snapshots, stored, NOW, PROPERTIES);
+
+        // then -> 빠뜨리는 편이 0m로 지어내는 것보다 낫다
+        assertThat(relations).hasSize(1);
+        assertThat(relations.get(0).second()).isEqualTo(B.value());
+    }
+
+    @Test
+    @DisplayName("저장된 관계가 없으면 빈 목록이다")
+    void liveRelations_returnsEmptyWithoutStoredPairs() {
+        // given & when -> 아직 아무와도 겹치지 않은 러닝의 첫 진입
+        List<RunningComboRelation> relations = RunningComboEvaluator.liveRelations(
+                overlapping(), List.of(), NOW, PROPERTIES);
+
+        // then -> 판정하지 않으므로 여기서 새 콤보가 생기지는 않는다
+        assertThat(relations).isEmpty();
+    }
+
     // 20m 차이 — 붙는 거리(30m) 안이다
     private static List<RunningComboSnapshot> overlapping() {
         return List.of(snapshot(A, 3_400, NOW, 0), snapshot(B, 3_420, NOW, 0));

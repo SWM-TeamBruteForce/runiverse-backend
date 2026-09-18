@@ -71,6 +71,29 @@ public final class RunningComboEvaluator {
         return new RunningComboEvaluation(pairs, new RunningComboUpdate(recipients, relations));
     }
 
+    // 판정하지 않고 지금 살아 있는 관계만 읽어 돌려준다 — RUNNING_STARTED 스냅샷이 쓴다.
+    // evaluate()와 달리 어떤 상태도 바꾸지 않으므로 저장할 pairs가 없다.
+    // 신선도를 걸지 않는 것이 중요하다: 끊는 판정은 배치가 도착할 때만 내리므로,
+    // 여기서 조용한 참가자를 빼면 상대 화면에는 아직 붙어 있는 콤보가 내 화면에서만 사라진다
+    public static List<RunningComboRelation> liveRelations(
+            List<RunningComboSnapshot> snapshots,
+            List<RunningComboPair> stored,
+            Instant now,
+            RunningComboProperties properties
+    ) {
+        Map<UserId, Double> corrected = new LinkedHashMap<>();
+        for (RunningComboSnapshot snapshot : snapshots) {
+            corrected.put(snapshot.userId(), correctedMeters(snapshot, now));
+        }
+        return stored.stream()
+                .filter(RunningComboPair::inCombo)
+                // 좌표를 한 번도 못 받은 참가자는 보정할 누적이 없어 거리차를 못 낸다
+                .filter(pair -> corrected.containsKey(pair.first())
+                        && corrected.containsKey(pair.second()))
+                .map(pair -> toRelation(pair, corrected, now, properties.tick()))
+                .toList();
+    }
+
     private static RunningComboPair judge(
             RunningComboPair before,
             Map<UserId, Double> corrected,
@@ -142,10 +165,11 @@ public final class RunningComboEvaluator {
                 pair.maxComboCount());
     }
 
-    // 유지 횟수는 저장하지 않고 시작 이후 경과 시간을 1회 길이로 나눈 몫에 1을 더해 센다 —
-    // 누가 몇 번 보내든 같은 답이 나온다
+    // 유지 횟수는 저장하지 않고 시작 이후 경과 시간을 1회 길이로 나눈 몫으로 센다 —
+    // 누가 몇 번 보내든 같은 답이 나온다.
+    // 붙는 순간은 0이다: 출발선에 나란히 선 것만으로 1을 주면 아직 함께 달리지도 않은 구간을 세게 된다
     private static int comboCount(Instant startedAt, Instant now, Duration tick) {
         long elapsedMillis = Math.max(0, Duration.between(startedAt, now).toMillis());
-        return (int) (elapsedMillis / tick.toMillis()) + 1;
+        return (int) (elapsedMillis / tick.toMillis());
     }
 }

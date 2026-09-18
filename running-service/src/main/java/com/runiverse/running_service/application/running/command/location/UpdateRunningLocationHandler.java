@@ -8,12 +8,9 @@ import com.runiverse.running_service.application.running.port.out.PublishRunning
 import com.runiverse.running_service.application.running.port.out.RunningDistance;
 import com.runiverse.running_service.application.running.port.out.RunningProgress;
 import com.runiverse.running_service.application.running.port.out.SaveRunningDistancePort;
-import com.runiverse.running_service.application.running.port.out.TrackPoint;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-
-import java.util.Comparator;
 
 @Service
 @RequiredArgsConstructor
@@ -44,17 +41,11 @@ public class UpdateRunningLocationHandler implements UpdateRunningLocationUsecas
                 command.userId(),
                 updated.metersRounded(),
                 command.targetDistanceMeters(),
-                latestPace(command),
+                // 누적기가 거리에 반영한 좌표의 페이스다 — 배치가 통째로 재전송분이면
+                // 직전 값이 그대로 유지된다
+                updated.lastPaceSecondsPerKm(),
                 false));   // TODO: 일시정지 고정값 — RUNNING_PAUSE/RESUME을 만들 때 실제 상태로 교체한다
         // 진행 통지 뒤에 둔다 — 콤보는 곁가지라 앞에 두면 판정이 느려질 때 진행 표시까지 늦어진다
         updateRunningComboJudge.judge(command.runningRoomId(), userId, updated.meters());
-    }
-
-    // 마지막 좌표의 값을 그대로 옮긴다 — 단말이 못 재면 null이다
-    private Integer latestPace(UpdateRunningLocationCommand command) {
-        return command.points().stream()
-                .max(Comparator.comparingLong(TrackPoint::sequence))
-                .map(TrackPoint::currentPaceSecondsPerKm)
-                .orElse(null);
     }
 }
