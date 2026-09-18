@@ -40,6 +40,10 @@ class BroadcastRunningProgressHandlerTest {
     @Mock
     private RunningSessionPort runningSessionPort;
 
+    // 보낸 사람 본인의 소켓 — 이제 자기 진행도 돌려받는다
+    @Mock
+    private RunningConnection senderConnection;
+
     @Mock
     private RunningConnection otherConnection;
 
@@ -58,12 +62,14 @@ class BroadcastRunningProgressHandlerTest {
     }
 
     @Test
-    @DisplayName("같은 방의 다른 참가자에게 진행 정보를 보낸다")
-    void sendsToOtherMembers() {
+    @DisplayName("같은 방의 참가자 전원에게 진행 정보를 보낸다")
+    void sendsToEveryMember() {
         // given
         given(loadRunningRoomMembersPort.usersIn(ROOM_ID))
                 .willReturn(Set.of(new UserId(SENDER_ID), new UserId(OTHER_ID),
                         new UserId(THIRD_ID)));
+        given(runningSessionPort.find(new UserId(SENDER_ID)))
+                .willReturn(Optional.of(senderConnection));
         given(runningSessionPort.find(new UserId(OTHER_ID)))
                 .willReturn(Optional.of(otherConnection));
         given(runningSessionPort.find(new UserId(THIRD_ID)))
@@ -72,23 +78,28 @@ class BroadcastRunningProgressHandlerTest {
         // when
         handle();
 
-        // then
+        // then -> 방 전체가 같은 서버 기준값으로 같은 화면을 그린다
+        verify(senderConnection).sendProgress(PROGRESS);
         verify(otherConnection).sendProgress(PROGRESS);
         verify(thirdConnection).sendProgress(PROGRESS);
     }
 
     @Test
-    @DisplayName("본인에게는 보내지 않는다")
-    void doesNotSendToSender() {
-        // given -> 본인 진행은 클라가 이미 계산해 화면에 띄우고 있다
+    @DisplayName("보낸 사람 본인도 받는다")
+    void sendsBackToSender() {
+        // given -> 콤보 통지와 수신자 규칙을 맞춘다. 클라가 분기 없이 한 벌로 처리한다.
+        // 다만 본인 표시 거리는 로컬 계산값이 정본이다 — 이 값으로 덮으면
+        // 10초마다 서버 누적으로 숫자가 뒤로 튄다
         given(loadRunningRoomMembersPort.usersIn(ROOM_ID))
                 .willReturn(Set.of(new UserId(SENDER_ID)));
+        given(runningSessionPort.find(new UserId(SENDER_ID)))
+                .willReturn(Optional.of(senderConnection));
 
         // when
         handle();
 
-        // then -> 명부에 본인뿐이면 연결을 찾을 일조차 없다
-        verify(runningSessionPort, never()).find(new UserId(SENDER_ID));
+        // then
+        verify(senderConnection).sendProgress(PROGRESS);
         verifyNoInteractions(otherConnection);
     }
 
@@ -99,10 +110,13 @@ class BroadcastRunningProgressHandlerTest {
         // 그쪽 인스턴스가 같은 메시지를 받아 자기 몫을 보낸다
         given(loadRunningRoomMembersPort.usersIn(ROOM_ID))
                 .willReturn(Set.of(new UserId(SENDER_ID), new UserId(OTHER_ID)));
+        given(runningSessionPort.find(new UserId(SENDER_ID)))
+                .willReturn(Optional.of(senderConnection));
         given(runningSessionPort.find(new UserId(OTHER_ID))).willReturn(Optional.empty());
 
         // when & then -> 연결이 없다고 예외가 나면 나머지 참가자 전송까지 멈춘다
         handle();
+        verify(senderConnection).sendProgress(PROGRESS);
         verifyNoInteractions(otherConnection);
     }
 
