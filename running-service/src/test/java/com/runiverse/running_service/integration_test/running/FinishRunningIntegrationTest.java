@@ -109,6 +109,8 @@ public class FinishRunningIntegrationTest extends IntegrationTestSupport {
                 (userId, cooldown) -> {
                 },                  // StartMatchCooldownPort
                 runningRecordStore, // ExistsRunningRecordPort
+                runningRecordStore, // LoadRecentRunningPacesPort
+                onboardingStore,    // UpdateUserAvgPacePort
                 PROPERTIES
         );
     }
@@ -186,6 +188,38 @@ public class FinishRunningIntegrationTest extends IntegrationTestSupport {
         // 혼자 뛰었어도 CANCELLED가 아니라 FINISHED다
         assertThat(storedRoom(runningRoomId).getStatus()).isEqualTo(RunningRoomStatus.FINISHED);
         assertThat(runningRecordStore.size()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("다섯 번째 러닝부터 평균 페이스가 실측으로 갈아탄다")
+    void updatesAvgPaceAfterFiveRunnings() {
+        // given -> 온보딩에서 330초/km라고 신고했지만 실제로는 초당 2.5m(400초/km)로 뛴다
+        UUID userId = onboardedUser(EMAIL, NICKNAME);
+
+        // when -> 네 번까지 뛴다
+        for (int i = 0; i < 4; i++) {
+            runOnce(userId);
+        }
+
+        // then -> 표본이 덜 차 자기 신고값이 그대로 남는다
+        assertThat(storedAvgPace(userId)).isEqualTo(AVG_PACE);
+
+        // when -> 다섯 번째에 표본이 찬다
+        runOnce(userId);
+
+        // then -> 거리 합 ÷ 시간 합이 곧 400초/km다. 구간 경계에서 끊기는 만큼만 흔들린다
+        assertThat(storedAvgPace(userId)).isBetween(395, 405);
+    }
+
+    // 솔로 개시 → 시작 → 약 1,000m 주행 → 종료. 기록 한 건이 남는다
+    private void runOnce(UUID userId) {
+        Long runningRoomId = runningRoom(userId);
+        runFor(userId, runningRoomId, 400);
+        finish(userId, runningRoomId);
+    }
+
+    private int storedAvgPace(UUID userId) {
+        return onboardingStore.loadAvgPace(new UserId(userId)).orElseThrow().secondsPerKm();
     }
 
     @Test

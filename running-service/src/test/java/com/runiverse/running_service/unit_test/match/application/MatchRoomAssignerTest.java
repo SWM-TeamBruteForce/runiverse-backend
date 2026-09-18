@@ -51,7 +51,7 @@ class MatchRoomAssignerTest {
     private static final Duration CLOSE_OFFSET = Duration.ofMinutes(15);
     private static final Duration READY_OFFSET = Duration.ofSeconds(10);
     private static final Duration FORCE_FINISH_OFFSET = Duration.ofHours(6);
-    // 페이스 차가 이 값 이내면 동급으로 보고 leave_count가 순위를 가른다
+    // 페이스 차를 이 단위로 끊어 같은 구간이면 내 이탈 이력이 순위를 가른다
     private static final int PACE_TIE_TOLERANCE = 10;
     // 이 테스트가 다루는 흐름은 아니지만 프로퍼티가 요구한다
     private static final Duration COOLDOWN = Duration.ofMinutes(20);
@@ -124,24 +124,24 @@ class MatchRoomAssignerTest {
     }
 
     @Test
-    @DisplayName("페이스 차가 30초/km를 넘는 방은 후보에서 걸러진다")
-    void skipsCandidateOutOfPaceRange() {
-        // given -> 자격의 정본은 도메인(Pace.isCloseTo)이지만 헛된 잠금을 줄이려 미리 거른다
-        givenCandidates(candidate(1L, MY_PACE.secondsPerKm() + 31, 0));
-        given(createMatchRoomPort.create(any())).willReturn(savedRoom(NEW_ROOM_ID));
+    @DisplayName("페이스가 아무리 멀어도 후보가 하나뿐이면 그 방에 붙인다")
+    void joinsFarPaceRoomWhenItIsTheOnlyCandidate() {
+        // given -> 6분/km인 신청자와 7분 33초/km인 방. 옛 ±30초 자격이면 걸러졌을 조합이다
+        givenCandidates(candidate(1L, MY_PACE.secondsPerKm() + 93, 0));
+        givenJoinable(1L);
 
         // when
         RunningRoomId assigned = assign();
 
-        // then -> 잠글 후보가 없어 새 방으로 간다
-        assertThat(assigned.value()).isEqualTo(NEW_ROOM_ID);
-        verifyNoInteractions(lockMatchRoomPort);
+        // then -> 혼자 뛰게 두느니 붙인다. 새 방은 열지 않는다
+        assertThat(assigned.value()).isEqualTo(1L);
+        verifyNoInteractions(createMatchRoomPort);
     }
 
     @Test
     @DisplayName("페이스가 가장 가까운 방을 고른다")
     void picksClosestPace() {
-        // given -> 셋 다 ±30초 안이지만 차이가 다르다. 순서는 뒤섞어 둔다
+        // given -> 차이가 25·3·14초다. 10초 단위로 끊으면 2·0·1번 구간이다. 순서는 뒤섞어 둔다
         givenCandidates(
                 candidate(1L, MY_PACE.secondsPerKm() + 25, 0),
                 candidate(2L, MY_PACE.secondsPerKm() + 3, 0),
@@ -156,10 +156,10 @@ class MatchRoomAssignerTest {
     }
 
     @Test
-    @DisplayName("페이스가 비슷하면 이탈이 적었던 방을 고른다")
-    void breaksPaceTieByLeaveCount() {
-        // given -> 차이가 3초와 9초로 임계(10초) 안이라 동급이다.
-        //          그러면 사람들이 잘 떠나지 않은 방이 이긴다(feature-spec 방 배정 기준)
+    @DisplayName("페이스가 비슷하면 내가 덜 나갔던 방을 고른다")
+    void breaksPaceTieByMyLeaveCount() {
+        // given -> 차이가 3초와 9초로 같은 10초 구간이라 동급이다.
+        //          그러면 내가 등지고 나온 적이 적은 방이 이긴다(feature-spec 방 배정 기준)
         givenCandidates(
                 candidate(1L, MY_PACE.secondsPerKm() + 3, 5),
                 candidate(2L, MY_PACE.secondsPerKm() + 9, 1));
@@ -168,14 +168,14 @@ class MatchRoomAssignerTest {
         // when
         RunningRoomId assigned = assign();
 
-        // then -> 페이스만 보면 1번이 가깝지만 동급 구간이라 leave_count가 갈랐다
+        // then -> 페이스만 보면 1번이 가깝지만 동급 구간이라 내 이탈 이력이 갈랐다
         assertThat(assigned.value()).isEqualTo(2L);
     }
 
     @Test
-    @DisplayName("페이스 차가 임계를 넘으면 이탈 횟수보다 페이스가 우선한다")
-    void paceWinsOverLeaveCountBeyondTolerance() {
-        // given -> 2초와 20초는 임계(10초)를 사이에 두고 갈린다
+    @DisplayName("페이스 구간이 갈리면 내 이탈 이력보다 페이스가 우선한다")
+    void paceWinsOverMyLeaveCountBeyondTolerance() {
+        // given -> 2초와 20초는 10초 경계를 사이에 두고 구간이 갈린다
         givenCandidates(
                 candidate(1L, MY_PACE.secondsPerKm() + 2, 9),
                 candidate(2L, MY_PACE.secondsPerKm() + 20, 0));
@@ -184,8 +184,41 @@ class MatchRoomAssignerTest {
         // when
         RunningRoomId assigned = assign();
 
+        // then -> 아홉 번 나온 방이라도 페이스가 가까우면 거기로 간다
+        assertThat(assigned.value()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("내가 나왔던 방이라도 후보가 그것뿐이면 다시 들어간다")
+    void joinsPreviouslyLeftRoomWhenItIsTheOnlyCandidate() {
+        // given -> 이탈 이력은 순위만 낮출 뿐 문을 잠그지 않는다(erd running_room_sessions)
+        givenCandidates(candidate(1L, MY_PACE.secondsPerKm(), 3));
+        givenJoinable(1L);
+
+        // when
+        RunningRoomId assigned = assign();
+
         // then
         assertThat(assigned.value()).isEqualTo(1L);
+        verifyNoInteractions(createMatchRoomPort);
+    }
+
+    @Test
+    @DisplayName("페이스도 이탈 이력도 같으면 오래된 방부터 채운다")
+    void breaksFullTieByRoomId() {
+        // given -> 셋 다 거쳐 간 적 없는 방이라 이탈 이력이 전부 0이다.
+        //          방 번호로 갈라 두지 않으면 DB 반환 순서라 배정이 비결정적이다
+        givenCandidates(
+                candidate(5L, MY_PACE.secondsPerKm() + 1, 0),
+                candidate(2L, MY_PACE.secondsPerKm() + 4, 0),
+                candidate(9L, MY_PACE.secondsPerKm() + 7, 0));
+        givenJoinable(2L);
+
+        // when
+        RunningRoomId assigned = assign();
+
+        // then
+        assertThat(assigned.value()).isEqualTo(2L);
     }
 
     @Test
@@ -278,7 +311,7 @@ class MatchRoomAssignerTest {
     }
 
     private void givenCandidates(MatchCandidate... candidates) {
-        given(loadMatchCandidatesPort.loadCandidates(START_AT, TARGET_DISTANCE))
+        given(loadMatchCandidatesPort.loadCandidates(APPLICANT, START_AT, TARGET_DISTANCE))
                 .willReturn(List.of(candidates));
     }
 
@@ -289,8 +322,9 @@ class MatchRoomAssignerTest {
         given(loadMatchPlayersPort.loadPlayers(new RunningRoomId(roomId))).willReturn(List.of());
     }
 
-    private static MatchCandidate candidate(long roomId, int avgPace, long totalLeaveCount) {
-        return new MatchCandidate(roomId, avgPace, totalLeaveCount);
+    // myLeaveCount는 방 전체 합이 아니라 신청자가 그 방을 나간 횟수다
+    private static MatchCandidate candidate(long roomId, int avgPace, int myLeaveCount) {
+        return new MatchCandidate(roomId, avgPace, myLeaveCount);
     }
 
     // 모집 중인 방 — 세션은 이미 있는 다른 참가자의 것이다

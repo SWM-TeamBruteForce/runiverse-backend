@@ -1,5 +1,6 @@
 package com.runiverse.running_service.application.running.command.finish;
 
+import com.runiverse.running_service.application.common.port.out.UpdateUserAvgPacePort;
 import com.runiverse.running_service.application.running.exception.NotRoomPlayerException;
 import com.runiverse.running_service.application.running.exception.RunningNotStartableException;
 import com.runiverse.running_service.application.running.exception.RunningRoomNotFoundException;
@@ -9,11 +10,13 @@ import com.runiverse.running_service.application.running.port.out.DeleteRunningT
 import com.runiverse.running_service.application.running.port.out.ExistsRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.ExistsRunningRecordPort;
 import com.runiverse.running_service.application.running.port.out.GpsTrackUpload;
+import com.runiverse.running_service.application.running.port.out.LoadRecentRunningPacesPort;
 import com.runiverse.running_service.application.running.port.out.LoadRoomPlayerPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningRoomPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.LoadUserWeightPort;
 import com.runiverse.running_service.application.running.port.out.LoadWeatherPort;
+import com.runiverse.running_service.application.running.port.out.RecentRunningPace;
 import com.runiverse.running_service.application.running.port.out.RunningTrack;
 import com.runiverse.running_service.application.running.port.out.SaveGpsTrackPort;
 import com.runiverse.running_service.application.running.port.out.StartMatchCooldownPort;
@@ -31,6 +34,7 @@ import com.runiverse.running_service.domain.running.record.SplitDraft;
 import com.runiverse.running_service.domain.running.room.RunningRoom;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
+import com.runiverse.running_service.domain.user.vo.AvgPace;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,11 +64,16 @@ public class FinishRunningHandler implements FinishRunningUsecase {
     private final UpdateRunningRoomPort updateRunningRoomPort;
     private final StartMatchCooldownPort startMatchCooldownPort;
     private final ExistsRunningRecordPort existsRunningRecordPort;
+    private final LoadRecentRunningPacesPort loadRecentRunningPacesPort;
+    private final UpdateUserAvgPacePort updateUserAvgPacePort;
     private final RunningFinishProperties properties;
     // 1인 확정 방에서 혼자 뛰다 그만두는 것은 제재하지 않는다 — 곤란해지는 상대가 없다.
     // 시작 전 이탈(CancelMatchHandler)의 면제와 같은 기준이다.
     // 러닝 시작 후에는 인원이 줄지 않으므로(erd) 이 값이 곧 확정 시점 인원이다
     private static final int PENALTY_MIN_PLAYER_COUNT = 2;
+    // 이만큼 쌓여야 실측 평균으로 갈아탄다. 그전에는 온보딩 입력값을 쓴다.
+    // 늘리면 자기 신고값이 오래 남고, 줄이면 한 번의 회복 러닝에 매칭 페이스가 흔들린다
+    private static final int AVG_PACE_SAMPLE_SIZE = 5;
 
     @Override
     public void handle(FinishRunningCommand command) {
@@ -96,8 +105,12 @@ public class FinishRunningHandler implements FinishRunningUsecase {
         RunningTrack track = loadRunningTrackPort.load(command.runningRoomId(), userId);
         Optional<TrackAnalysis> analysis = TrackAnalyzer.analyze(
                 track.points(), analysisTargetMeters(room), weightKg, properties);
-        // 4. 기록은 만들 수 있을 때만 남긴다 — 상태 확정과 기록 생성은 별개다
-        analysis.ifPresent(result -> createRecord(command, track, result, weightKg));
+        // 4. 기록은 만들 수 있을 때만 남긴다 — 상태 확정과 기록 생성은 별개다.
+        //    기록이 없으면 표본이 그대로라 평균 페이스도 다시 낼 것이 없다
+        analysis.ifPresent(result -> {
+            createRecord(command, track, result, weightKg);
+            updateAvgPace(userId);
+        });
 
         // 5. 상태를 확정한다
         finish(player, room, analysis.map(TrackAnalysis::totalDistanceMeters).orElse(0));
@@ -218,5 +231,25 @@ public class FinishRunningHandler implements FinishRunningUsecase {
             return;
         }
         deleteRunningTrackPort.delete(runningRoomId, userId);
+    }
+
+    // 최근 N건의 거리 합·시간 합으로 다시 낸다. 기록별 avg_pace의 산술 평균은
+    // 300m 러닝과 10km 러닝을 같은 무게로 세서 짧은 기록이 값을 끌고 간다
+    private void updateAvgPace(UserId userId) {
+        List<RecentRunningPace> recent =
+                loadRecentRunningPacesPort.loadRecent(userId, AVG_PACE_SAMPLE_SIZE);
+        // 표본이 덜 찼으면 온보딩 입력값을 그대로 둔다 — 한두 번의 실측으로 갈아치우면
+        // 컨디션 나쁜 하루가 그대로 실력이 된다. 자기 신고값이라도 '평소'에는 더 가깝다
+        if (recent.size() < AVG_PACE_SAMPLE_SIZE) {
+            return;
+        }
+        long meters = 0;
+        long seconds = 0;
+        for (RecentRunningPace record : recent) {
+            meters += record.totalDistanceMeters();
+            seconds += record.totalDurationSeconds();
+        }
+        // total_distance는 1 이상이 보장돼(ck_running_record_total_distance) 0으로 나눌 일이 없다
+        updateUserAvgPacePort.updateAvgPace(userId, AvgPace.clamped((int) (seconds * 1000 / meters)));
     }
 }

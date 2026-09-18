@@ -125,8 +125,8 @@ public class RunningRoom {
     }
 
     // 후보 스캔이 걸러도 애그리거트가 다시 지킨다 — 스캔과 합류 사이에 자리가 찰 수 있다
-    public void join(UserId userId, RunningPlayerId runningPlayerId, Pace pace) {
-        if (!canJoin(pace)) {
+    public void join(UserId userId, RunningPlayerId runningPlayerId) {
+        if (!canJoin()) {
             throw new RoomNotJoinableException();
         }
         RoomSession existing = findSession(userId).orElse(null);
@@ -138,18 +138,20 @@ public class RunningRoom {
         if (existing.isConnected()) {
             throw new AlreadyRoomPlayerException();   // 한 플레이어 = 최대 한 방
         }
-        // 전에 거쳐 간 방이다 — 키가 유저라 행을 새로 만들지 않고 되살린다(erd)
+        // 전에 거쳐 간 방이다 — 키가 유저라 행을 새로 만들지 않고 되살린다(erd).
+        // 몇 번을 나갔든 다시 받아 준다 — 이탈 이력은 후보 순위만 낮출 뿐 문을 잠그지 않는다
         this.playerCount = playerCount.join();
         existing.reassign(runningPlayerId);
     }
 
-    // start_at·target_distance는 조회가 등가로 거르고, 페이스 근접만 방이 판정한다
-    // 지금 pace 조건이 있기는 한데 나중에 수정 가능성 있음
-    public boolean canJoin(Pace pace) {
+    // start_at·target_distance는 조회가 등가로 거르고, 방은 모집 상태와 자리만 본다.
+    // 페이스는 합류 자격이 아니라 후보를 고르는 순서다(MatchRoomAssigner)
+    public boolean canJoin() {
         return status == RunningRoomStatus.MATCHING
                 && playerCount.canJoin()
-                && avgPace != null                 // 평균이 없는 방엔 붙일 기준이 없다
-                && avgPace.isCloseTo(pace);
+                // 참가자가 0이면 평균이 지워지고(erd) 그 방은 같은 순간 닫힌다 —
+                // 순위를 매길 기준이 없는 방에 붙이지 않는다
+                && avgPace != null;
     }
 
     // 모집 마감(start_at - 오프셋) 도달 — 인원 수와 무관하게 확정된다(1인이면 1인으로 확정돼 혼자 뛴다)

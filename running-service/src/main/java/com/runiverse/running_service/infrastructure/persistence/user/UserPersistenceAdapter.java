@@ -7,6 +7,7 @@ import com.runiverse.running_service.application.auth.port.out.SaveUserPort;
 import com.runiverse.running_service.application.common.port.out.LoadPlayerProfilesPort;
 import com.runiverse.running_service.application.common.port.out.LoadUserAvgPacePort;
 import com.runiverse.running_service.application.common.port.out.PlayerProfile;
+import com.runiverse.running_service.application.common.port.out.UpdateUserAvgPacePort;
 import com.runiverse.running_service.application.running.port.out.LoadUserWeightPort;
 import com.runiverse.running_service.application.user.exception.NicknameAlreadyExistsException;
 import com.runiverse.running_service.application.user.exception.OnboardingNotCompletedException;
@@ -72,7 +73,7 @@ public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUser
         UpdatePasswordPort, LoadUserAvgPacePort, UpdateIntroductionPort, UpdateOnboardingPort, LoadUserWeightPort,
         LoadOnboardingProfilePort, LoadPlayerProfilesPort, UpdateSettingsPort, LoadOauthProviderPort,
         LoadAccountSnapshotPort, SaveDeletedUserPort, DeleteUserPort,
-        LoadDeletedUserIdsPort, RedactDeletedUserPort {
+        LoadDeletedUserIdsPort, RedactDeletedUserPort, UpdateUserAvgPacePort {
 
     private final EntityManager entityManager;
 
@@ -210,6 +211,17 @@ public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUser
         if (height != null) {
             entity.changeHeight(height.value());
         }
+    }
+
+    @Override
+    public void updateAvgPace(UserId userId, AvgPace avgPace) {
+        UserOnboardingJpaEntity entity =
+                entityManager.find(UserOnboardingJpaEntity.class, userId.value());
+        if (entity == null) {
+            throw new OnboardingNotCompletedException();
+        }
+        // @DynamicUpdate라 avg_pace만 UPDATE에 실린다 — 같은 행에 쓰는 프로필 수정을 옛 값으로 덮지 않는다
+        entity.changeAvgPace(avgPace.secondPerKm());
     }
 
     // 칼로리 계산에만 쓴다. 온보딩을 안 끝낸 유저는 행이 없어 Optional이다 —

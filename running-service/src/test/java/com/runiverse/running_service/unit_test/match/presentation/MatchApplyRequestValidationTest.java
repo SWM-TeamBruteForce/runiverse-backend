@@ -24,10 +24,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("매칭 신청 요청 DTO 검증 단위 테스트")
 class MatchApplyRequestValidationTest {
 
-    // ApplyMatchRequest의 상수와 짝이다 — 거기를 바꾸면 여기 셋도 같이 바꾼다
-    private static final LocalTime EARLIEST = LocalTime.of(18, 0);
-    private static final LocalTime LATEST = LocalTime.of(22, 0);
-    private static final int SLOT_MINUTES = 30;
+    // ApplyMatchRequest가 테스트용으로 창(18:00~22:00)·간격(30분) 제한을 풀어둔 상태와 짝이다.
+    // 거기 상수를 운영값으로 되돌리면 아래 anyTimeOfDayPasses·unalignedMinutePasses가 깨진다 — 그게 신호다
+    private static final LocalTime VALID = LocalTime.of(1, 54);
 
     private static final LocalDate DATE = LocalDate.of(2026, 9, 11);
     private static final int DISTANCE = 5_000;
@@ -46,50 +45,28 @@ class MatchApplyRequestValidationTest {
         validatorFactory.close();
     }
 
-    @Test
-    @DisplayName("허용 창의 양 끝은 통과한다")
-    void boundaryTimesPass() {
-        // given & when & then -> 경계를 포함한다. 배타로 바뀌면 마지막 슬롯이 사라진다
-        assertThat(validate(EARLIEST, DISTANCE)).isEmpty();
-        assertThat(validate(LATEST, DISTANCE)).isEmpty();
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"00:00", "01:54", "13:07", "18:00", "22:00", "23:59"})
+    @DisplayName("하루 중 어느 시각이든 통과한다")
+    void anyTimeOfDayPasses(String time) {
+        // when & then -> 창 제한이 풀린 상태다. 옛 창(18:00~22:00)으로 되돌리면 00:00·01:54·23:59가 깨진다
+        assertThat(validate(LocalTime.parse(time), DISTANCE)).isEmpty();
     }
 
     @Test
-    @DisplayName("창 안에서 간격에 맞는 시각은 통과한다")
-    void alignedTimePasses() {
-        // given -> 창 한가운데의 정렬된 시각
-        LocalTime aligned = EARLIEST.plusMinutes(SLOT_MINUTES * 3L);
-
-        // when & then
-        assertThat(validate(aligned, DISTANCE)).isEmpty();
-    }
-
-    @Test
-    @DisplayName("창을 벗어난 시각은 거절한다")
-    void timeOutsideWindowFails() {
-        // given -> 마지막 슬롯 바로 다음 칸
-        LocalTime tooLate = LATEST.plusMinutes(SLOT_MINUTES);
-
-        // when & then
-        assertThat(validate(tooLate, DISTANCE)).hasSize(1);
-    }
-
-    @Test
-    @DisplayName("간격에 맞지 않는 분은 거절한다")
-    void unalignedMinuteFails() {
-        // given -> 간격의 배수가 아닌 분
-        LocalTime unaligned = EARLIEST.plusMinutes(SLOT_MINUTES + 1L);
-
-        // when & then
-        assertThat(validate(unaligned, DISTANCE)).hasSize(1);
+    @DisplayName("30분 간격이 아닌 분도 통과한다")
+    void unalignedMinutePasses() {
+        // given & when & then -> 옛 간격(30분)으로 되돌리면 여기가 깨진다
+        assertThat(validate(LocalTime.of(1, 54), DISTANCE)).isEmpty();
+        assertThat(validate(LocalTime.of(18, 1), DISTANCE)).isEmpty();
     }
 
     @Test
     @DisplayName("초·나노가 붙으면 거절한다")
     void secondsAndNanosFail() {
-        // given -> 분만 보면 통과하지만 슬롯이 아니다
-        LocalTime withSeconds = EARLIEST.plusMinutes(SLOT_MINUTES).withSecond(30);
-        LocalTime withNanos = EARLIEST.plusMinutes(SLOT_MINUTES).withNano(1);
+        // given -> 분만 보면 통과하지만 슬롯이 아니다. 제한을 푼 뒤에도 남는 유일한 시각 검사다
+        LocalTime withSeconds = VALID.withSecond(30);
+        LocalTime withNanos = VALID.withNano(1);
 
         // when & then
         assertThat(validate(withSeconds, DISTANCE)).hasSize(1);
@@ -101,7 +78,7 @@ class MatchApplyRequestValidationTest {
     @DisplayName("허용된 목표 거리는 통과한다")
     void allowedDistancePasses(int distance) {
         // when & then
-        assertThat(validate(EARLIEST, distance)).isEmpty();
+        assertThat(validate(VALID, distance)).isEmpty();
     }
 
     @ParameterizedTest(name = "{0}m")
@@ -109,7 +86,7 @@ class MatchApplyRequestValidationTest {
     @DisplayName("허용되지 않은 목표 거리는 거절한다")
     void disallowedDistanceFails(int distance) {
         // when & then -> 자유 입력이 아니라 정해진 선택지다
-        assertThat(validate(EARLIEST, distance)).hasSize(1);
+        assertThat(validate(VALID, distance)).hasSize(1);
     }
 
     @Test
@@ -129,7 +106,7 @@ class MatchApplyRequestValidationTest {
     void nullDistanceReportsOnlyRequired() {
         // given & when
         Set<ConstraintViolation<ApplyMatchRequest>> violations =
-                validator.validate(new ApplyMatchRequest(DATE.atTime(EARLIEST), null));
+                validator.validate(new ApplyMatchRequest(DATE.atTime(VALID), null));
 
         // then
         assertThat(violations).hasSize(1);

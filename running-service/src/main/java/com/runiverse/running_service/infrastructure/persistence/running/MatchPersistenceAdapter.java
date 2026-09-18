@@ -56,12 +56,14 @@ public class MatchPersistenceAdapter implements LoadMatchRoomPort, LoadMatchPlay
     }
 
     @Override
-    public List<MatchCandidate> loadCandidates(LocalDateTime startAt, int targetDistanceMeters) {
+    public List<MatchCandidate> loadCandidates(UserId userId, LocalDateTime startAt,
+                                               int targetDistanceMeters) {
         return entityManager.createQuery("""
                         SELECT NEW com.runiverse.running_service.application.match.port.out.MatchCandidate(
-                            r.runningRoomId, r.avgPace, COALESCE(SUM(s.leaveCount), 0))
+                            r.runningRoomId, r.avgPace, COALESCE(s.leaveCount, 0))
                         FROM RunningRoomJpaEntity r
-                        LEFT JOIN RunningRoomSessionJpaEntity s ON s.room = r
+                        LEFT JOIN RunningRoomSessionJpaEntity s
+                            ON s.room = r AND s.userId = :userId
                         WHERE r.deletedAt IS NULL
                           AND r.type = :type
                           AND r.status = :status
@@ -69,13 +71,16 @@ public class MatchPersistenceAdapter implements LoadMatchRoomPort, LoadMatchPlay
                           AND r.targetDistance = :targetDistance
                           AND r.currentPlayerCount < r.maxPlayerCount
                           AND r.avgPace IS NOT NULL
-                        GROUP BY r.runningRoomId, r.avgPace
                         """, MatchCandidate.class)
                 // 솔로·초대 방을 인덱스 단계에서 배제한다(erd 후보 방 조회 인덱스)
                 .setParameter("type", RunningRoomType.MATCH)
                 .setParameter("status", RunningRoomStatus.MATCHING)
                 .setParameter("startAt", startAt)
                 .setParameter("targetDistance", targetDistanceMeters)
+                // 세션 PK가 (running_room_id, user_id)라 이 조인은 방당 최대 한 행이다 —
+                // 집계(GROUP BY·SUM)가 필요 없다
+                .setParameter("userId", userId.value())
                 .getResultList();
     }
+
 }

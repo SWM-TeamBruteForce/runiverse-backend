@@ -1,6 +1,7 @@
 package com.runiverse.running_service.unit_test.running.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.common.port.out.UpdateUserAvgPacePort;
 import com.runiverse.running_service.application.running.command.finish.CalorieCalculator;
 import com.runiverse.running_service.application.running.command.finish.FinishRunningCommand;
 import com.runiverse.running_service.application.running.command.finish.FinishRunningHandler;
@@ -13,7 +14,9 @@ import com.runiverse.running_service.application.running.port.out.DeleteRunningT
 import com.runiverse.running_service.application.running.port.out.ExistsRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.ExistsRunningRecordPort;
 import com.runiverse.running_service.application.running.port.out.GpsTrackUpload;
+import com.runiverse.running_service.application.running.port.out.LoadRecentRunningPacesPort;
 import com.runiverse.running_service.application.running.port.out.LoadRoomPlayerPort;
+import com.runiverse.running_service.application.running.port.out.RecentRunningPace;
 import com.runiverse.running_service.application.running.port.out.LoadRunningRoomPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.LoadUserWeightPort;
@@ -38,6 +41,7 @@ import com.runiverse.running_service.domain.running.room.SessionDraft;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
+import com.runiverse.running_service.domain.user.vo.AvgPace;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -133,6 +137,12 @@ public class FinishRunningHandlerTest {
     @Mock
     private StartMatchCooldownPort startMatchCooldownPort;
 
+    @Mock
+    private LoadRecentRunningPacesPort loadRecentRunningPacesPort;
+
+    @Mock
+    private UpdateUserAvgPacePort updateUserAvgPacePort;
+
     @Captor
     private ArgumentCaptor<RunningRecord> recordCaptor;
 
@@ -148,7 +158,8 @@ public class FinishRunningHandlerTest {
                 loadRunningTrackPort, loadUserWeightPort, loadWeatherPort, saveGpsTrackPort,
                 createRunningRecordPort, updateRunningPlayerPort, deleteRunningTrackPort,
                 existsRunningPlayerPort, updateRunningRoomPort, startMatchCooldownPort,
-                existsRunningRecordPort, PROPERTIES);
+                existsRunningRecordPort, loadRecentRunningPacesPort, updateUserAvgPacePort,
+                PROPERTIES);
         // 이 클래스의 트랙은 대부분 유효 러닝을 통과해 기록이 남는다 —
         // 기록 없이 닫히는 경우만 개별 테스트가 뒤집는다
         lenient().when(existsRunningRecordPort.existsInRoom(new RunningRoomId(ROOM_ID)))
@@ -731,6 +742,91 @@ public class FinishRunningHandlerTest {
             assertThatThrownBy(FinishRunningHandlerTest.this::finish)
                     .isInstanceOf(OnboardingNotCompletedException.class);
             verifyNoInteractions(updateRunningPlayerPort, deleteRunningTrackPort);
+        }
+    }
+
+    @Nested
+    @DisplayName("평균 페이스 갱신 테스트")
+    class AvgPaceUpdateTest {
+
+        // 핸들러의 AVG_PACE_SAMPLE_SIZE와 같아야 한다 — 어긋나면 스텁이 안 물린다
+        private static final int SAMPLE_SIZE = 5;
+
+        // 조회 결과에는 방금 만든 기록도 포함된다 — 어댑터가 같은 트랜잭션에서 다시 읽기 때문이다
+        private void givenRecent(RecentRunningPace... recent) {
+            given(loadRecentRunningPacesPort.loadRecent(new UserId(USER_ID), SAMPLE_SIZE))
+                    .willReturn(List.of(recent));
+        }
+
+        private static RecentRunningPace pace(int meters, int seconds) {
+            return new RecentRunningPace(meters, seconds);
+        }
+
+        // 기록이 남는 평범한 완주 — 갱신은 이 경로에서만 일어난다
+        private void finishWithRecord() {
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(track(1_801, 2.8));
+            finish();
+        }
+
+        @Test
+        @DisplayName("최근 기록이 5건에 못 미치면 갱신하지 않는다")
+        void skipsUpdateBelowSampleSize() {
+            // given -> 방금 만든 기록까지 네 건뿐이다
+            givenRecent(pace(5_000, 1_500), pace(5_000, 1_500),
+                    pace(5_000, 1_500), pace(5_000, 1_500));
+
+            // when
+            finishWithRecord();
+
+            // then -> 한두 번의 실측으로 갈아치우면 컨디션 나쁜 하루가 실력이 된다.
+            //         온보딩 입력값을 그대로 둔다
+            verifyNoInteractions(updateUserAvgPacePort);
+        }
+
+        @Test
+        @DisplayName("5건이 차면 거리 합과 시간 합으로 다시 낸다")
+        void updatesFromRecentFive() {
+            // given -> 21,000m를 6,400초에 뛰었다 → 304초/km
+            givenRecent(pace(10_000, 3_000), pace(5_000, 1_500),
+                    pace(3_000, 900), pace(2_000, 600), pace(1_000, 400));
+
+            // when
+            finishWithRecord();
+
+            // then -> 기록별 페이스의 산술 평균은 320초다. 짧은 1km가 값을 끌고 가지 않는다
+            verify(updateUserAvgPacePort).updateAvgPace(new UserId(USER_ID), new AvgPace(304));
+        }
+
+        @Test
+        @DisplayName("온보딩 페이스 범위를 넘기면 경계로 맞춘다")
+        void clampsToOnboardingRange() {
+            // given -> 다섯 건 모두 2,000초/km. 기록 페이스는 3,600까지 허용하지만
+            //          user_onboardings.avg_pace는 1,800이 상한이다
+            givenRecent(pace(1_000, 2_000), pace(1_000, 2_000), pace(1_000, 2_000),
+                    pace(1_000, 2_000), pace(1_000, 2_000));
+
+            // when
+            finishWithRecord();
+
+            // then -> 갱신을 포기하지 않고 경계를 적는다. 그대로 넣으면 CHECK 제약에 걸린다
+            verify(updateUserAvgPacePort).updateAvgPace(new UserId(USER_ID), new AvgPace(1_800));
+        }
+
+        @Test
+        @DisplayName("기록을 만들지 못한 종료는 조회조차 하지 않는다")
+        void skipsEntirelyWithoutRecord() {
+            // given -> 좌표가 하나도 안 올라온 러닝 — 표본이 늘지 않았다
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(new RunningTrack("", List.of()));
+
+            // when
+            finish();
+
+            // then
+            verifyNoInteractions(loadRecentRunningPacesPort, updateUserAvgPacePort);
         }
     }
 }

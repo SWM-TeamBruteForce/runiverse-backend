@@ -89,6 +89,11 @@ public class UserOnboardingJpaEntity extends BaseTimeEntity {
         this.nickname = nickname;
     }
 
+    // 평균 페이스는 러닝을 끝낼 때마다 서버가 최근 기록으로 다시 낸다 — 사용자 수정 API는 없다
+    public void changeAvgPace(int avgPace) {
+        this.avgPace = avgPace;
+    }
+
     // 평균 페이스는 러닝 기록이 갱신하므로 변경 메서드를 두지 않는다
     public void changeGender(Gender gender) {
         this.gender = gender;

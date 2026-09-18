@@ -45,7 +45,7 @@ public class MatchRoomAssigner {
     // 세션의 키가 유저라 배정에는 둘 다 필요하다 — 유저로 자리를 잡고 신청을 그 자리에 꽂는다
     public RunningRoom assign(UserId userId, RunningPlayerId playerId, Pace pace,
                               LocalDateTime startAt, int targetDistanceMeters) {
-        for (MatchCandidate candidate : ranked(pace, startAt, targetDistanceMeters)) {
+        for (MatchCandidate candidate : ranked(userId, pace, startAt, targetDistanceMeters)) {
             RunningRoomId roomId = new RunningRoomId(candidate.runningRoomId());
             // 잠금 없이 스캔했으므로 그새 자리가 찼을 수 있다 — 확정 직전에 잠그고 다시 읽는다
             Optional<RunningRoom> locked = lockMatchRoomPort.lockById(roomId);
@@ -54,7 +54,7 @@ public class MatchRoomAssigner {
             }
             RunningRoom room = locked.get();
             try {
-                room.join(userId, playerId, pace);
+                room.join(userId, playerId);
             } catch (RoomNotJoinableException e) {
                 // 스캔과 합류 사이에 마감됐거나 자리가 찼다 — 다음 후보로 넘어간다
                 log.debug("후보 방 합류 실패 — roomId={}", roomId.value());
@@ -67,19 +67,24 @@ public class MatchRoomAssigner {
         return openNewRoom(userId, playerId, pace, startAt, targetDistanceMeters);
     }
 
-    // ① 페이스가 가장 가까운 방 ② 그 차이가 임계 안으로 비슷하면 leave_count가 적은 방(feature-spec)
-    private List<MatchCandidate> ranked(Pace pace, LocalDateTime startAt, int targetDistanceMeters) {
+    // 페이스로도 이탈 이력으로도 거르지 않는다 — 둘 다 순위일 뿐이다(feature-spec 방 배정 기준).
+    // ① 내 페이스에 가까운 방 ② 같은 구간이면 내가 덜 나갔던 방 ③ 그래도 같으면 오래된 방.
+    // 후보가 하나도 없을 때만 새 방을 연다
+    private List<MatchCandidate> ranked(UserId userId, Pace pace, LocalDateTime startAt,
+                                        int targetDistanceMeters) {
         int tolerance = matchProperties.paceTieToleranceSecondsPerKm();
-        return loadMatchCandidatesPort.loadCandidates(startAt, targetDistanceMeters).stream()
-                // 후보 자격(±30초)의 정본은 도메인이다 — 여기서 미리 걸러 헛된 잠금을 줄인다
-                .filter(candidate -> pace.isCloseTo(paceOf(candidate)))
+        return loadMatchCandidatesPort.loadCandidates(userId, startAt, targetDistanceMeters).stream()
                 .sorted(Comparator
-                        // 차이를 임계 단위로 뭉뚱그려 같은 구간이면 leave_count가 순위를 가르게 한다
+                        // 차이를 임계 단위로 뭉뚱그려 같은 구간이면 이탈 이력이 순위를 가르게 한다
                         .comparingInt((MatchCandidate candidate) ->
                                 pace.gapTo(paceOf(candidate)) / tolerance)
-                        .thenComparingLong(MatchCandidate::totalLeaveCount))
+                        .thenComparingInt(MatchCandidate::myLeaveCount)
+                        // 거쳐 간 적 없는 방끼리는 전부 0이라 여기서 갈린다 —
+                        // 없으면 DB 반환 순서라 배정이 비결정적이고, 방도 잘게 쪼개진다
+                        .thenComparingLong(MatchCandidate::runningRoomId))
                 .toList();
     }
+
 
     // 합류자의 세션은 아직 저장 전이라 조회에 안 잡힌다 — 기존 참가자에 합류자를 더해 계산한다
     private List<Pace> pacesAfterJoin(RunningRoomId roomId, Pace joined) {

@@ -1,6 +1,7 @@
 package com.runiverse.running_service.integration_test.fake;
 
 import com.runiverse.running_service.application.common.port.out.LoadUserAvgPacePort;
+import com.runiverse.running_service.application.common.port.out.UpdateUserAvgPacePort;
 import com.runiverse.running_service.application.running.port.out.LoadUserWeightPort;
 import com.runiverse.running_service.application.user.exception.OnboardingNotCompletedException;
 import com.runiverse.running_service.application.user.port.out.CheckNicknameDuplicatePort;
@@ -32,14 +33,16 @@ import java.util.UUID;
 
 public class InMemoryOnboardingStore implements ExistsOnboardingPort,
         CheckNicknameDuplicatePort, SaveOnboardingPort, LoadNicknamePort, UpdateNicknamePort,
-        UpdateOnboardingPort, LoadUserAvgPacePort, LoadUserWeightPort, LoadOnboardingProfilePort {
+        UpdateOnboardingPort, LoadUserAvgPacePort, UpdateUserAvgPacePort, LoadUserWeightPort,
+        LoadOnboardingProfilePort {
 
     // 실제 어댑터가 컬럼 단위로 갱신하므로 도메인 객체가 아니라 user_onboardings의 한 행을 들고 있는다
     @Getter
     public static class OnboardingRow {
 
         private final UserId userId;
-        private final AvgPace avgPace;
+        // 러닝을 끝낼 때마다 서버가 다시 쓴다 — 온보딩 입력은 초기값일 뿐이라 final이 아니다
+        private AvgPace avgPace;
         private Nickname nickname;
         private Gender gender;
         private Birthday birthday;
@@ -123,6 +126,12 @@ public class InMemoryOnboardingStore implements ExistsOnboardingPort,
                 .map(OnboardingRow::getAvgPace)
                 .map(AvgPace::secondPerKm)
                 .map(Pace::new);
+    }
+
+    // 실제 어댑터와 같이 온보딩 행이 없으면 막는다 — 러닝 종료가 이 경로로 avg_pace를 덮어쓴다
+    @Override
+    public void updateAvgPace(UserId userId, AvgPace avgPace) {
+        row(userId).orElseThrow(OnboardingNotCompletedException::new).avgPace = avgPace;
     }
 
     // 체중도 같은 행에서 나온다 — 종료 시 칼로리 계산이 이 값을 쓴다.

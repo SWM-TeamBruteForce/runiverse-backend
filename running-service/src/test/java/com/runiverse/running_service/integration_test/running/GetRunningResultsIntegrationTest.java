@@ -115,6 +115,8 @@ public class GetRunningResultsIntegrationTest extends IntegrationTestSupport {
                 (userId, cooldown) -> {
                 },                  // StartMatchCooldownPort
                 runningRecordStore, // ExistsRunningRecordPort
+                runningRecordStore, // LoadRecentRunningPacesPort
+                onboardingStore,    // UpdateUserAvgPacePort
                 PROPERTIES
         );
 

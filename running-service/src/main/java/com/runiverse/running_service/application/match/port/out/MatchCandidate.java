@@ -4,7 +4,9 @@ package com.runiverse.running_service.application.match.port.out;
 public record MatchCandidate(
         Long runningRoomId,
         int avgPaceSecondsPerKm,
-        long totalLeaveCount
+        // 신청자가 이 방을 나간 횟수 — 방 전체 합이 아니다.
+        // 거쳐 간 적 없는 방은 세션 행이 없어 0이다
+        int myLeaveCount
 ) {
 
 }

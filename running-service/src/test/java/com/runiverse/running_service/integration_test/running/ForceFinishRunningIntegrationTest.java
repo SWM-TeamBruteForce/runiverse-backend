@@ -112,6 +112,8 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
                 runningStore,       // UpdateRunningRoomPort
                 this::recordCooldown, // StartMatchCooldownPort
                 runningRecordStore, // ExistsRunningRecordPort
+                runningRecordStore, // LoadRecentRunningPacesPort
+                onboardingStore,    // UpdateUserAvgPacePort
                 FINISH_PROPERTIES
         );
         ForceFinishRunningRoomHandler forceFinishRunningRoomHandler =

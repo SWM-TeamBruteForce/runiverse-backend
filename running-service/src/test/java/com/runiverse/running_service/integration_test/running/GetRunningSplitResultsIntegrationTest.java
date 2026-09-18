@@ -90,6 +90,7 @@ public class GetRunningSplitResultsIntegrationTest extends IntegrationTestSuppor
                 (userId, cooldown) -> {
                 },
                 runningRecordStore,
+                runningRecordStore, onboardingStore,
                 PROPERTIES);
 
         InMemoryRunningResultStore resultStore =

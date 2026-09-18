@@ -2,6 +2,9 @@ package com.runiverse.running_service.infrastructure.persistence.running;
 
 import com.runiverse.running_service.application.running.port.out.CreateRunningRecordPort;
 import com.runiverse.running_service.application.running.port.out.ExistsRunningRecordPort;
+import com.runiverse.running_service.application.running.port.out.LoadRecentRunningPacesPort;
+import com.runiverse.running_service.application.running.port.out.RecentRunningPace;
+import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.record.RunningRecord;
 import com.runiverse.running_service.domain.running.record.RunningSplit;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
@@ -9,9 +12,12 @@ import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 @Component
 @RequiredArgsConstructor
-public class RunningRecordPersistenceAdapter implements CreateRunningRecordPort, ExistsRunningRecordPort {
+public class RunningRecordPersistenceAdapter implements CreateRunningRecordPort, ExistsRunningRecordPort,
+        LoadRecentRunningPacesPort {
 
     // 방당 수천 행이라 영속성 컨텍스트를 비워가며 넣는다.
     // hibernate.jdbc.batch_size와 맞춰야 실제로 묶여 나간다
@@ -68,6 +74,23 @@ public class RunningRecordPersistenceAdapter implements CreateRunningRecordPort,
                         """, Long.class)
                 .setParameter("roomId", runningRoomId.value())
                 .getSingleResult() > 0;
+    }
+
+    @Override
+    public List<RecentRunningPace> loadRecent(UserId userId, int limit) {
+        // idx_running_record_user(user_id, start_at)를 탄다.
+        // 같은 트랜잭션에서 방금 만든 기록도 이 쿼리 앞의 자동 flush로 함께 보인다.
+        // start_at이 겹치면 순서가 흔들리므로 id로 한 번 더 가른다
+        return entityManager.createQuery("""
+                        SELECT NEW com.runiverse.running_service.application.running.port.out.RecentRunningPace(
+                            record.totalDistance, record.totalDuration)
+                        FROM RunningRecordJpaEntity record
+                        WHERE record.userId = :userId
+                        ORDER BY record.startAt DESC, record.runningRecordId DESC
+                        """, RecentRunningPace.class)
+                .setParameter("userId", userId.value())
+                .setMaxResults(limit)
+                .getResultList();
     }
 
     private RunningSplitJpaEntity toEntity(RunningRecordJpaEntity record, RunningSplit split) {

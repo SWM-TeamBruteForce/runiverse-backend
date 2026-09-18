@@ -24,7 +24,8 @@ import java.time.LocalDateTime;
 @Table(
         name = "running_rooms",
         indexes = {
-                // 매칭 후보 방 스캔 — 앞 4개는 등가 조건, avg_pace는 범위(±30초/km) 조건이라 마지막.
+                // 매칭 후보 방 스캔 — 앞 4개는 등가 조건, avg_pace는 순위 재료라 마지막.
+                // 거르지 않고 값만 실어 나른다(feature-spec 방 배정 기준).
                 // 마감 스케줄러(type='MATCH' AND status='MATCHING' AND start_at <= now() + 오프셋)도
                 // 앞 4개 컬럼을 그대로 탄다
                 @Index(name = "idx_running_room_candidate",
