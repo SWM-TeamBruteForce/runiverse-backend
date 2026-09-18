@@ -35,8 +35,8 @@ class RunningComboEvaluatorTest {
             30, 30, Duration.ofSeconds(19), Duration.ofSeconds(10), 1);
 
     @Test
-    @DisplayName("처음 겹치면 그 순간이 시작 시각이고 콤보는 1부터다")
-    void evaluate_startsComboAtOne() {
+    @DisplayName("처음 겹치면 그 순간이 시작 시각이고 콤보는 0부터다")
+    void evaluate_startsComboAtZero() {
         // given -> 저장된 관계가 없고 두 사람이 20m 차이로 달린다
         List<RunningComboSnapshot> snapshots = List.of(
                 snapshot(A, 3_400, NOW, 0),
@@ -46,15 +46,16 @@ class RunningComboEvaluatorTest {
         RunningComboEvaluation evaluation =
                 RunningComboEvaluator.evaluate(A, snapshots, List.of(), NOW, PROPERTIES);
 
-        // then
+        // then -> 붙는 순간은 0이다. 나란히 서기만 한 구간을 1로 세면
+        // 출발선에서 아무것도 안 하고 콤보를 얻는다
         RunningComboPair pair = pairBetween(evaluation, A, B);
         assertThat(pair.startedAt()).isEqualTo(NOW);
-        assertThat(pair.maxComboCount()).isEqualTo(1);
+        assertThat(pair.maxComboCount()).isZero();
         assertThat(pair.missLeft()).isEqualTo(1);
 
         RunningComboRelation relation = relationBetween(evaluation, A, B);
-        assertThat(relation.comboCount()).isEqualTo(1);
-        assertThat(relation.maxComboCount()).isEqualTo(1);
+        assertThat(relation.comboCount()).isZero();
+        assertThat(relation.maxComboCount()).isZero();
         // second(B)가 앞서 있으면 양수다 — 받는 쪽이 B면 부호를 뒤집어 쓴다
         assertThat(relation.gapMeters()).isEqualTo(20);
         assertThat(evaluation.update().recipients()).containsExactlyInAnyOrder(A.value(), B.value());
@@ -79,7 +80,7 @@ class RunningComboEvaluatorTest {
     @Test
     @DisplayName("유지 횟수는 저장값이 아니라 시작 시각에서 계산한다")
     void evaluate_countsComboFromStartedAt() {
-        // given -> 40초 전에 시작한 콤보. 1회 길이가 10초이므로 5가 나와야 한다
+        // given -> 40초 전에 시작한 콤보. 1회 길이가 10초이므로 4가 나와야 한다
         List<RunningComboPair> stored = List.of(
                 new RunningComboPair(A, B, NOW.minusSeconds(40), 2, 1));
 
@@ -88,9 +89,9 @@ class RunningComboEvaluatorTest {
                 A, overlapping(), stored, NOW, PROPERTIES);
 
         // then
-        assertThat(relationBetween(evaluation, A, B).comboCount()).isEqualTo(5);
+        assertThat(relationBetween(evaluation, A, B).comboCount()).isEqualTo(4);
         // 겹친 순간이라 최고 콤보도 함께 오른다
-        assertThat(pairBetween(evaluation, A, B).maxComboCount()).isEqualTo(5);
+        assertThat(pairBetween(evaluation, A, B).maxComboCount()).isEqualTo(4);
     }
 
     @Test
@@ -145,7 +146,7 @@ class RunningComboEvaluatorTest {
         assertThat(pair.startedAt()).isEqualTo(NOW.minusSeconds(40));
         assertThat(pair.missLeft()).isZero();
         // 끊기지 않았으므로 통에도 그대로 실린다
-        assertThat(relationBetween(evaluation, A, B).comboCount()).isEqualTo(5);
+        assertThat(relationBetween(evaluation, A, B).comboCount()).isEqualTo(4);
     }
 
     @Test
@@ -188,7 +189,7 @@ class RunningComboEvaluatorTest {
     }
 
     @Test
-    @DisplayName("끊겼다 다시 겹치면 콤보는 1부터지만 최고 콤보는 살아 있다")
+    @DisplayName("끊겼다 다시 겹치면 콤보는 0부터지만 최고 콤보는 살아 있다")
     void evaluate_restartsComboKeepingMax() {
         // given -> 시작 시각이 지워진 관계
         List<RunningComboPair> stored = List.of(new RunningComboPair(A, B, null, 8, 1));
@@ -200,7 +201,7 @@ class RunningComboEvaluatorTest {
         // then
         assertThat(pairBetween(evaluation, A, B).startedAt()).isEqualTo(NOW);
         RunningComboRelation relation = relationBetween(evaluation, A, B);
-        assertThat(relation.comboCount()).isEqualTo(1);
+        assertThat(relation.comboCount()).isZero();
         assertThat(relation.maxComboCount()).isEqualTo(8);
     }
 
@@ -225,7 +226,7 @@ class RunningComboEvaluatorTest {
         assertThat(evaluation.pairs()).hasSize(2);
         assertThat(evaluation.pairs()).allMatch(pair -> pair.contains(A));
         // B-C는 봐주기가 0이라 B나 C가 보냈으면 끊겼을 상태인데 그대로 살아 있다
-        assertThat(relationBetween(evaluation, B, C).comboCount()).isEqualTo(3);
+        assertThat(relationBetween(evaluation, B, C).comboCount()).isEqualTo(2);
         // 받는 사람은 A와 얽힌 참가자뿐 — C는 A와 아무 관계가 아니다
         assertThat(evaluation.update().recipients()).containsExactlyInAnyOrder(A.value(), B.value());
     }
@@ -294,8 +295,8 @@ class RunningComboEvaluatorTest {
         assertThat(relations).hasSize(1);
         assertThat(relations.get(0).first()).isEqualTo(A.value());
         assertThat(relations.get(0).second()).isEqualTo(B.value());
-        // 시작 이후 110초 = 10초짜리 11칸 + 1
-        assertThat(relations.get(0).comboCount()).isEqualTo(12);
+        // 시작 이후 110초 = 10초짜리 11칸
+        assertThat(relations.get(0).comboCount()).isEqualTo(11);
         assertThat(relations.get(0).maxComboCount()).isEqualTo(30);
         assertThat(relations.get(0).gapMeters()).isEqualTo(20);
     }

@@ -13,6 +13,7 @@ import com.runiverse.running_service.application.running.exception.RunningRoomNo
 import com.runiverse.running_service.application.running.exception.RunningTrackUnavailableException;
 import com.runiverse.running_service.application.running.port.in.FinishRunningUsecase;
 import com.runiverse.running_service.application.running.port.in.GetRunningSnapshotUsecase;
+import com.runiverse.running_service.application.running.port.in.StartRunningComboUsecase;
 import com.runiverse.running_service.application.running.port.in.StartRunningUsecase;
 import com.runiverse.running_service.application.running.port.out.RunningComboPeer;
 import com.runiverse.running_service.application.running.query.snapshot.GetRunningSnapshotResult;
@@ -127,6 +128,10 @@ class RunningWebSocketHandlerTest {
     @Mock
     private GetRunningSnapshotUsecase getRunningSnapshotUsecase;
 
+    // 출발선 콤보 판정도 Redis를 오가며 자기 안에서 실패를 삼킨다 — 여기서는 호출 순서만 본다
+    @Mock
+    private StartRunningComboUsecase startRunningComboUsecase;
+
     private RunningWebSocketHandler handler;
 
     @BeforeEach
@@ -142,7 +147,8 @@ class RunningWebSocketHandlerTest {
                 new UpdateRunningLocationHandler(appendRunningTrackPort, loadRunningDistancePort,
                         saveRunningDistancePort, publishRunningProgressPort, updateRunningComboJudge),
                 finishRunningUsecase,
-                getRunningSnapshotUsecase);
+                getRunningSnapshotUsecase,
+                startRunningComboUsecase);
         // 좌표를 한 번도 못 받은 상태에서 시작한다 — 누적 거리는 이 테스트의 관심사가 아니다
         given(loadRunningDistancePort.loadDistance(anyLong(), any()))
                 .willReturn(RunningDistance.empty());
