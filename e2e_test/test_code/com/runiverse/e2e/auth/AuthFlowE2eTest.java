@@ -106,4 +106,17 @@ class AuthFlowE2eTest extends E2eTestSupport {
         assertThat(post("/auth/login", Map.of("email", email, "password", "onlyletters")).status())
                 .isEqualTo(401);
     }
+
+    @Test
+    @DisplayName("지원하지 않는 소셜 로그인 제공자는 외부 호출 없이 400으로 거절된다")
+    void unsupportedOauthProviderIsRejected() {
+        // when -> 목록에 없는 제공자, 대소문자만 다른 제공자. 본문은 보지 않는다
+        Response unknown = post("/auth/oauth/apple", Map.of());
+        Response upperCase = post("/auth/oauth/GOOGLE", Map.of("idToken", "anything"));
+        // then -> 404가 아니라 400이다
+        assertThat(unknown.status()).isEqualTo(400);
+        assertThat(unknown.text("code")).isEqualTo("UNSUPPORTED_PROVIDER");
+        assertThat(upperCase.status()).isEqualTo(400);
+        assertThat(upperCase.text("code")).isEqualTo("UNSUPPORTED_PROVIDER");
+    }
 }

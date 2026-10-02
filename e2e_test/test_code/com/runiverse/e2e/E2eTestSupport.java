@@ -130,6 +130,21 @@ public abstract class E2eTestSupport {
         return RunningWebSocket.connect(HTTP_CLIENT, RUNNING_WEBSOCKET_URL, accessToken);
     }
 
+    protected MatchStream openMatchStream(String accessToken) {
+        return MatchStream.open(HTTP_CLIENT, BASE_URL + "/running-matches/stream", accessToken);
+    }
+
+    /** 메일 인증 → 가입까지만 한다. 액세스 토큰을 돌려준다. */
+    protected String signUp(String email, String password) {
+        post("/auth/email/verifications", Map.of("email", email));
+        Response verified = post("/auth/email/verifications/confirm",
+                Map.of("email", email, "code", sentVerificationCode(email)));
+        Response signedUp = post("/auth/signup", Map.of(
+                "verificationTicket", verified.text("verificationTicket"),
+                "password", password));
+        return signedUp.text("accessToken");
+    }
+
     /**
      * 메일 인증 → 가입 → 온보딩까지 한 번에 끝낸다.
      * 러닝은 온보딩의 평균 페이스·몸무게가 없으면 시작조차 못 해 대부분의 흐름이 여기서 출발한다.
@@ -137,13 +152,7 @@ public abstract class E2eTestSupport {
     protected TestUser signUpAndOnboard() {
         String email = uniqueEmail();
         String password = "Password123!";
-        post("/auth/email/verifications", Map.of("email", email));
-        Response verified = post("/auth/email/verifications/confirm",
-                Map.of("email", email, "code", sentVerificationCode(email)));
-        Response signedUp = post("/auth/signup", Map.of(
-                "verificationTicket", verified.text("verificationTicket"),
-                "password", password));
-        String accessToken = signedUp.text("accessToken");
+        String accessToken = signUp(email, password);
         String nickname = uniqueNickname();
         post("/users/onboarding", Map.of(
                 "nickname", nickname,
