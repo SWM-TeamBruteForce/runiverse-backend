@@ -1,8 +1,8 @@
-package com.runiverse.running_service.unit_test.running.presentation;
+package com.runiverse.running_service.unit_test.user.presentation;
 
 import com.runiverse.running_service.application.running.query.record.GetMyRunningRecordsResult;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
-import com.runiverse.running_service.presentation.running.response.RunningRecordsResponse;
+import com.runiverse.running_service.presentation.user.response.RunningRecordsResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

@@ -1,4 +1,4 @@
-package com.runiverse.running_service.presentation.running.request;
+package com.runiverse.running_service.presentation.user.request;
 
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;

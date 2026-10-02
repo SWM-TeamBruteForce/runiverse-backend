@@ -1,10 +1,10 @@
-package com.runiverse.running_service.presentation.running.controller;
+package com.runiverse.running_service.presentation.user.controller;
 
 import com.runiverse.running_service.application.running.port.in.GetMyRunningRecordsUsecase;
 import com.runiverse.running_service.application.running.query.record.GetMyRunningRecordsQuery;
 import com.runiverse.running_service.application.running.query.record.GetMyRunningRecordsResult;
-import com.runiverse.running_service.presentation.running.request.RunningRecordsRequest;
-import com.runiverse.running_service.presentation.running.response.RunningRecordsResponse;
+import com.runiverse.running_service.presentation.user.request.RunningRecordsRequest;
+import com.runiverse.running_service.presentation.user.response.RunningRecordsResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

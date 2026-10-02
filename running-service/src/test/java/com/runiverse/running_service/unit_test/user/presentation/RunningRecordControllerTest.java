@@ -1,4 +1,4 @@
-package com.runiverse.running_service.unit_test.running.presentation;
+package com.runiverse.running_service.unit_test.user.presentation;
 
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.running.port.in.GetMyRunningRecordsUsecase;
@@ -7,7 +7,7 @@ import com.runiverse.running_service.application.running.query.record.GetMyRunni
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
 import com.runiverse.running_service.infrastructure.config.JacksonConfig;
 import com.runiverse.running_service.presentation.common.exception.GlobalExceptionHandler;
-import com.runiverse.running_service.presentation.running.controller.RunningRecordController;
+import com.runiverse.running_service.presentation.user.controller.RunningRecordController;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

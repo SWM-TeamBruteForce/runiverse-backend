@@ -1,6 +1,6 @@
-package com.runiverse.running_service.unit_test.running.presentation;
+package com.runiverse.running_service.unit_test.user.presentation;
 
-import com.runiverse.running_service.presentation.running.request.RunningRecordsRequest;
+import com.runiverse.running_service.presentation.user.request.RunningRecordsRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;

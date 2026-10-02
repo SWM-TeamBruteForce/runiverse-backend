@@ -28,6 +28,8 @@ FORBIDDEN = {
         ("jakarta.transaction", "트랜잭션 API 의존"),
         ("org.hibernate", "하이버네이트 의존"),
         ("com.fasterxml", "잭슨 의존"),
+        ("tools.jackson", "잭슨 의존"),
+        ("io.micrometer", "메트릭 의존"),
         (f"{BASE_PKG}.application", "바깥 레이어 참조"),
         (f"{BASE_PKG}.infrastructure", "바깥 레이어 참조"),
         (f"{BASE_PKG}.presentation", "바깥 레이어 참조"),
@@ -36,6 +38,7 @@ FORBIDDEN = {
     "application": [
         ("jakarta.persistence", "JPA 의존 — 영속성은 어댑터 책임"),
         ("org.hibernate", "하이버네이트 의존"),
+        ("io.micrometer", "메트릭 의존 — port/out 기록 포트로 남긴다"),
         (f"{BASE_PKG}.infrastructure", "바깥 레이어 참조"),
         (f"{BASE_PKG}.presentation", "바깥 레이어 참조"),
         (f"{BASE_PKG}.observability", "관측성 참조 — 로그는 SLF4J만으로 충분"),
@@ -78,7 +81,7 @@ PACKAGE_RE = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.M)
 # 인터페이스 본문의 메서드 선언 (기본 구현 default 메서드 제외)
 IFACE_METHOD_RE = re.compile(r"^\s*(?!default\b|static\b)[\w<>\[\],.?\s]+?\s+(\w+)\s*\(", re.M)
 
-APP_ERROR_CODE = f"{BASE_PKG}.application.common.exception.ErrorCode"
+APP_EXCEPTION_PKG = f"{BASE_PKG}.application.common.exception"
 EXTERNAL_CLIENT_IMPORT_PREFIXES = (
     "org.springframework.web.client",
     "org.springframework.web.reactive.function.client",
@@ -110,8 +113,9 @@ def strip_annotations(text: str) -> str:
     return "".join(out)
 
 
-def skip_balanced(text: str, start: int) -> int:
+def skip_balanced(text: str, start: int, pair: str = "()") -> int:
     """`text[start]`의 여는 괄호에 대응하는 닫는 괄호 다음 위치를 반환한다."""
+    opener, closer = pair
     depth, i, n = 0, start, len(text)
     while i < n:
         c = text[i]
@@ -119,9 +123,9 @@ def skip_balanced(text: str, start: int) -> int:
             quote, i = c, i + 1
             while i < n and text[i] != quote:
                 i += 2 if text[i] == "\\" else 1
-        elif c == "(":
+        elif c == opener:
             depth += 1
-        elif c == ")":
+        elif c == closer:
             depth -= 1
             if depth == 0:
                 return i + 1
@@ -265,6 +269,30 @@ def parse_enum_constants(path: Path):
     return names
 
 
+def application_error_enums(root: Path):
+    """application `ErrorCode`를 이루는 enum별 상수와, 소스를 못 찾은 enum 이름.
+
+    `ErrorCode`는 sealed interface이고 `permits`한 도메인별 enum이 실제 코드를 갖는다.
+    `ErrorCode` 자체가 enum이던 이전 구조도 읽는다.
+    """
+    exception_dir = root / SRC / "application/common/exception"
+    sealed = exception_dir / "ErrorCode.java"
+    if not sealed.exists():
+        return {}, ["ErrorCode"]
+    text = without_comments(sealed.read_text(encoding="utf-8"))
+    if re.search(r"\benum\s+ErrorCode\b", text):
+        return {"ErrorCode": parse_enum_constants(sealed)}, []
+    permits = re.search(r"\bpermits\s+([\w\s,]+?)\s*\{", text)
+    enums, missing = {}, []
+    for name in re.findall(r"\w+", permits.group(1)) if permits else []:
+        path = exception_dir / f"{name}.java"
+        if path.exists():
+            enums[name] = parse_enum_constants(path)
+        else:
+            missing.append(name)
+    return enums, missing
+
+
 def source_fqcn(path: Path, source_root: Path) -> str:
     """Java 소스 경로를 패키지 포함 클래스명으로 바꾼다."""
     relative = path.relative_to(source_root).with_suffix("")
@@ -282,45 +310,40 @@ def application_exception_index(root: Path):
     }
 
 
-def referenced_application_error_codes(text: str, known_codes):
-    """domain의 동명 ErrorCode를 제외하고 application 코드 참조만 반환한다."""
-    known = set(known_codes)
+def referenced_application_error_codes(text: str, enums):
+    """domain의 동명 enum(`UserErrorCode` 등)을 제외하고 application 코드 참조만
+    `Enum.CONSTANT` 형태로 반환한다."""
     source = without_comments(text)
     imports = set(NORMAL_IMPORT_RE.findall(source))
     static_imports = set(STATIC_IMPORT_RE.findall(source))
     body = without_comments_and_imports(text)
-    found = set()
-
     package_match = PACKAGE_RE.search(source)
     package_name = package_match.group(1) if package_match else ""
-    explicit_error_imports = {
-        imported for imported in imports if imported.endswith(".ErrorCode")
-    }
-    imports_application_error = APP_ERROR_CODE in explicit_error_imports or (
-        not explicit_error_imports
-        and (
-            f"{BASE_PKG}.application.common.exception.*" in imports
-            or package_name == f"{BASE_PKG}.application.common.exception"
+    found = set()
+
+    for enum_name, constants in enums.items():
+        fqcn = f"{APP_EXCEPTION_PKG}.{enum_name}"
+        explicit = {imported for imported in imports if imported.rsplit(".", 1)[-1] == enum_name}
+        simple_name_is_application = fqcn in explicit or (
+            not explicit
+            and (f"{APP_EXCEPTION_PKG}.*" in imports or package_name == APP_EXCEPTION_PKG)
         )
-    )
-    if imports_application_error:
-        found.update(re.findall(r"\bErrorCode\.([A-Z][A-Z0-9_]*)\b", body))
+        names = set()
+        if simple_name_is_application:
+            names.update(re.findall(rf"(?<![\w.]){enum_name}\.([A-Z][A-Z0-9_]*)\b", body))
+        names.update(re.findall(rf"\b{re.escape(fqcn)}\.([A-Z][A-Z0-9_]*)\b", body))
 
-    found.update(
-        re.findall(rf"\b{re.escape(APP_ERROR_CODE)}\.([A-Z][A-Z0-9_]*)\b", body)
-    )
+        for imported in static_imports:
+            if not imported.startswith(f"{fqcn}."):
+                continue
+            member = imported[len(fqcn) + 1:]
+            if member == "*":
+                names.update(code for code in constants if re.search(rf"\b{re.escape(code)}\b", body))
+            elif re.search(rf"\b{re.escape(member)}\b", body):
+                names.add(member)
 
-    static_prefix = f"{APP_ERROR_CODE}."
-    for imported in static_imports:
-        if not imported.startswith(static_prefix):
-            continue
-        member = imported[len(static_prefix):]
-        if member == "*":
-            found.update(code for code in known if re.search(rf"\b{re.escape(code)}\b", body))
-        elif member in known and re.search(rf"\b{re.escape(member)}\b", body):
-            found.add(member)
-
-    return found & known
+        found.update(f"{enum_name}.{code}" for code in names if code in constants)
+    return found
 
 
 def referenced_application_exceptions(text: str, current: Path, index):
@@ -376,7 +399,7 @@ def referenced_application_exceptions(text: str, current: Path, index):
     return resolved, unresolved
 
 
-def trace_scoped_application_codes(root: Path, scope: Path, known_codes):
+def trace_scoped_application_codes(root: Path, scope: Path, enums):
     """범위 파일의 직접 코드 참조와 직접 참조 예외 체인을 추적한다."""
     index = application_exception_index(root)
     scoped_files = java_files(root, scope)
@@ -390,7 +413,7 @@ def trace_scoped_application_codes(root: Path, scope: Path, known_codes):
             continue
         visited.add(resolved)
         text = path.read_text(encoding="utf-8")
-        codes.update(referenced_application_error_codes(text, known_codes))
+        codes.update(referenced_application_error_codes(text, enums))
         references, missing = referenced_application_exceptions(text, path, index)
         unresolved.update(missing)
         for target in references:
@@ -404,23 +427,30 @@ def trace_scoped_application_codes(root: Path, scope: Path, known_codes):
 def check_error_exposure_details(root: Path, scope: Path = None):
     """ErrorCode ↔ toStatus ↔ 공개 경로 대조와 범위 추적 메타데이터."""
     base = root / SRC
-    all_codes = parse_enum_constants(base / "application/common/exception/ErrorCode.java")
+    enums, missing_enums = application_error_enums(root)
+    all_codes = [f"{name}.{code}" for name, codes in enums.items() for code in codes]
     selected_codes = set(all_codes)
-    followed, unresolved = set(), set()
+    followed, unresolved = set(), {f"{APP_EXCEPTION_PKG}.{name}" for name in missing_enums}
     complete_claim = scope is None
 
     if scope is not None:
-        scoped_files = java_files(root, scope)
+        scoped = {path.resolve() for path in java_files(root, scope)}
+        exception_dir = base / "application/common/exception"
         global_files = {
-            (base / "application/common/exception/ErrorCode.java").resolve(),
+            (exception_dir / "ErrorCode.java").resolve(),
             (base / "presentation/common/exception/GlobalExceptionHandler.java").resolve(),
             (base / "presentation/common/exception/ErrorExposurePolicy.java").resolve(),
         }
-        complete_claim = any(path.resolve() in global_files for path in scoped_files)
+        complete_claim = bool(scoped & global_files)
         if not complete_claim:
-            selected_codes, followed, unresolved = trace_scoped_application_codes(
-                root, scope, all_codes
+            selected_codes, followed, traced_unresolved = trace_scoped_application_codes(
+                root, scope, enums
             )
+            unresolved |= traced_unresolved
+            # 범위에 든 enum 파일은 그 enum의 상수만 본다
+            for name, codes in enums.items():
+                if (exception_dir / f"{name}.java").resolve() in scoped:
+                    selected_codes |= {f"{name}.{code}" for code in codes}
 
     handler = base / "presentation/common/exception/GlobalExceptionHandler.java"
     policy = base / "presentation/common/exception/ErrorExposurePolicy.java"
@@ -429,32 +459,36 @@ def check_error_exposure_details(root: Path, scope: Path = None):
     handler_code = without_comments_and_imports(handler_text)
     policy_code = without_comments_and_imports(policy_text)
 
-    # toStatus 스위치 본문만 잘라낸다
-    match = re.search(r"toStatus\s*\([^)]*\)\s*\{(.*?)\n\s*\}", handler_code, re.S)
-    switch_body = match.group(1) if match else ""
-    exposed = set(re.findall(r"ErrorCode\.(\w+)\.getCode\(\)", policy_code))
+    # enum별 toStatus overload의 switch에서 상수 → 상태를 모은다
+    status_by_code = {}
+    for method in re.finditer(r"\btoStatus\s*\(\s*(\w+)\s+\w+\s*\)\s*\{", handler_code):
+        enum_name = method.group(1)
+        if enum_name not in enums:
+            continue
+        body = handler_code[method.end():skip_balanced(handler_code, method.end() - 1, "{}")]
+        for case_match in re.finditer(r"\bcase\s+(.*?)\s*->\s*HttpStatus\.([A-Z_]+)", body, re.S):
+            case_body, status = case_match.groups()
+            for code in re.findall(r"\b[A-Z][A-Z0-9_]*\b", case_body):
+                status_by_code[f"{enum_name}.{code}"] = status
+
+    exposed = {
+        f"{enum_name}.{code}"
+        for enum_name, code in re.findall(r"\b(\w+)\.([A-Z][A-Z0-9_]*)\.getCode\(\)", policy_code)
+        if enum_name in enums
+    }
     bad_request_auto_exposed = re.search(
         r"\bstatus\s*==\s*HttpStatus\.BAD_REQUEST\b|"
         r"\bHttpStatus\.BAD_REQUEST\s*==\s*status\b",
         policy_code,
     ) is not None
-    status_by_code = {}
-    for case_match in re.finditer(
-        r"\bcase\s+(.*?)\s*->\s*HttpStatus\.([A-Z_]+)", switch_body, re.S
-    ):
-        case_body, status = case_match.groups()
-        for code in re.findall(r"\b[A-Z][A-Z0-9_]*\b", case_body):
-            status_by_code[code] = status
 
     rows = []
     for code in all_codes:
         if code not in selected_codes:
             continue
-        in_switch = re.search(rf"\b{re.escape(code)}\b", switch_body) is not None
-        has_public_path = (
-            bad_request_auto_exposed and status_by_code.get(code) == "BAD_REQUEST"
-        ) or code in exposed
-        rows.append((code, in_switch, has_public_path))
+        status = status_by_code.get(code)
+        has_public_path = (bad_request_auto_exposed and status == "BAD_REQUEST") or code in exposed
+        rows.append((code, status, has_public_path))
     metadata = {
         "complete_claim": complete_claim,
         "followed": sorted(rel(path, root) for path in followed),
@@ -527,24 +561,28 @@ def check_ports(root: Path, scope: Path = None):
 
 
 def check_application_structure(root: Path, scope: Path = None):
-    """Command/Handler 세트와 트랜잭션 경계를 검사한다.
+    """command/·query/ 기능 패키지의 구성과 트랜잭션 경계를 검사한다.
 
-    `Result`는 반환값이 있을 때만 두므로 필수가 아니다. 트랜잭션도 경계가 Handler가
-    아닐 수 있고(내부 컴포넌트) Redis 전용 유스케이스는 아예 불필요하므로,
-    기능 패키지 전체에 `@Transactional`이 하나도 없을 때만 휴리스틱으로 보고한다.
+    command는 Command·Handler, query는 Query·Handler·Result가 필수다 — command의
+    `Result`는 반환값이 있을 때만 둔다. 트랜잭션도 경계가 Handler가 아닐 수 있고
+    (내부 컴포넌트) Redis 전용 유스케이스는 아예 불필요하므로, 기능 패키지 전체에
+    `@Transactional`이 하나도 없을 때만 휴리스틱으로 보고한다. 다만 query Handler가
+    `@Transactional`을 걸었으면 `readOnly = true`여야 한다.
     """
+    required = {"command": ("Command", "Handler"), "query": ("Query", "Handler", "Result")}
     source_root = root / SRC
     feature_dirs = set()
     for f in java_files(root, scope):
         parts = f.relative_to(source_root).parts
-        if len(parts) >= 4 and parts[0] == "application" and parts[2] == "command":
+        if len(parts) >= 4 and parts[0] == "application" and parts[2] in required:
             feature_dirs.add(source_root.joinpath(*parts[:4]))
 
     missing_sets, handler_issues, no_tx = [], [], []
     for feature_dir in sorted(feature_dirs):
+        kind = feature_dir.parent.name
         files = sorted(feature_dir.glob("*.java"))
         stems = [f.stem for f in files]
-        missing = [suffix for suffix in ("Command", "Handler")
+        missing = [suffix for suffix in required[kind]
                    if not any(stem.endswith(suffix) for stem in stems)]
         if missing:
             missing_sets.append((rel(feature_dir, root), missing))
@@ -557,13 +595,20 @@ def check_application_structure(root: Path, scope: Path = None):
             no_tx.append(rel(feature_dir, root))
 
         for handler in (f for f in files if f.stem.endswith("Handler")):
+            issues = []
             declaration = re.search(
                 r"\bclass\s+\w+Handler\b[^\{]*\bimplements\b[^\{]*\b\w+Usecase\b",
                 texts[handler],
                 re.S,
             )
             if not declaration:
-                handler_issues.append((rel(handler, root), ["*Usecase 구현 누락"]))
+                issues.append("*Usecase 구현 누락")
+            if kind == "query":
+                transactions = re.findall(r"@Transactional\b(\([^)]*\))?", texts[handler])
+                if any(not re.search(r"\breadOnly\s*=\s*true\b", args) for args in transactions):
+                    issues.append("query Handler의 @Transactional에 readOnly = true 누락")
+            if issues:
+                handler_issues.append((rel(handler, root), issues))
     return missing_sets, handler_issues, no_tx
 
 
@@ -638,7 +683,7 @@ def check_outbound_role_ambiguities(root: Path, scope: Path = None):
 
 
 def check_unit_suffix(root: Path, scope: Path = None):
-    """요청·응답 DTO 필드의 단위 접미사 (api-convention.md '예외 0' 규칙).
+    """요청·응답 DTO 필드의 단위 접미사 (api-convention.md '물리량 단위').
 
     휴리스틱이다 — 이름에 물리량 키워드가 있는데 접미사가 없는 필드를 모은다.
     """
@@ -722,16 +767,18 @@ def main():
         print("  위반 없음")
 
     print("\n## 2. 조사 필요")
-    print("\n### 에러 코드 상태·노출 후보 (ErrorCode / toStatus / EXPOSED_CODES)")
+    print("\n### 에러 코드 상태·노출 후보 (*ErrorCode / toStatus / EXPOSED_CODES)")
     rows, error_metadata = check_error_exposure_details(root, scope)
-    missing = [(code, in_switch, has_public_path)
-               for code, in_switch, has_public_path in rows
-               if not (in_switch and has_public_path)]
+    # toStatus가 500을 지정한 코드는 마스킹해도 상태가 같다 — 의도적 은닉이다
+    intentional_500 = [code for code, status, _ in rows if status == "INTERNAL_SERVER_ERROR"]
+    missing = [(code, status, has_public_path)
+               for code, status, has_public_path in rows
+               if status is None or not (has_public_path or status == "INTERNAL_SERVER_ERROR")]
     if missing:
         investigate += len(missing)
-        for code, in_switch, has_public_path in missing:
+        for code, status, has_public_path in missing:
             flags = []
-            if not in_switch:
+            if status is None:
                 flags.append("toStatus 누락")
             if not has_public_path:
                 flags.append(
@@ -739,20 +786,24 @@ def main():
                 )
             print(f"  - {code}: {', '.join(flags)}")
         print("  ※ 의도적 비노출일 수 있다 — 현재 API 계약과 직접 관련된 이력을 함께 확인할 것")
+    elif error_metadata["complete_claim"] and not rows:
+        investigate += 1
+        print("  - application ErrorCode 상수를 하나도 읽지 못함 — 스크립트가 에러 코드 구조를 따라가지 못한다")
+    elif error_metadata["complete_claim"]:
+        print(f"  {len(rows)}개 application 코드에 상태·공개 경로가 있음")
+    elif rows:
+        print(f"  범위에서 추적된 {len(rows)}개 코드에 상태·공개 경로가 있음")
     else:
-        if error_metadata["complete_claim"]:
-            print(f"  {len(rows)}개 application 코드에 상태·공개 경로가 있음")
-        elif rows:
-            print(f"  범위에서 추적된 {len(rows)}개 코드에 상태·공개 경로가 있음")
-        else:
-            print("  범위에서 추적된 application ErrorCode 없음")
+        print("  범위에서 추적된 application ErrorCode 없음")
+    if intentional_500:
+        print(f"  ※ toStatus가 500을 지정한 의도적 은닉: {', '.join(intentional_500)}")
 
     if error_metadata["followed"]:
         print(f"  ※ 직접 참조한 application 예외 {len(error_metadata['followed'])}개의 ErrorCode를 추적함")
     if error_metadata["unresolved"]:
         investigate += len(error_metadata["unresolved"])
-        for exception_name in error_metadata["unresolved"]:
-            print(f"  - {exception_name}: application 예외 소스를 찾지 못해 ErrorCode 확인 불가")
+        for name in error_metadata["unresolved"]:
+            print(f"  - {name}: application 소스를 찾지 못해 ErrorCode 확인 불가")
     if not error_metadata["complete_claim"]:
         print(
             "  ※ 범위 검사 한계: 직접 application ErrorCode 참조와 직접 참조한 "
