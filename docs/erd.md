@@ -6,7 +6,7 @@
 
 ## 0. 공통 규칙
 
-- **PK 타입**: `users.user_id`만 **UUID**, 그 외 자체 PK는 **bigint**(auto-increment). 연결·좋아요류(`friendships`·`user_colors`·`feed_likes`·`comment_likes`·`running_room_sessions`)는 **복합 PK**, 유저당 1 row(`user_onboardings`·`oauth_users`·`delete_users`)는 **참조 키가 곧 PK**. → API: `userId`만 UUID 문자열, 나머지 Long.
+- **PK 타입**: `users.user_id`만 **UUID**, 그 외 자체 PK는 **bigint**(auto-increment, `running_splits`만 시퀀스 — 표 참고). 연결·좋아요류(`friendships`·`user_colors`·`feed_likes`·`comment_likes`·`running_room_sessions`)는 **복합 PK**, 유저당 1 row(`user_onboardings`·`oauth_users`·`delete_users`)는 **참조 키가 곧 PK**. → API: `userId`만 UUID 문자열, 나머지 Long.
 - **FK/참조 네이밍**: 참조 테이블 PK명 그대로(예: `running_records.running_room_id`). 같은 테이블 이중 참조는 역할명(`friendships.requester_id`/`receiver_id`). `feeds.running_record_id`는 논리 참조(아래 정책).
 - **UNIQUE 표기**: 단일 컬럼 = 제약칸, 복합 UNIQUE = 표 아래 블록쿼트(`oauth_users`·`running_records`·`running_splits`·`colors`).
 - **타임스탬프**: **접미사가 타입을 말한다** — 시점은 전부 `*_at`(`timestamp`, 시간대 없음, **KST 벽시계로 저장**). 앱이 JVM 기본 타임존을 `APP_TIME_ZONE`으로 고정한다(`TimeZoneConfig`). DB에 저장하는 달력 날짜 컬럼은 `user_onboardings.birthday`뿐이며 API에서는 `YYYY-MM-DD`로 표현한다.
@@ -168,7 +168,7 @@
 
 | 컬럼 | 타입 | 제약 | 비고 |
 |---|---|---|---|
-| running_split_id | bigint | PK | |
+| running_split_id | bigint | PK | 시퀀스 `running_split_seq`로 채번한다(`allocationSize=100`) — IDENTITY면 Hibernate가 배치 INSERT를 끈다 |
 | running_record_id | bigint | FK → running_records, NOT NULL | |
 | split_number | int | NOT NULL | 구간 번호(1부터). API `splitNumber` |
 | avg_pace | int | NOT NULL | 초/km |
