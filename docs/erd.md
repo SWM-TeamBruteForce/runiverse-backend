@@ -16,7 +16,7 @@
 - **단위(컬럼에 단위 미표기 — 아래로 통일)**: 거리 = **미터**, 페이스(`avg_pace`) = **초/km**, 시간(`total_duration`·`duration`) = **초**, 칼로리 = **kcal**, 케이던스(`avg_cadence`) = **spm**, 누적 상승 고도(`total_elevation_gain`)·구간 순고도차(`elevation_change`) = **미터**, 기온(`temperature`) = **섭씨**. **좌표는 컬럼으로 두지 않는다** — 경로·지점은 전부 `route_polyline`(encoded polyline, precision 5)에서 뽑는다. PostGIS 미사용(위치 기반 기능 도입 시 검토).
 - **enum**: DB도 API와 **동일한 영문 코드를 그대로 저장**(Java enum `@Enumerated(STRING)`) — 한글 값·변환 매핑 없음. 컬럼별 값 목록은 [§6 enum 사전](#6-enum-사전).
 - **`deleted_at`**: `feeds`는 소프트 삭제, `comments`는 답글이 있을 때의 톰스톤, `running_rooms`는 **[MVP 제외]** 관리자 숨김에 쓴다. `delete_*` 테이블은 별도 용도다([§5](#5-delete_-스냅샷이력-테이블)).
-  - **`running_players.deleted_at`은 "신청이 끝난 시각"이다** — 활성 신청과 쿨다운 판정에 쓰므로 시각 자체가 의미를 갖는다.
+  - **`running_players.deleted_at`은 "신청이 끝난 시각"이다** — 활성 신청은 값의 유무로 판정하고, 값은 신청이 끝난 시각으로 남아 쿨다운 DB 폴백을 얹을 때의 기준이 된다.
 - **`user_id` FK 정책 (회원탈퇴 연동)**: 탈퇴 시 **CASCADE 삭제**되는 테이블(`user_onboardings`·`oauth_users`·`user_devices`·`friendships`·`user_colors`)은 `user_id` **FK + ON DELETE CASCADE**. **유지**되는 테이블(`feeds`·`comments`·`running_records`·`feed_likes`·`comment_likes`)은 `user_id`를 **논리 참조**(FK 제약 없음 — `users` 하드delete 후 값 유지, 무결성은 앱 레벨). 표기 `→ users`
   - **CASCADE에 기대지 않고 앱이 먼저 지운다** — 온보딩 값과 로그인 수단은 `delete_users`로 옮겨야 하는데 DB 연쇄 삭제는 애플리케이션을 거치지 않는다. 기존 개발 DB처럼 FK가 붙지 않은 환경도 있어 CASCADE 유무와 무관하게 동작해야 한다.
 - **`running_players`는 조건부 유지다.** 탈퇴 전 일반 취소·이탈·러닝 종료 처리를 적용한다. 시작 전 신청 row와 세션은 삭제하고, 이미 시작한 방의 참가 row와 세션은 기록 없는 참가자도 과거 결과에 남기기 위해 유지한다.
@@ -120,9 +120,9 @@
 
 > **방과의 연결은 `running_room_sessions`가 갖는다** — 참가자가 여러 방을 거칠 수 있는 설계라(방 이동은 향후 매칭 알고리즘 몫) 단일 `running_room_id` 컬럼으로는 이력을 담을 수 없고, 현재 속한 방은 `is_connected`로 가린다.
 > **`status`는 참가 의사와 진행 상태를 함께 표현한다** — 신청(`JOINED`)에서 러닝(`RUNNING`)·완주(`COMPLETED`)까지 한 축으로 간다. 이탈은 시점과 제재 여부로 네 값이 갈리며, `INVITED`는 **[MVP 제외]** 예약값이다.
-> **`status`와 `deleted_at`은 축이 다르다** — `status`가 "어떻게 끝났나"(사유·제재 여부), `deleted_at`이 "언제 끝났나"다. `updated_at`을 이탈 시각으로 쓰지 않는다 — 그 row가 한 번만 더 갱신돼도 값이 밀려 쿨다운이 잘못 계산된다.
+> **`status`와 `deleted_at`은 축이 다르다** — `status`가 "어떻게 끝났나"(사유·제재 여부), `deleted_at`이 "언제 끝났나"다. `updated_at`을 이탈 시각으로 쓰지 않는다 — 그 row가 한 번만 더 갱신돼도 값이 밀려 이탈 시각을 잃는다.
 > **row 생명주기**: 생성 = 매칭 신청·솔로 개시 / 대기 취소 = `status=MATCHED_LEFT_NO_PENALTY` + `deleted_at` 기록(마감 전이라 언제나 미제재다) / 러닝 시작 = 각자의 WS `RUNNING_START`가 본인을 `RUNNING`으로 전환(일괄 전환 없음) / 이탈 = `status=*_LEFT_*` + `deleted_at` 기록 / 완주 = `status=COMPLETED` + `deleted_at` 기록. **시작 전** 대기 취소·이탈 시 배정 행은 `is_connected=false`로 바꾸고 방 인원을 하나 줄이며, 그 결과 인원이 `0`이면 방을 `CANCELLED`로 닫는다. **러닝이 시작된 뒤에는 인원이 줄지 않는다** — 완주든 조기 종료든 배정 행만 `is_connected=false`로 내리고 `leave_count`도 올리지 않는다. 그래서 `current_player_count`는 시작 이후 "이 방이 몇 명으로 확정됐나"로 고정되며, 그 값이 1이면 1인 확정 러닝이라 조기 종료 제재가 면제된다. 줄이면 마지막 완주자가 방을 `CANCELLED`로 만들어 버리기도 한다 — 시작 후 방을 닫는 건 전원 종료를 확인하는 별도 경로이고, 유효 기록이 있으면 `FINISHED`, 하나도 없으면 `CANCELLED`다. 친구 초대 생명주기는 MVP에서 정의하지 않는다.
-> **활성 신청 판정**: `deleted_at IS NULL AND status='JOINED'`.
+> **활성 신청 판정**: `deleted_at IS NULL`. `status`는 보지 않는다 — 러닝 중(`RUNNING`)인 참가자도 활성이어야 다음 매칭이 막힌다.
 > **러닝 종료 판정**: 목표 거리 도달은 `COMPLETED`, 미달은 실제 거리 비율에 따라 `RUNNING_LEFT_*`다. 종료 신호·강제 종료·러닝 중 탈퇴에 같은 규칙을 적용하고, 유효 러닝 판정(거리·시간·경로 산출 가능 + 최소 거리·최소 시간 통과)을 지난 트랙만 기록으로 만든다. 산출할 수 없으면 실제 거리를 0으로 판정한다. **미달이어도 `status`는 그대로 남는다** — 기록 유무와 개인 종료 상태는 별개다.
 
 ### running_room_sessions (참가자 ↔ 방 배정)
@@ -409,5 +409,5 @@ FK 강제 없는 독립 테이블(원본 삭제/수정된 row를 참조하므로
 | running_room_sessions.user_id | 유저의 현재 방 조회 — 복합 PK가 `running_room_id` 방향만 커버해 역방향이 미커버다. 활성 신청에서 배정된 방을 찾을 때 탄다 |
 | running_rooms.(deleted_at, type, status, start_at, target_distance, avg_pace) | 매칭 후보 방 조회 — 같은 슬롯·거리에서 모집 중이고 자리가 남은 방(`type='MATCH' AND status='MATCHING'`). 솔로 방·초대방을 인덱스 단계에서 배제한다. **`avg_pace`는 거르는 조건이 아니라 순위 재료다** — 후보 자격에 페이스 조건이 없어(feature-spec 방 배정 기준) 조회가 값만 실어 나르고 정렬은 애플리케이션이 한다. **모집 마감은 이 인덱스를 타지 않는다** — 방을 훑는 대신 `scheduled_jobs`에 예약을 걸어 그 시각에만 깬다 |
 | scheduled_jobs.(is_sent, execute_at) | 부팅 복구 — 아직 실행되지 않은 예약 조회. `is_sent=false`가 선두라 실행이 끝난 대다수를 인덱스 단계에서 배제한다 |
-| running_players.(user_id, deleted_at) | 활성 신청 조회 — 중복 신청 검사·내 매칭 상태·러닝 시작. 페널티 판정(최근 제재 이탈 조회)도 이 인덱스를 탄다 |
+| running_players.(user_id, deleted_at) | 활성 신청 조회 — 중복 신청 검사·내 매칭 상태·러닝 시작 |
 | delete_users.(email, created_at) | 보관 기간 만료 정리 — 아직 신원 정보가 남은 행 조회. `email`이 선두라 정리가 끝난 대다수를 인덱스 단계에서 배제한다. 행을 지우지 않는 테이블이라 시간이 갈수록 `created_at` 단독으로는 거의 전부를 읽게 된다 |
