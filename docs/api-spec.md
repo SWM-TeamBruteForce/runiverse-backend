@@ -1356,6 +1356,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   - `RUNNING_START` 없이 이 메시지를 보내면 서버에 정해진 방이 없어 `RUNNING_NOT_STARTED`로 거부한다. 클라는 `RUNNING_START`부터 다시 보낸다
 - **필수는 `sequence`·`latitude`·`longitude`·`accuracyMeters`·`recordedAt` 다섯뿐이다.** 나머지는 단말이 못 잴 수 있어 `null`로 보내도 되고, 서버는 그 좌표를 버리지 않고 값이 비었다는 사실만 남긴다 — 배치 하나가 통째로 거절되면 그 10초가 통으로 빈다. 케이던스는 보수 센서가, 속도·방위는 GPS 픽스가 있어야 온다
   - 비어 있으면 해당 지표를 표본에서 제외한다. 유효 표본이 없으면 지표 자체가 null이다(`running_records.avg_cadence`, erd.md)
+  - 배치를 거부하는 건 필수 값 쪽뿐이다 — `locations`가 없거나 비었거나, 좌표 중 하나라도 필수 다섯 값이 빠졌거나 범위(위도 -90~90, 경도 -180~180, `sequence` 0~100,000)를 벗어나면 배치 전체를 `INVALID_REQUEST`로 거부한다. `sequence` 상한은 정상 클라가 닿지 않는 안전 한도다(6시간 × 1Hz = 21,600)
 - **클라는 1~2초 간격으로 수집해 로컬에 쌓으면서, 10초마다 모아서 보낸다.** 좌표 하나씩 10초마다 보내면 트랙이 성겨져 경로와 거리 정확도가 떨어진다
 - 페이스·거리·케이던스·진행 시간은 러닝 중 표시용으로 클라이언트가 계산한다. 칼로리는 러닝 중 표시·전송하지 않고 종료 시 서버가 계산한다
 - 서버는 Redis(`runningRoomId+userId` 키)에 버퍼링하고 기록을 생성할 때 S3에 업로드한다(`gpsTrackKey`) — `runningRoomId`는 세션이 들고 있는 값이다
@@ -1374,7 +1375,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 {
   "userId": "550e8400-e29b-41d4-a716-446655440015",
   "distanceMeters": 1520,               // 현재까지 이동 거리(서버가 좌표로 누적)
-  "targetDistanceMeters": 5000,         // 목표 거리(m)
+  "targetDistanceMeters": 5000,         // 목표 거리(m). 목표 없는 솔로 방은 null
   "currentPaceSecondsPerKm": 345,       // 현재 페이스(초/km), nullable
   "paused": false                       // 일시정지 중이면 true
 }
@@ -1440,6 +1441,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 }
 ```
 
+- `forced`는 필수다 — 비우면 `INVALID_REQUEST`로 거부한다
 - `forced`는 사용자가 조기 종료를 선택했는지 나타낼 뿐 최종 상태를 결정하지 않는다. 서버가 확정한 거리가 목표 이상이면 `COMPLETED`, 미달이면 `totalDistanceMeters / targetDistanceMeters`를 운영 설정 비율과 비교해 이상은 `RUNNING_LEFT_NO_PENALTY`, 미만은 `RUNNING_LEFT_PENALTY`로 전환한다
 - 종료 시각을 `deleted_at`에 기록한다 — `COMPLETED`·`RUNNING_LEFT_*` 공통이다. 비우면 활성 신청으로 남아 다음 매칭을 신청할 수 없다
 - 종료 신호나 강제 종료에 마지막 수신 데이터로 거리·페이스·구간·칼로리·고도 지표를 계산한다. 칼로리는 확정 거리·시간과 사용자 체중으로, 고도는 노이즈를 필터링한 기기 GPS 고도로 계산한다
