@@ -993,9 +993,19 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **방 ID만 돌려준다.** 방 정보·참가자 목록·모집 마감 시각(`closeAt`)은 **연결 직후 스트림이 `RoomInfo` 스냅샷으로 나른다** — 응답과 스트림이 같은 값을 두 벌로 내리지 않는다. 솔로 개시(`POST /running-rooms/solo`)와 응답 모양이 같다
 - **응답을 받은 뒤 SSE 스트림에 연결한다**
-- **에러 (400 Bad Request)**: 허용 범위 밖의 값 — 요청 검증 단계에서 걸린다
+- **에러 (400 Bad Request)**: 값이 없거나 허용 범위 밖이다 — 요청 검증 단계에서 걸린다
 
 ```json
+{
+  "code": "INVALID_REQUEST",
+  "message": "희망 시작 시각은 필수입니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "목표 거리는 필수입니다."
+}
+
 {
   "code": "INVALID_REQUEST",
   "message": "시작 시각은 18:00부터 22:00까지 30분 간격으로만 선택할 수 있습니다."
@@ -1070,6 +1080,15 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **시각으로 취소를 차단하지 않는다.** 시작 직전까지 호출할 수 있고 늦은 이탈은 쿨다운으로 다룬다
 - **Response `204 No Content`** — 이후 클라는 SSE 스트림을 닫는다
 - **에러 (404 Not Found)**: 활성 신청이 없다
+- **에러 (409 Conflict)**: 본인이 이미 러닝을 시작했다(참가자 `RUNNING`)
+
+```json
+{
+  "code": "MATCH_ALREADY_STARTED",
+  "message": "이미 시작된 러닝은 취소할 수 없습니다."
+}
+```
+
 - **인증**: 필요
 
 #### 매칭 상태 복원 — `GET /api/v1/users/me/status`
@@ -2438,7 +2457,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 }
 ```
 
-- **에러 (400 Bad Request — 본인 키가 아니거나 형식이 어긋남)**
+- **에러 (400 Bad Request — 본인 키가 아니거나, 올라간 파일이 10MB를 넘거나 `Content-Type`이 허용값이 아님)**
 
 ```json
 {
