@@ -4,6 +4,7 @@ import com.runiverse.running_service.application.auth.command.signup.SignUpComma
 import com.runiverse.running_service.application.auth.command.signup.SignUpHandler;
 import com.runiverse.running_service.application.running.command.solo.OpenSoloRoomCommand;
 import com.runiverse.running_service.application.running.command.solo.OpenSoloRoomHandler;
+import com.runiverse.running_service.application.running.command.solo.SoloProperties;
 import com.runiverse.running_service.application.running.command.start.StartRunningCommand;
 import com.runiverse.running_service.application.running.command.start.StartRunningHandler;
 import com.runiverse.running_service.application.running.command.start.StartRunningResult;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -54,7 +56,11 @@ public class StartRunningIntegrationTest extends IntegrationTestSupport {
                 runningStore,     // ExistsActiveRunningPlayerPort
                 onboardingStore,  // LoadUserAvgPacePort
                 runningStore,     // CreateRunningPlayerPort
-                runningStore      // CreateRunningRoomPort
+                runningStore,     // CreateRunningRoomPort
+                // 강제 종료 예약은 이 테스트의 주제가 아니다 — 아무것도 하지 않는다
+                (type, targetId, executeAt) -> {
+                },                // ScheduleJobPort
+                new SoloProperties(Duration.ofHours(6))
         );
         handler = new StartRunningHandler(
                 runningStore,     // LockRunningPlayerPort

@@ -5,7 +5,9 @@ import com.runiverse.running_service.application.auth.command.signup.SignUpHandl
 import com.runiverse.running_service.application.running.command.solo.OpenSoloRoomCommand;
 import com.runiverse.running_service.application.running.command.solo.OpenSoloRoomHandler;
 import com.runiverse.running_service.application.running.command.solo.OpenSoloRoomResult;
+import com.runiverse.running_service.application.running.command.solo.SoloProperties;
 import com.runiverse.running_service.application.running.exception.AlreadyRunningException;
+import com.runiverse.running_service.application.scheduling.command.schedule.ScheduleJobHandler;
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingCommand;
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingHandler;
 import com.runiverse.running_service.application.user.exception.OnboardingNotCompletedException;
@@ -15,12 +17,16 @@ import com.runiverse.running_service.domain.running.player.vo.RunningPlayerStatu
 import com.runiverse.running_service.domain.running.room.RunningRoom;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
+import com.runiverse.running_service.domain.scheduling.ScheduledJob;
+import com.runiverse.running_service.domain.scheduling.vo.ScheduledJobType;
 import com.runiverse.running_service.integration_test.IntegrationTestSupport;
+import com.runiverse.running_service.integration_test.fake.InMemoryScheduledJobStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -34,13 +40,17 @@ public class OpenSoloRoomIntegrationTest extends IntegrationTestSupport {
     private static final String EMAIL = "runner@runiverse.com";
     private static final String NICKNAME = "러너킴";
     private static final int AVG_PACE = 330;   // 5분 30초/km
+    // 운영 설정과 같은 값
+    private static final Duration FORCE_FINISH_OFFSET = Duration.ofHours(6);
 
+    private InMemoryScheduledJobStore scheduledJobStore;
     private SignUpHandler signUpHandler;
     private CompleteOnboardingHandler completeOnboardingHandler;
     private OpenSoloRoomHandler handler;
 
     @BeforeEach
     void setUp() {
+        scheduledJobStore = new InMemoryScheduledJobStore();
         signUpHandler = newSignUpHandler();
         completeOnboardingHandler = new CompleteOnboardingHandler(
                 userStore,        // LoadUserByIdPort
@@ -52,7 +62,11 @@ public class OpenSoloRoomIntegrationTest extends IntegrationTestSupport {
                 runningStore,     // ExistsActiveRunningPlayerPort
                 onboardingStore,  // LoadUserAvgPacePort — 페이스 출처가 user_onboardings다
                 runningStore,     // CreateRunningPlayerPort
-                runningStore      // CreateRunningRoomPort
+                runningStore,     // CreateRunningRoomPort
+                // 타이머 등록과 전파는 이 테스트의 주제가 아니다 — 저장된 예약만 본다
+                new ScheduleJobHandler(scheduledJobStore, event -> {
+                }),
+                new SoloProperties(FORCE_FINISH_OFFSET)
         );
     }
 
@@ -123,6 +137,23 @@ public class OpenSoloRoomIntegrationTest extends IntegrationTestSupport {
         assertThat(room.getCloseAt()).isEmpty();
         assertThat(room.getTargetDistance()).isEmpty();
         assertThat(room.getPlayerCount().max()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("솔로 방도 시작 시각 + 유예에 강제 종료를 예약한다")
+    void schedulesForceFinish() {
+        // given -> 앱이 방 번호를 잃으면 종료 메시지가 영영 오지 않는다
+        UUID userId = onboardedUser();
+
+        // when
+        OpenSoloRoomResult result =
+                handler.handle(new OpenSoloRoomCommand(userId));
+
+        // then -> 서버가 대신 닫아야 활성 신청이 풀려 다음 러닝을 열 수 있다
+        ScheduledJob job = scheduledJobStore
+                .findBy(ScheduledJobType.RUNNING_FORCE_FINISH, result.runningRoomId())
+                .orElseThrow();
+        assertThat(job.getExecuteAt()).isEqualTo(result.startAt().plus(FORCE_FINISH_OFFSET));
     }
 
     @Test

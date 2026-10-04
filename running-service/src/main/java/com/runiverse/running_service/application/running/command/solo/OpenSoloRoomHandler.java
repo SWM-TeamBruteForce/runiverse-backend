@@ -1,6 +1,7 @@
 package com.runiverse.running_service.application.running.command.solo;
 
 import com.runiverse.running_service.application.common.port.out.LoadUserAvgPacePort;
+import com.runiverse.running_service.application.common.port.out.ScheduleJobPort;
 import com.runiverse.running_service.application.running.exception.AlreadyRunningException;
 import com.runiverse.running_service.application.running.port.in.OpenSoloRoomUsecase;
 import com.runiverse.running_service.application.running.port.out.CreateRunningPlayerPort;
@@ -12,6 +13,7 @@ import com.runiverse.running_service.domain.running.metric.vo.Pace;
 import com.runiverse.running_service.domain.running.player.RunningPlayer;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerId;
 import com.runiverse.running_service.domain.running.room.RunningRoom;
+import com.runiverse.running_service.domain.scheduling.vo.ScheduledJobType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +29,8 @@ public class OpenSoloRoomHandler implements OpenSoloRoomUsecase {
     private final LoadUserAvgPacePort loadUserAvgPacePort;
     private final CreateRunningPlayerPort createRunningPlayerPort;
     private final CreateRunningRoomPort createRunningRoomPort;
+    private final ScheduleJobPort scheduleJobPort;
+    private final SoloProperties soloProperties;
 
     @Override
     public OpenSoloRoomResult handle(OpenSoloRoomCommand command) {
@@ -50,7 +54,11 @@ public class OpenSoloRoomHandler implements OpenSoloRoomUsecase {
         //    (player 쪽은 NOT NULL이라 Distance.unlimited()가 들어간다)
         RunningRoom room = createRunningRoomPort.create(
                 RunningRoom.openSolo(userId, playerId, avgPace.secondsPerKm(), null, startAt));
-        return new OpenSoloRoomResult(
-                room.getRunningRoomId().orElseThrow().value(), startAt);
+        Long roomId = room.getRunningRoomId().orElseThrow().value();
+        // 5. 앱이 방 번호를 잃으면 종료가 영영 오지 않아 활성 신청이 다음 러닝을 막는다 —
+        //    매칭 방처럼 서버가 대신 닫을 예약을 같은 트랜잭션에서 건다
+        scheduleJobPort.schedule(ScheduledJobType.RUNNING_FORCE_FINISH, roomId,
+                startAt.plus(soloProperties.forceFinishOffset()));
+        return new OpenSoloRoomResult(roomId, startAt);
     }
 }

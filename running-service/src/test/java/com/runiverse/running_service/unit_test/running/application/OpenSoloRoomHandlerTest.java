@@ -2,9 +2,11 @@ package com.runiverse.running_service.unit_test.running.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.common.port.out.LoadUserAvgPacePort;
+import com.runiverse.running_service.application.common.port.out.ScheduleJobPort;
 import com.runiverse.running_service.application.running.command.solo.OpenSoloRoomCommand;
 import com.runiverse.running_service.application.running.command.solo.OpenSoloRoomHandler;
 import com.runiverse.running_service.application.running.command.solo.OpenSoloRoomResult;
+import com.runiverse.running_service.application.running.command.solo.SoloProperties;
 import com.runiverse.running_service.application.running.exception.AlreadyRunningException;
 import com.runiverse.running_service.application.running.port.out.CreateRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.CreateRunningRoomPort;
@@ -19,14 +21,16 @@ import com.runiverse.running_service.domain.running.player.vo.RunningPlayerStatu
 import com.runiverse.running_service.domain.running.room.RunningRoom;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
+import com.runiverse.running_service.domain.scheduling.vo.ScheduledJobType;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
@@ -35,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,6 +49,7 @@ public class OpenSoloRoomHandlerTest {
     private static final int AVG_PACE = 330;          // 5분 30초/km
     private static final long PLAYER_ID = 42L;
     private static final long ROOM_ID = 125L;
+    private static final Duration FORCE_FINISH_OFFSET = Duration.ofHours(6);
 
     @Mock
     private ExistsActiveRunningPlayerPort existsActiveRunningPlayerPort;
@@ -57,8 +63,17 @@ public class OpenSoloRoomHandlerTest {
     @Mock
     private CreateRunningRoomPort createRunningRoomPort;
 
-    @InjectMocks
+    @Mock
+    private ScheduleJobPort scheduleJobPort;
+
     private OpenSoloRoomHandler handler;
+
+    @BeforeEach
+    void setUp() {
+        handler = new OpenSoloRoomHandler(existsActiveRunningPlayerPort, loadUserAvgPacePort,
+                createRunningPlayerPort, createRunningRoomPort, scheduleJobPort,
+                new SoloProperties(FORCE_FINISH_OFFSET));
+    }
 
     // 어댑터가 ID를 채워 돌려주는 상황을 흉내 낸다
     private static RunningPlayer savedPlayer(UUID userId) {
@@ -183,6 +198,25 @@ public class OpenSoloRoomHandlerTest {
     }
 
     @Test
+    @DisplayName("시작 시각 + 솔로 유예에 강제 종료를 예약한다")
+    void schedulesForceFinish() {
+        // given
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        given(existsActiveRunningPlayerPort.existsActive(new UserId(userId))).willReturn(false);
+        given(loadUserAvgPacePort.loadAvgPace(new UserId(userId)))
+                .willReturn(Optional.of(new Pace(AVG_PACE)));
+        given(createRunningPlayerPort.create(any())).willReturn(savedPlayer(userId));
+        given(createRunningRoomPort.create(any())).willReturn(savedRoom());
+
+        // when
+        OpenSoloRoomResult result = handler.handle(new OpenSoloRoomCommand(userId));
+
+        // then -> 앱이 방 번호를 잃으면 종료가 영영 오지 않는다 — 서버가 대신 닫아 신청을 푼다
+        verify(scheduleJobPort).schedule(ScheduledJobType.RUNNING_FORCE_FINISH, ROOM_ID,
+                result.startAt().plus(FORCE_FINISH_OFFSET));
+    }
+
+    @Test
     @DisplayName("진행 중인 신청이 있으면 새로 시작하지 못한다")
     void rejectsWhenAlreadyRunning() {
         // given -> "한 플레이어 = 최대 한 방"은 DB가 강제하지 않아 앱이 막는다
@@ -193,8 +227,9 @@ public class OpenSoloRoomHandlerTest {
         assertThatThrownBy(() -> handler.handle(new OpenSoloRoomCommand(userId)))
                 .isInstanceOf(AlreadyRunningException.class);
 
-        // 중복 검사에서 걸리면 페이스 조회도 저장도 하지 않는다
-        verifyNoInteractions(loadUserAvgPacePort, createRunningPlayerPort, createRunningRoomPort);
+        // 중복 검사에서 걸리면 페이스 조회도 저장도 예약도 하지 않는다
+        verifyNoInteractions(loadUserAvgPacePort, createRunningPlayerPort, createRunningRoomPort,
+                scheduleJobPort);
     }
 
     @Test
@@ -210,6 +245,6 @@ public class OpenSoloRoomHandlerTest {
                 .isInstanceOf(OnboardingNotCompletedException.class);
 
         // 아무것도 저장되지 않아야 한다 — 신청만 남으면 유저가 영영 다시 못 뛴다
-        verifyNoInteractions(createRunningPlayerPort, createRunningRoomPort);
+        verifyNoInteractions(createRunningPlayerPort, createRunningRoomPort, scheduleJobPort);
     }
 }

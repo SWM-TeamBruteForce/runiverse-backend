@@ -10,6 +10,7 @@ import com.runiverse.running_service.application.running.command.location.Update
 import com.runiverse.running_service.application.running.command.location.UpdateRunningLocationResult;
 import com.runiverse.running_service.application.running.command.solo.OpenSoloRoomCommand;
 import com.runiverse.running_service.application.running.command.solo.OpenSoloRoomHandler;
+import com.runiverse.running_service.application.running.command.solo.SoloProperties;
 import com.runiverse.running_service.application.running.command.start.StartRunningCommand;
 import com.runiverse.running_service.application.running.command.start.StartRunningHandler;
 import com.runiverse.running_service.application.running.common.RunningFinishProperties;
@@ -83,7 +84,11 @@ public class FinishRunningIntegrationTest extends IntegrationTestSupport {
                 runningStore,     // ExistsActiveRunningPlayerPort
                 onboardingStore,  // LoadUserAvgPacePort
                 runningStore,     // CreateRunningPlayerPort
-                runningStore      // CreateRunningRoomPort
+                runningStore,     // CreateRunningRoomPort
+                // 강제 종료 예약은 이 테스트의 주제가 아니다 — 아무것도 하지 않는다
+                (type, targetId, executeAt) -> {
+                },                // ScheduleJobPort
+                new SoloProperties(Duration.ofHours(6))
         );
         startRunningHandler = new StartRunningHandler(
                 runningStore,     // LockRunningPlayerPort

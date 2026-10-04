@@ -1279,6 +1279,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **WS 연결 후 클라가 보내는 첫 메시지다.** 채널 등록·방 시작·참가자 시작을 이 하나가 다 한다 — 클라는 최초 진입인지 재연결인지 구분하지 않고 언제나 같은 메시지를 보낸다
   - **의도적으로 나간 사람은 돌아오지 못한다.** 나가기는 활성 신청을 닫으므로(`running_players.deleted_at`) 이후 `RUNNING_START`는 참가자 확인 단계에서 `NOT_ROOM_PLAYER`로 거부된다. 반면 네트워크가 끊긴 것뿐이면 신청도 배정도 그대로라 이어 뛴다 — 서버는 끊긴 원인을 추측하지 않고 나가기 요청이 있었는지만 본다
+  - **강제 종료로 닫힌 러닝에도 돌아오지 못한다.** 강제 종료(`start_at + 유예`)가 신청을 닫으므로 이후 `RUNNING_START`는 `NOT_ROOM_PLAYER`다. 클라는 로컬에 남은 방 번호와 트랙을 지우고 `GET /users/me/status`로 현재 상태를 다시 받는다
 - `runningRoomId`는 이미 손에 있다 — 솔로는 `POST /running-rooms/solo`의 201 응답, 매칭은 SSE `RoomInfo`에서 받는다
 - **서버 처리 순서**
 
