@@ -74,6 +74,7 @@
 | created_at / updated_at | timestamp | NOT NULL | |
 
 > UNIQUE (provider, provider_id) — 같은 소셜 계정 중복 연결 방지.
+> CHECK `ck_oauth_user_provider`: `provider in ('KAKAO', 'GOOGLE')`
 
 ### user_devices
 

@@ -16,6 +16,7 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Check;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
@@ -30,6 +31,7 @@ import java.util.UUID;
                 columnNames = {"provider", "provider_id"}
         )
 )
+@Check(name = "ck_oauth_user_provider", constraints = "provider in ('KAKAO', 'GOOGLE')")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OauthUserJpaEntity extends BaseTimeEntity {
 
