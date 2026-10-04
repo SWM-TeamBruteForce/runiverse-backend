@@ -166,13 +166,14 @@
 - **친구 관계**: 토글이 아니며 요청·수락·삭제를 10-4~10-6으로 나눈다.
 - **이미지 업로드 공통(Presigned)**: ① 업로드 URL 발급 API → ② 클라가 S3에 직접 업로드 → ③ 반환받은 `key`(또는 완료 API)를 본 API에 전달
 - **탈퇴 유저 표시**: 작성자·러닝 참가자는 `{ "userId": "550e8400-...", "nickname": "탈퇴한 사용자", "profileImageUrl": null, "isDeleted": true }`로 반환한다(`userId`는 유지).
-- **값이 없는 필드**: 조회 응답에서는 `null`이다(`profileImageUrl`·`introduction`·`friendStatus` 등). 수정 응답(11-2·11-6·11-7)은 보낸 필드만 담아 돌려주므로 그쪽의 `null`은 "보내지 않았다"를 뜻한다.
+- **값이 없는 필드**: 조회 응답에서는 `null`이다(`profileImageUrl`·`introduction`·`friendStatus` 등). 수정 응답(11-2·11-6·11-7)은 보낸 필드만 담는다 — 11-6에서 보내지 않은 필드는 키째 빠진다(11-2·11-7은 필드가 하나뿐이다).
 - **수정 응답의 범위**: `PATCH`가 본문을 반환하면 저장 후의 리소스 전체 표현을 담는다(12-3). 반환할 표현이 없으면 `204 No Content`다. 위 세 API(11-2·11-6·11-7)는 보낸 필드만 담는 기존 계약이라 그대로 유지한다. 저장 위치가 여러 테이블로 나뉘는지는 기준이 아니다.
 - **`[MVP 제외]` 표기**: 지금 만들지 않는 엔드포인트. 정의는 그대로 두어 확장 시점에 재작성 없이 쓴다. 마커가 없으면 만드는 것이며, 차수(1차·2차)는 적지 않는다.
 
 ### 공통 에러 응답
 
 인증 필요(`인증: 필요`) API → **401**, 모든 API → **400**·**500** 공통 발생. 각 엔드포인트 명세엔 특유 에러만 표기. 검증 실패 시 `code`는 `INVALID_REQUEST` 공통이고 `message`로 사유를 구분한다.
+`인증: 불필요` API도 `Authorization` 헤더가 있으면 토큰을 검증하며, 실패하면 아래 401을 낸다 — 클라이언트는 공개 API(1-1~1-7·11-3·11-8)에 헤더를 싣지 않는다.
 
 검증에 실패한 필드가 둘 이상이거나 한 필드에서 제약이 둘 이상 깨지면 `message`는 각 사유를 공백으로 이어 붙인 한 문자열이며, **문장 순서는 보장하지 않는다**. 각 엔드포인트의 400 예시는 사유를 하나씩 보여주는 것이지 나올 수 있는 조합을 모두 나열한 것이 아니다. 클라이언트는 `message`를 문서 문구와 정확히 비교하거나 파싱해 어느 필드가 틀렸는지 역추적하지 않는다 — 필드 단위 안내는 클라이언트 자체 검증으로 처리하고, 서버 `message`는 그대로 노출한다.
 
@@ -836,7 +837,7 @@
   "type": "MATCH",                              // MATCH | SOLO — status가 IDLE이면 null
   "runningRoomId": 125,                         // status가 IDLE이면 null
   "scheduledStartAt": "2026-07-25T19:00:00",    // status가 IDLE이면 null
-  "targetDistanceMeters": 5000,                 // 목표 없는 솔로 방은 null
+  "targetDistanceMeters": 5000,                 // status가 IDLE이거나 목표 없는 솔로 방이면 null
   "cooldownUntil": null                         // 제재 쿨다운이 남아 있으면 그 시각
 }
 ```
@@ -907,8 +908,8 @@
 
 - **DB row 트리거** — `running_room_sessions`가 신청과 방을 잇는다(신청 즉시 방이 생기므로 배정 row도 항상 있다). 현재 속한 방은 `is_connected=true`인 행이다
   - row 생성 = 매칭 신청·솔로 개시 시. 새 방을 만들거나 기존 모집 중인 방에 배정된다
-  - 취소·나가기 요청 시 서버가 방 상태로 분기한다(5-A 참고). 어느 쪽이든 배정 행은 `is_connected=false`로 남아 이력이 된다
-  - 참가자가 모두 빠져 `current_player_count`가 `0`이 되면 방을 닫는다 — **시작 전이면 항상 `CANCELLED`**, **시작 후면 유효 기록이 하나라도 저장됐을 때만 `FINISHED`**이고 없으면 `CANCELLED`다. 각 참가자 row는 유지하되 취소·이탈 시각을 `deleted_at`에 기록하고 배정 행은 `is_connected=false`로 남긴다
+  - 취소·나가기 요청 시 서버가 모집 마감 시각으로 분기한다(5-A 참고). 어느 쪽이든 배정 행은 `is_connected=false`로 남아 이력이 된다
+  - 시작 전에는 참가자가 모두 빠져 `current_player_count`가 `0`이 되면 방을 `CANCELLED`로 닫는다. **시작 후에는 인원이 줄지 않으며**, `RUNNING` 참가자가 모두 종료되면 유효 기록이 하나라도 저장됐을 때 `FINISHED`, 없으면 `CANCELLED`다. 각 참가자 row는 유지하되 취소·이탈 시각을 `deleted_at`에 기록하고 배정 행은 `is_connected=false`로 남긴다
 
 ### 5-A. 매칭 중 (홈 → 매칭 대기 화면)
 
@@ -920,6 +921,7 @@
   - **이 응답에만 본문이 없다.** 요청 `Accept`가 `text/event-stream`이라 다른 에러처럼 JSON 본문을 실을 수 없다. 클라는 상태 코드로 판단하고, 신청 응답을 받기 전에는 스트림을 열지 않는다.
   - 앱 재시작·포그라운드 복귀 시엔 스트림을 다시 열고, **연결 직후 내려오는 `RoomInfo` 스냅샷으로 상태를 복원한다.**
 - **종료 시점**: `RUNNING_STARTED` ack 뒤, 또는 매칭 취소(`DELETE /running-matches`)의 204를 받은 뒤 클라이언트가 닫는다.
+- **서버도 스트림을 닫는다** — 열린 지 운영값(현재 30분)이 지나면, 같은 사용자의 새 연결이 들어오면, 탈퇴하면 닫는다. 활성 신청이 남아 있으면 클라는 다시 연결하고 연결 직후 스냅샷으로 상태를 복원한다.
 - **연결을 화면 생명주기에 묶지 않는다.** 홈을 벗어나도 스트림은 살아 있어야 한다(근거는 `feature-spec.md` 매칭·러닝 설계 절)
 - **이벤트 형식** — 타입은 SSE `event` 필드로, 본문은 `data`에 JSON으로 싣는다
 
@@ -931,11 +933,11 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | 이벤트 | 시점 |
 |---|---|
 | `MATCH_STARTED` | 매칭 확정 — `data` = `RoomInfo` |
-| `MATCH_ROOM_UPDATED` | 인원 변동·방 취소·연결 직후 스냅샷 — `data` = `RoomInfo`. 러닝 시작은 이 이벤트로 알리지 않는다 |
+| `MATCH_ROOM_UPDATED` | 인원 변동·연결 직후 스냅샷 — `data` = `RoomInfo`. 러닝 시작은 이 이벤트로 알리지 않는다 |
 | `RUNNING_READY` | 곧 시작 통지 — `start_at` 직전에 한 번 (5-C) |
 
 - 연결 직후 서버가 현재 상태를 보낸다. 각 이벤트는 변경분이 아니라 해당 객체의 전체 상태를 담으므로 `Last-Event-ID` 재개는 사용하지 않는다.
-- **keep-alive**: 주기적으로 주석 라인(`: ping`)을 보내 프록시 유휴 타임아웃을 막는다. 주기는 운영값.
+- **keep-alive**: 주기적으로 주석 라인(`:ping`)을 보내 프록시 유휴 타임아웃을 막는다. 주기는 운영값.
 - 스트림은 수신 전용이라 요청 실패라는 개념이 없다 — 오류는 신청·취소 REST 응답으로 전달된다.
 
 #### `GET /api/v1/running-matches/slots` — 시간대별 대기 인원
@@ -1110,7 +1112,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 ```json
 {
   "runningRoomId": 125,
-  "status": "MATCHED",               // running_rooms.status: MATCHING|MATCHED|STARTED|FINISHED|CANCELLED — CANCELLED면 클라는 홈으로
+  "status": "MATCHED",               // running_rooms.status: MATCHING|MATCHED|STARTED|FINISHED|CANCELLED — CANCELLED는 현재 내려오지 않는다(받으면 홈으로)
   "scheduledStartAt": "2026-07-25T19:00:00",
   "closeAt": "2026-07-25T18:50:00",  // 모집 마감 시각 — start_at - 오프셋(운영값, 현재 10분) 계산값
   "targetDistanceMeters": 5000,
@@ -1136,8 +1138,8 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 }
 ```
 
-- **참가자별 `status`는 내려보내지 않는다** — 이탈자는 배정 행이 `is_connected=false`가 되어 목록에서 빠지므로 남아 있는 참가자는 전부 `JOINED`다. 방의 진행 단계는 위 `status`가 나른다
-- **탈퇴한 참가자도 목록에서 빼지 않는다** — 빼면 `players.length`가 방 인원과 어긋난다. §0 규칙대로 닉네임·사진을 익명 처리하고 `isDeleted: true`로 표시한다
+- **참가자별 `status`는 내려보내지 않는다** — 이탈자는 배정 행이 `is_connected=false`가 되어 목록에서 빠지므로 남아 있는 참가자는 아직 끝나지 않은 참가자(`JOINED`·`RUNNING`)다. 방의 진행 단계는 위 `status`가 나른다
+- **탈퇴한 참가자는 목록에서 빠진다** — 시작 전 탈퇴는 일반 취소처럼 방에서 빠지며 인원도 줄고, 시작 후 탈퇴는 배정이 끊겨 목록에서 빠진다. `isDeleted`는 §0 공통 형식이라 계약에 남지만 이 목록에서는 현재 항상 `false`다
 
 #### `MATCH_STARTED` (SSE) — 매칭 성사 통지
 
@@ -1146,7 +1148,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 #### `MATCH_ROOM_UPDATED` (SSE) — 매칭방 정보 갱신
 
-- `data` = `RoomInfo` 전체 재전송. **모집 중 인원 변동, 방 취소, 그리고 연결 직후 스냅샷이 이 이벤트로 나간다**
+- `data` = `RoomInfo` 전체 재전송. **모집 중 인원 변동과 연결 직후 스냅샷이 이 이벤트로 나간다**
 - **`STARTED` 전환은 이 이벤트로 알리지 않는다** — 시작 통지는 `RUNNING_READY`가 맡고(5-C), 방의 `STARTED` 전환은 `start_at` 정각의 시작 스케줄러가 일으킨다. 다만 그 뒤에 붙은 스냅샷에는 `status: "STARTED"`가 실려 온다
 - 클라는 **받으면 무조건 `RoomInfo`로 화면을 다시 그린다.** 무슨 일이 있었는지는 `status`와 `players`가 말해주므로 이벤트를 더 쪼개지 않는다
 
@@ -1155,10 +1157,10 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | `MATCHING` | 대기 화면 — 인원·마감 시각 갱신 |
 | `MATCHED` | 대기방 |
 | `STARTED` | 이미 시작된 방이다(재연결 스냅샷 등) — 러닝 화면으로 이어가고 WS `RUNNING_START`를 보낸다 |
-| `CANCELLED` | 홈으로 |
+| `CANCELLED` | 홈으로 — 현재 서버는 보내지 않는다(아래) |
 
 - **`MATCH_STARTED`와 나뉘는 이유는 "전이"와 "상태"의 차이다.** `status=MATCHED`는 재연결 스냅샷으로도 오므로, 그것만 보면 확정 연출을 볼 때마다 반복하게 된다. 확정된 그 순간은 `MATCH_STARTED`가, 그 밖의 모든 갱신은 이 이벤트가 맡는다
-- 방 취소(참가자 전원 이탈)도 별도 이벤트 없이 `status: "CANCELLED"`로 전달한다
+- 방 취소는 마지막 참가자가 나갈 때만 일어나 받을 사람이 없으므로 이벤트를 보내지 않는다. `CANCELLED`는 방어적으로만 처리한다
 
 #### 방 나가기 — 별도 이벤트 없음
 
@@ -1218,7 +1220,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **연결**: `wss://.../api/v1/ws/running` + `Authorization: Bearer {accessToken}`
 - **인증 실패**: 업그레이드를 거부하고 **HTTP 401**로 응답한다 — 연결이 서기 전이라 `ERROR` 프레임을 쓸 수 없다. 본문은 REST 에러 포맷과 같다. 클라는 `POST /auth/refresh` 후 재연결하고, 다시 실패하면 재로그인으로 보낸다. 같은 이유로 아래 `ERROR`의 code 목록에는 인증 코드가 없다
 - **토큰은 핸드셰이크에서 한 번만 검증한다** — 연결 유지 중 `accessToken`이 만료돼도 끊지 않는다. 러닝 구간이 토큰 수명보다 길어 만료마다 끊으면 좌표 전달이 그때마다 멈추고 갱신·재연결·재전송 비용이 든다. 재연결은 같은 러닝으로 이어지므로 기록이 갈리지는 않는다. 단 탈퇴하면 서버가 연결을 닫는다(close code `1000`). 토큰이 폐기돼 재연결 핸드셰이크가 401로 막힌다. 클라는 REST용 토큰을 평소대로 갱신하고, 새 토큰은 재연결할 때만 쓴다
-- **중복 연결은 마지막 것만 남긴다** — 같은 사용자의 새 연결이 들어오면 서버가 기존 연결을 close code `4001`로 닫는다. 기기 전환·앱 재시작 때 이전 소켓이 남아 있을 수 있는데 둘 다 살려두면 같은 `(runningRoomId, userId, sequence)`에 서로 다른 트랙이 섞인다. `4001`을 받은 클라는 재연결하지 않는다 — 다른 기기가 이어받은 것이다
+- **중복 연결은 마지막 것만 남긴다** — 같은 사용자의 새 연결이 `RUNNING_START`를 보내면 서버가 기존 연결을 close code `4001`로 닫는다. 기기 전환·앱 재시작 때 이전 소켓이 남아 있을 수 있는데 둘 다 살려두면 같은 `(runningRoomId, userId, sequence)`에 서로 다른 트랙이 섞인다. `4001`을 받은 클라는 재연결하지 않는다 — 다른 기기가 이어받은 것이다
 - **보낼 메시지가 밀려 한도(운영값)를 넘으면 서버가 close code `4500`으로 닫는다** — 네트워크가 끊긴 것에 가까운 상태라 연결을 정리하고 재연결로 복구한다. `4001`이 아니므로 클라는 평소대로 재연결한다
 - **keep-alive**: 클라가 주기적으로 `HEALTH_CHECK`(C→S)를 보내고 서버가 `HEALTH_CHECKED`(S→C)로 응답한다. 둘 다 `data`는 비운다. **유휴 상태가 서버 설정 시간(운영값)을 넘으면 서버가 연결을 닫는다** — 좌표를 계속 보내는 러닝 중에는 별도 신호가 필요 없고, 시작 전 대기 구간에서 의미가 있다. 프록시 유휴 타임아웃을 막는 목적은 SSE와 같다
 - **연결이 끊겨도 러닝은 끝나지 않는다** — 방·참가자 상태는 그대로 두고 재연결을 기다린다. 서버의 강제 종료는 **`start_at`부터 잰 유예**(운영값) 기준이라 연결 상태와 축이 다르다(`running_room_sessions.is_connected`도 방 배정 여부이지 접속 여부가 아니다)
@@ -1259,7 +1261,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   | `UNSUPPORTED_MESSAGE_TYPE` | 모르는 `event`이거나 S→C 전용 타입을 클라가 보냄 |
   | `INVALID_REQUEST` | `data` 검증 실패 |
   | `RUNNING_NOT_STARTED` | `RUNNING_START` 없이 러닝 중 메시지를 보냄 — 형식은 맞지만 서버에 정해진 방이 없다 |
-  | `RUNNING_SESSION_UNAVAILABLE` | 외부 저장소 장애로 세션을 등록하지 못함 — 러닝이 시작되지 않았으니 잠시 뒤 `RUNNING_START`를 재시도한다 |
+  | `RUNNING_SESSION_UNAVAILABLE` | 외부 저장소 장애로 세션을 등록하지 못함 — 이 연결로는 러닝 메시지를 처리할 수 없다(참가자 상태는 이미 `RUNNING`일 수 있다). 잠시 뒤 `RUNNING_START`를 다시 보낸다 — 멱등이다 |
   | `RUNNING_TRACK_UNAVAILABLE` | 외부 저장소 장애로 좌표를 저장하지 못함 — 러닝은 계속된다 |
   | `ROOM_NOT_FOUND` | 방 없음 |
   | `NOT_ROOM_PLAYER` | 이 방 참가자가 아님 |
@@ -1444,16 +1446,16 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 ```
 
 - `forced`는 필수다 — 비우면 `INVALID_REQUEST`로 거부한다
-- `forced`는 사용자가 조기 종료를 선택했는지 나타낼 뿐 최종 상태를 결정하지 않는다. 서버가 확정한 거리가 목표 이상이면 `COMPLETED`, 미달이면 `totalDistanceMeters / targetDistanceMeters`를 운영 설정 비율과 비교해 이상은 `RUNNING_LEFT_NO_PENALTY`, 미만은 `RUNNING_LEFT_PENALTY`로 전환한다
+- `forced`는 사용자가 조기 종료를 선택했는지 나타낼 뿐 최종 상태를 결정하지 않는다. 서버가 확정한 거리가 목표 이상이면 `COMPLETED`, 미달이면 `totalDistanceMeters / targetDistanceMeters`를 운영 설정 비율과 비교해 이상은 `RUNNING_LEFT_NO_PENALTY`, 미만은 `RUNNING_LEFT_PENALTY`로 전환한다. 다만 미만이어도 판정 순간 러닝에 들어온 참가자(본인·이미 끝낸 사람 포함)가 본인뿐이면 `_NO_PENALTY`다. 목표가 없는 솔로 방은 끝낸 것이 곧 완주라 `COMPLETED`다
 - 종료 시각을 `deleted_at`에 기록한다 — `COMPLETED`·`RUNNING_LEFT_*` 공통이다. 비우면 활성 신청으로 남아 다음 매칭을 신청할 수 없다
 - 종료 신호나 강제 종료에 마지막 수신 데이터로 거리·페이스·구간·칼로리·고도 지표를 계산한다. 칼로리는 확정 거리·시간과 사용자 체중으로, 고도는 노이즈를 필터링한 기기 GPS 고도로 계산한다
-- 거리·시간·경로를 산출할 수 있는 트랙이 있으면 `running_records`와 splits를 저장하고 GPS 트랙을 S3에 올려 `route_polyline`을 만든다. 그렇지 않으면 실제 거리를 0으로 판정하고 기록 없이 상태만 확정한다
+- 유효 러닝 판정(거리·시간·경로 산출 가능 + 평균 페이스 허용 범위 + 최소 거리·최소 시간, 운영값)을 통과한 트랙이면 `running_records`와 splits를 저장하고 GPS 트랙을 S3에 올려 `route_polyline`을 만든다. 통과하지 못하면 실제 거리를 0으로 판정하고 기록 없이 상태만 확정한다
 - **목표 거리를 넘겨 뛰면 목표 지점에서 끊어 기록한다.** 목표를 사이에 둔 두 좌표에서 비율로 위치·시각을 보간해 그 지점을 기록의 끝으로 삼고, `totalDistanceMeters`·`endAt`·`totalDurationSeconds`를 모두 그 기준으로 확정한다 — 거리만 자르면 페이스가 실제보다 빨라진다. 목표 이후 좌표는 기록 계산에서만 빠지고 **S3 원본 트랙에는 그대로 남는다**. 목표 미달로 끝났으면 마지막 10m 경계까지로 확정한다(10m 미만 꼬리는 버린다)
 - **구간은 목표 거리를 10m로 나눈 고정 경계다**(0-10, 10-20…). 참가자별 실제 거리로 나누지 않으므로 같은 방 참가자의 `splitNumber` N은 언제나 같은 거리 구간을 가리킨다. 경계가 정확히 10m가 되도록 그 지점도 보간해 만든다
 - **ack**: `RUNNING_FINISHED` — 수신 후 클라는 REST `GET /running-rooms/{id}/results`로 대시보드 진입
   - 목표가 있는 방은 이 요청 없이도 받을 수 있다 — 좌표 배치로 목표를 채우면 서버가 먼저 끝낸다(`RUNNING_LOCATION_UPDATE` 절)
 - `RUNNING_FINISH`는 멱등이다. 강제 종료·목표 도달 자동 종료나 이전 요청으로 이미 확정됐으면 기록을 덮어쓰지 않고 `RUNNING_FINISHED`를 다시 보내 로컬 트랙을 정리하게 한다
-- 방 시작 때 `RUNNING`으로 전환된 참가자 전원이 종료 상태가 되고 기록 확정이 끝나면 방을 `FINISHED`로 바꾼다. 강제 종료 시각(`start_at + 유예`)에는 남은 참가자를 먼저 같은 규칙으로 종료 처리하고, 한 번도 붙지 않아 `JOINED`로 남은 참가자는 확정 후 이탈로 닫는다
+- `RUNNING`이 된 참가자가 모두 종료 상태가 되고 기록 확정이 끝나면 방을 닫는다 — 유효 기록이 하나라도 있으면 `FINISHED`, 없으면 `CANCELLED`다. 강제 종료 시각(`start_at + 유예`)에는 한 번도 붙지 않아 `JOINED`로 남은 참가자를 확정 후 이탈로 먼저 닫고, 뛰던 참가자를 같은 규칙으로 종료 처리한다
 - **부수효과 — 기록을 확정할 때 시작 좌표가 외부로 나간다.** 서버가 날씨를 조회하려고 `api.open-meteo.com`(`OpenMeteo GmbH`, 스위스)에 위도·경도와 시각을 보낸다. 개인위치정보의 국외 이전이라 개인정보처리방침 고지 대상이고 Google Play 데이터 보안에는 `공유됨`으로 신고한다. 상세는 `feature-spec.md`의 날씨 절에 있다
 
 ## 6. 러닝 중 / 러닝 후 대시보드 (REST)
@@ -1802,7 +1804,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
     "totalDistanceMeters": 5020,
     "totalDurationSeconds": 1800,
     "averagePaceSecondsPerKm": 359,
-    "routePolyline": "u{~vFvyys@fS]pT_@..."   // 다운샘플 경로(encoded polyline) — 카드 지도 미리보기. running_records.route_polyline
+    "routePolyline": "u{~vFvyys@fS]pT_@..."   // 10m 경계점 경로(encoded polyline) — 카드 지도 미리보기. running_records.route_polyline
   },
   "createdAt": "2026-07-25T11:00:00",
   "updatedAt": "2026-07-25T11:00:00"
@@ -2183,7 +2185,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **계정 정보를 함께 싣는다** — 이메일과 로그인 수단을 쓰는 곳은 설정 화면뿐이지만, 설정에서 따로 호출하지 않고 앱 진입 때 받아 둔 값을 그대로 쓴다. 어차피 매번 타는 경로라 여기 얹으면 설정 진입에 추가 왕복이 없다
 - **`loginType` 판정**: `oauth_users`에 row가 있으면 그 `provider`, 없으면 `LOCAL`. `users.password_hash`의 null 여부로 판정하지 않는다 — 결과는 같지만 "무슨 계정인가"에 직접 답하는 데이터는 `oauth_users`다
-- **계정은 로컬·소셜 중 하나로 배타적이다** — 소셜 최초 가입 시 이메일이 기존 로컬 계정과 겹치면 `409`로 거부하므로(1-5/1-7) 단일 값으로 표현된다
+- **계정은 로컬·소셜 중 하나로 배타적이다** — 소셜 최초 가입 시 이메일이 기존 계정과 겹치면 `409`로 거부하므로(1-5·1-6) 단일 값으로 표현된다
 - **클라 표시 규칙**: `LOCAL`이면 로그인 수단 문구 없이 "비밀번호 변경" 메뉴를 노출하고, 소셜이면 "구글/카카오 계정으로 로그인 중"을 표시하고 메뉴를 감춘다(근거는 `feature-spec.md` 설정 페이지 절)
 - **소개글은 싣지 않는다** — 프로필 화면에서만 쓰고 10-2가 담당한다
 - **`profileImageUrl`을 내리지 않는 이유** — 11-3이 전용 조회를 제공하고, presigned URL은 TTL이 있어 표시 시점에 다시 받아야 한다. 앱 진입마다 발급하면 쓰이지 않을 URL에 S3 호출만 늘어난다
@@ -2871,7 +2873,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **화면**: 설정 (확인 팝업 후)
 - **동작 (테이블별 정책)**:
-  - 탈퇴는 활성 상태 때문에 막지 않는다. `MATCHING`이면 5-A의 대기 취소, `MATCHED`이면 방 나가기, `STARTED`이면 마지막 수신 데이터로 5-D의 종료 처리를 먼저 적용한다. 방 인원·상태를 갱신하고 남은 참가자에게 이벤트를 보낸다.
+  - 탈퇴는 활성 상태 때문에 막지 않는다. `MATCHING`이면 5-A의 대기 취소, `MATCHED`이면 방 나가기를 적용하고 인원을 갱신해 남은 참가자에게 이벤트를 보낸다. `STARTED`이면 본인이 `RUNNING`일 때 마지막 수신 데이터로 5-D의 종료 처리를, `JOINED`(미접속)일 때 강제 종료와 같은 기준의 이탈 처리를 먼저 적용한다(인원·방 상태는 그대로 둔다).
   - `delete_users` 스냅샷 후 `users`를 하드 삭제한다. `delete_users.created_at`은 스냅샷 시각이다.
   - **유지**: `feeds`/`comments`/`running_records`(+splits)/좋아요. `running_players`와 `running_room_sessions`는 상태와 무관하게 전부 유지한다 — 시작 전 신청도 지우지 않고 일반 취소처럼 닫는다(쿨다운은 걸지 않는다). 시작한 방은 기록 없는 참가자도 결과에 남고, 신청 이력은 통계에 쓴다. 사용자는 공통 탈퇴 유저 형식으로 표시한다.
   - **삭제**: `user_onboardings`(값은 `delete_users`로 스냅샷 후)/`user_devices`/`oauth_users`(`login_type` 판정 후 — 먼저 지우면 `LOCAL`로 보인다)/`friendships`/`user_colors`.
