@@ -73,12 +73,18 @@ public class CancelMatchHandler implements CancelMatchUsecase {
             // 근거는 status에 남고, "지금 막혀 있나"는 Redis TTL이 답한다
             matchCooldownPort.start(userId, matchProperties.cooldown());
         }
-        // 6. 세션을 끊고 인원을 줄인다. 0이 되면 방이 CANCELLED로 닫힌다
-        room.leave(userId, now);
-
         updateMatchApplicationPort.update(player);
+        // 6. 시작 후에는 인원을 줄이지 않는다 — current_player_count는 확정 인원으로 고정되고(erd),
+        //    방은 강제 종료가 기록 유무로 닫는다. 탈퇴 정산의 미출석 처리와 같다
+        if (!room.getStatus().isBeforeStart()) {
+            room.finishSession(userId);
+            updateMatchRoomPort.update(room);
+            return;
+        }
+        // 7. 세션을 끊고 인원을 줄인다. 0이 되면 방이 CANCELLED로 닫힌다
+        room.leave(userId, now);
         updateMatchRoomPort.update(room);
-        // 7. 남은 참가자에게 알린다. 나간 본인은 곧 스트림을 닫으므로 대상이 아니다.
+        // 8. 남은 참가자에게 알린다. 나간 본인은 곧 스트림을 닫으므로 대상이 아니다.
         // 인원이 0이면 받을 사람이 없어 발행하지 않는다
         if (room.getPlayerCount().current() > 0) {
             eventPublisher.publishEvent(new MatchRoomChangedEvent(
