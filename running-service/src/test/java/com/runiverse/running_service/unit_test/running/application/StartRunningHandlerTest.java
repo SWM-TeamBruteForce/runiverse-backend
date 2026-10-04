@@ -298,6 +298,29 @@ public class StartRunningHandlerTest {
         }
 
         @Test
+        @DisplayName("예전에 거쳐 간 방이면 지금 신청의 방이 아니므로 거부한다")
+        void rejectRoomOfPastApplication() {
+            // given -> 이 방의 내 세션은 끝난 옛 신청을 가리킨다. 지금 활성 신청은 다른 방에 있다
+            RunningRoom room = RunningRoom.builder()
+                    .runningRoomId(ROOM_ID)
+                    .type(RunningRoomType.MATCH)
+                    .status(RunningRoomStatus.STARTED)
+                    .startAt(PAST)
+                    .avgPace(AVG_PACE)
+                    .currentPlayerCount(1)
+                    .maxPlayerCount(4)
+                    .sessions(List.of(new SessionDraft(
+                            new UserId(USER_ID), new RunningPlayerId(PLAYER_ID - 1), 0, false)))
+                    .build();
+            givenStore(room, player(RunningPlayerStatus.JOINED));
+
+            // when & then -> 받아 주면 다른 방의 신청이 이 방에 되살아나 RUNNING이 된다
+            assertThatThrownBy(StartRunningHandlerTest.this::start)
+                    .isInstanceOf(NotRoomPlayerException.class);
+            verifyNoInteractions(updateRunningRoomPort, updateRunningPlayerPort);
+        }
+
+        @Test
         @DisplayName("시작 시각 전이면 거부한다")
         void rejectBeforeStartAt() {
             // given -> 매칭 클라가 카운트다운도 전에 쐈다

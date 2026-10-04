@@ -11,6 +11,7 @@ import com.runiverse.running_service.application.running.port.out.UpdateRunningR
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.metric.vo.Distance;
 import com.runiverse.running_service.domain.running.player.RunningPlayer;
+import com.runiverse.running_service.domain.running.player.vo.RunningPlayerId;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerStatus;
 import com.runiverse.running_service.domain.running.room.RoomSession;
 import com.runiverse.running_service.domain.running.room.RunningRoom;
@@ -45,8 +46,11 @@ public class StartRunningHandler implements StartRunningUsecase {
         //    잠금 순서는 취소 핸들러와 같게 참가자 → 방으로 맞춘다
         RunningRoom room = lockRunningRoomPort.lockById(new RunningRoomId(command.runningRoomId()))
                 .orElseThrow(RunningRoomNotFoundException::new);
+        // 세션은 유저가 키라 예전에 거쳐 간 방에도 남아 있다 — 지금 신청이 배정된 세션인지까지 본다.
+        // 유저만 보면 다른 방의 신청이 옛 방에 되살아나 그 방에서 RUNNING이 된다
+        RunningPlayerId playerId = player.getRunningPlayerId().orElseThrow();
         RoomSession session = room.getSessions().stream()
-                .filter(roomSession -> roomSession.isSameUser(userId))
+                .filter(roomSession -> roomSession.isSamePlayer(playerId))
                 .findFirst()
                 .orElseThrow(NotRoomPlayerException::new);
         // 도메인 예외는 WS 에러 코드로 매핑하지 않는다 — 거부 사유는 전부 여기서 걸러야 한다.

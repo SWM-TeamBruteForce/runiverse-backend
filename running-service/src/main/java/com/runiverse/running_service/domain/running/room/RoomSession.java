@@ -61,4 +61,8 @@ public class RoomSession {
     public boolean isSameUser(UserId userId) {
         return this.userId.equals(userId);
     }
+
+    public boolean isSamePlayer(RunningPlayerId runningPlayerId) {
+        return this.runningPlayerId.equals(runningPlayerId);
+    }
 }
