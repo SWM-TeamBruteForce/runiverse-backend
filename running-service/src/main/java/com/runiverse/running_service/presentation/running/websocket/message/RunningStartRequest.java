@@ -4,6 +4,6 @@ package com.runiverse.running_service.presentation.running.websocket.message;
 public record RunningStartRequest(Long runningRoomId) {
 
     public boolean isValid() {
-        return runningRoomId != null;
+        return runningRoomId != null && runningRoomId > 0;
     }
 }

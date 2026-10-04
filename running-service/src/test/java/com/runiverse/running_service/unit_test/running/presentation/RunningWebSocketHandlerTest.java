@@ -370,6 +370,18 @@ class RunningWebSocketHandlerTest {
     }
 
     @Test
+    @DisplayName("runningRoomId가 1 미만이면 유스케이스를 태우지 않고 INVALID_REQUEST로 응답한다")
+    void respondsInvalidRequestWithNonPositiveRoomId() throws Exception {
+        // when -> 유스케이스까지 가면 도메인 VO 검증에 걸려 INTERNAL_SERVER_ERROR가 된다
+        handler.handleMessage(session, runningStart("""
+                {"runningRoomId":0}"""));
+
+        // then
+        assertThatError(captureSent(), "INVALID_REQUEST", "RUNNING_START");
+        verifyNoInteractions(startRunningUsecase);
+    }
+
+    @Test
     @DisplayName("유스케이스가 튕겨내면 그 에러 코드를 ERROR로 돌려준다")
     void respondsUsecaseErrorCode() throws Exception {
         // given

@@ -43,6 +43,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -105,6 +106,15 @@ public class GetRunningSplitResultsHandlerTest {
         assertThatThrownBy(() -> handler.handle(new GetRunningSplitResultsQuery(ROOM_ID, ME)))
                 .isInstanceOf(RunningResultNotFoundException.class);
         verify(loadRunningSplitsPort, never()).loadSplits(any());
+    }
+
+    @Test
+    @DisplayName("1 미만의 방 ID는 없는 방이다 -> 조회하지 않고 404로 끊는다")
+    void 방_ID가_1_미만이면_404다() {
+        // when & then -> 도메인 VO까지 가면 500으로 마스킹된다
+        assertThatThrownBy(() -> handler.handle(new GetRunningSplitResultsQuery(0L, ME)))
+                .isInstanceOf(RunningResultNotFoundException.class);
+        verifyNoInteractions(loadRunningRoomPort);
     }
 
     @Test

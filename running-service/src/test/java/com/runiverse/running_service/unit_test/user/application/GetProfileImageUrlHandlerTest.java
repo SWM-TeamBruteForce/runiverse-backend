@@ -120,6 +120,18 @@ public class GetProfileImageUrlHandlerTest {
     }
 
     @Test
+    @DisplayName("v7이 아닌 userId는 없는 사용자로 보고 조회하지 않는다")
+    void treatsNonV7UserIdAsNotFound() {
+        // given -> 형식은 UUID지만 서버가 발급하지 않는 버전이다
+        UUID nonV7UserId = UUID.fromString("00000000-0000-4000-8000-000000000000");
+
+        // when & then -> 도메인 VO까지 가면 500으로 마스킹된다
+        assertThatThrownBy(() -> handler.handle(new GetProfileImageUrlQuery(nonV7UserId)))
+                .isInstanceOf(ProfileNotFoundException.class);
+        verifyNoInteractions(loadUserByIdPort, generateViewUrlPort);
+    }
+
+    @Test
     @DisplayName("조회할 사용자 식별자를 그대로 포트에 넘긴다")
     void looksUpRequestedUser() {
         // given
