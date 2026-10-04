@@ -23,8 +23,7 @@ public final class UserStatusResolver {
             case MATCHING -> now.isBefore(row.scheduledStartAt().minus(closeOffset))
                     ? UserRunningStatus.WAITING
                     : UserRunningStatus.READY;
-            // 닫힌 방에 활성 신청이 남아 있을 수 없다 — 종료·취소가 deleted_at을 함께 찍는다.
-            // 그래도 어긋난 데이터가 조회를 깨뜨리지 않게 IDLE로 떨어뜨린다
+            // 닫힌 방의 활성 신청은 방이 닫힌 직후 강제 종료가 정리하기 전의 잠깐뿐이다 — 할 일이 없으니 IDLE
             case FINISHED, CANCELLED -> UserRunningStatus.IDLE;
         };
     }

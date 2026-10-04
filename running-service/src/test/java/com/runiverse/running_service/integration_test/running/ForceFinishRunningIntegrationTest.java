@@ -6,6 +6,8 @@ import com.runiverse.running_service.application.match.common.MatchProperties;
 import com.runiverse.running_service.application.running.command.finish.FinishRunningHandler;
 import com.runiverse.running_service.application.running.command.forcefinish.ForceFinishRunningRoomHandler;
 import com.runiverse.running_service.application.running.command.forcefinish.RunningForceFinishExecutor;
+import com.runiverse.running_service.application.running.command.forcefinish.RunningForceFinishListener;
+import com.runiverse.running_service.application.running.command.forcefinish.RunningForceFinishRequestedEvent;
 import com.runiverse.running_service.application.running.command.location.UpdateRunningFinishJudge;
 import com.runiverse.running_service.application.running.command.location.UpdateRunningLocationCommand;
 import com.runiverse.running_service.application.running.command.location.UpdateRunningLocationHandler;
@@ -86,11 +88,14 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
     private RunScheduledJobHandler runScheduledJobHandler;
     // 제재가 실제로 걸렸는지 보려면 발급 자체를 잡아야 한다 — 근거(status)와 별개 축이다
     private Map<UUID, Duration> cooldowns;
+    private List<RunningForceFinishRequestedEvent> forceFinishRequests;
+    private RunningForceFinishListener forceFinishListener;
 
     @BeforeEach
     void setUp() {
         scheduledJobStore = new InMemoryScheduledJobStore();
         cooldowns = new HashMap<>();
+        forceFinishRequests = new ArrayList<>();
         signUpHandler = newSignUpHandler();
         completeOnboardingHandler = new CompleteOnboardingHandler(
                 userStore,        // LoadUserByIdPort
@@ -115,6 +120,11 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
                 runningRecordStore, // ExistsRunningRecordPort
                 runningRecordStore, // LoadRecentRunningPacesPort
                 onboardingStore,    // UpdateUserAvgPacePort
+                event -> {          // ApplicationEventPublisher — 커밋 뒤 전달은 테스트가 직접 한다
+                    if (event instanceof RunningForceFinishRequestedEvent request) {
+                        forceFinishRequests.add(request);
+                    }
+                },
                 FINISH_PROPERTIES
         );
         updateRunningLocationHandler = new UpdateRunningLocationHandler(
@@ -139,6 +149,7 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
                         finishRunningHandler, // FinishRunningUsecase
                         MATCH_PROPERTIES
                 );
+        forceFinishListener = new RunningForceFinishListener(forceFinishRunningRoomHandler);
         runScheduledJobHandler = new RunScheduledJobHandler(
                 scheduledJobStore, scheduledJobStore,
                 List.of(new RunningForceFinishExecutor(forceFinishRunningRoomHandler)));
@@ -401,6 +412,28 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
                 .isEqualTo(RunningPlayerStatus.MATCHED_LEFT_PENALTY);
         assertThat(cooldowns).containsOnlyKeys(noShow);
         assertThat(storedRoom(roomId).getStatus()).isEqualTo(RunningRoomStatus.FINISHED);
+    }
+
+    @Test
+    @DisplayName("뛴 사람이 모두 끝나 방이 닫히면 남은 미출석자를 예약 시각을 기다리지 않고 닫는다")
+    void settlesNoShowRightAfterRoomCloses() {
+        // given -> A가 목표를 채워 방이 닫혔고, B는 한 번도 오지 않아 활성 신청이 남았다
+        UUID runner = onboardedUser("runner@runiverse.com", "러너킴");
+        UUID noShow = onboardedUser("noshow@runiverse.com", "안온사람");
+        long roomId = givenStartedMatchRoom(runner, noShow);
+        runFor(runner, roomId, COMPLETING_POINTS);
+        assertThat(storedRoom(roomId).getStatus()).isEqualTo(RunningRoomStatus.FINISHED);
+
+        // when -> 커밋 뒤 전달
+        forceFinishRequests.forEach(forceFinishListener::forceFinish);
+
+        // then
+        assertThat(forceFinishRequests).extracting(RunningForceFinishRequestedEvent::runningRoomId)
+                .containsExactly(roomId);
+        assertThat(storedPlayer(roomId, noShow).getStatus())
+                .isEqualTo(RunningPlayerStatus.MATCHED_LEFT_PENALTY);
+        assertThat(runningStore.existsActive(new UserId(noShow))).isFalse();
+        assertThat(cooldowns).containsOnlyKeys(noShow);
     }
 
     private void recordCooldown(UserId userId, Duration cooldown) {

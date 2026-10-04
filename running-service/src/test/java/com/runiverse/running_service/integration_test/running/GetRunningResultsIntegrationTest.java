@@ -118,6 +118,8 @@ public class GetRunningResultsIntegrationTest extends IntegrationTestSupport {
                 runningRecordStore, // ExistsRunningRecordPort
                 runningRecordStore, // LoadRecentRunningPacesPort
                 onboardingStore,    // UpdateUserAvgPacePort
+                event -> {          // ApplicationEventPublisher
+                },
                 PROPERTIES
         );
         updateRunningLocationHandler = new UpdateRunningLocationHandler(
