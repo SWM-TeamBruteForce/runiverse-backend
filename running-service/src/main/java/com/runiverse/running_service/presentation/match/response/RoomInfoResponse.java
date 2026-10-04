@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-// 13번 조회의 room과 SSE 세 이벤트의 data가 이 구조를 공유한다(api-spec 5-B).
+// SSE의 MATCH_STARTED·MATCH_ROOM_UPDATED(연결 직후 스냅샷 포함)가 data로 이 구조를 쓴다(api-spec 5-B).
 // 와이어 계약이라 presentation이 갖는다 — SSE 전송도 이걸 실어 보낸다
 public record RoomInfoResponse(
         Long runningRoomId,

@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-// 13번 조회와 SSE 세 이벤트가 같은 RoomInfo를 쓴다 — 조립은 여기 한 곳에서만 한다
+// 스트림의 MATCH_STARTED·MATCH_ROOM_UPDATED가 같은 RoomInfo를 쓴다 — 조립은 여기 한 곳에서만 한다
 @Component
 @RequiredArgsConstructor
 public class RoomInfoAssembler {

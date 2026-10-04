@@ -94,7 +94,6 @@ public class UserOnboardingJpaEntity extends BaseTimeEntity {
         this.avgPace = avgPace;
     }
 
-    // 평균 페이스는 러닝 기록이 갱신하므로 변경 메서드를 두지 않는다
     public void changeGender(Gender gender) {
         this.gender = gender;
     }

@@ -107,7 +107,7 @@ public final class RunningComboEvaluator {
                 && fresh.contains(before.second())
                 && Math.abs(gapMeters(before, corrected)) <= window;
         if (overlapped) {
-            // 끊겨 있었다면 지금이 새 시작 시각이고 콤보는 1부터다
+            // 끊겨 있었다면 지금이 새 시작 시각이고 콤보는 0부터 센다
             Instant startedAt = before.inCombo() ? before.startedAt() : now;
             int comboCount = comboCount(startedAt, now, properties.tick());
             // 최고 콤보는 겹쳤다고 판정된 순간에만 갱신한다 — 봐주는 구간에도 시각은 흐르므로
