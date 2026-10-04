@@ -42,13 +42,15 @@ public class SendEmailVerificationHandler implements SendEmailVerificationUsecas
             throw new EmailVerificationCooldownException();
         }
 
-        // 3. 이메일 중복성 검사
+        // 3. 이메일 중복성 검사 — 3·4에서 끝나면 메일을 안 보냈으니 쿨다운을 되돌린다
         if (checkEmailDuplicatePort.existsByEmail(email)) {
+            releaseSendCooldownPort.release(email);
             throw new EmailAlreadyExistsException();
         }
 
         // 4. 전송 횟수 제한 확인
         if (!checkDailySendLimitPort.tryConsume(email)) {
+            releaseSendCooldownPort.release(email);
             throw new EmailVerificationDailyLimitExceededException();
         }
 

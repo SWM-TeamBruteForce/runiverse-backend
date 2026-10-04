@@ -1,11 +1,15 @@
 package com.runiverse.running_service.integration_test.auth;
 
+import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.auth.command.emailverification.SendEmailVerificationCommand;
 import com.runiverse.running_service.application.auth.command.emailverification.SendEmailVerificationHandler;
+import com.runiverse.running_service.application.auth.exception.EmailAlreadyExistsException;
 import com.runiverse.running_service.application.auth.exception.EmailSendFailedException;
 import com.runiverse.running_service.application.auth.exception.EmailVerificationCooldownException;
 import com.runiverse.running_service.application.auth.exception.EmailVerificationDailyLimitExceededException;
+import com.runiverse.running_service.domain.user.User;
 import com.runiverse.running_service.domain.user.exception.InvalidEmailFormatException;
+import com.runiverse.running_service.domain.user.vo.Provider;
 import com.runiverse.running_service.integration_test.IntegrationTestSupport;
 import com.runiverse.running_service.integration_test.fake.FakeEmailSender;
 import org.junit.jupiter.api.BeforeEach;
@@ -85,6 +89,39 @@ public class SendEmailVerificationIntegrationTest extends IntegrationTestSupport
         assertThatThrownBy(() -> handler.handle(new SendEmailVerificationCommand(EMAIL)))
                 .isInstanceOf(EmailVerificationDailyLimitExceededException.class);
         assertThat(emailSender.size()).isEqualTo(DAILY_LIMIT);
+    }
+
+    @Test
+    @DisplayName("하루 발송 한도에 막히면 쿨다운이 남지 않아 다시 요청해도 한도 초과로 응답한다")
+    void dailyLimitDoesNotHoldCooldown() {
+        // given
+        for (int i = 0; i < DAILY_LIMIT; i++) {
+            handler.handle(new SendEmailVerificationCommand(EMAIL));
+            emailVerificationStore.release(EMAIL);
+        }
+        assertThatThrownBy(() -> handler.handle(new SendEmailVerificationCommand(EMAIL)))
+                .isInstanceOf(EmailVerificationDailyLimitExceededException.class);
+
+        // when & then - 메일이 나가지 않았는데 "방금 보냈습니다"로 답하면 안 된다
+        assertThat(emailVerificationStore.hasCooldown(EMAIL)).isFalse();
+        assertThatThrownBy(() -> handler.handle(new SendEmailVerificationCommand(EMAIL)))
+                .isInstanceOf(EmailVerificationDailyLimitExceededException.class);
+    }
+
+    @Test
+    @DisplayName("가입된 이메일이면 쿨다운이 남지 않아 다시 요청해도 EmailAlreadyExistsException이 발생한다")
+    void duplicateEmailDoesNotHoldCooldown() {
+        // given
+        userStore.save(User.registerWithOauth(
+                UuidCreator.getTimeOrderedEpoch(), EMAIL, Provider.KAKAO, "3812345678"));
+        assertThatThrownBy(() -> handler.handle(new SendEmailVerificationCommand(EMAIL)))
+                .isInstanceOf(EmailAlreadyExistsException.class);
+
+        // when & then
+        assertThat(emailVerificationStore.hasCooldown(EMAIL)).isFalse();
+        assertThatThrownBy(() -> handler.handle(new SendEmailVerificationCommand(EMAIL)))
+                .isInstanceOf(EmailAlreadyExistsException.class);
+        assertThat(emailSender.isEmpty()).isTrue();
     }
 
     @Test
