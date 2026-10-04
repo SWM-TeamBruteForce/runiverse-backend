@@ -64,7 +64,7 @@ public class RunningRecordJpaEntity extends BaseCreatedAtEntity {
     // 목표를 넘겨 뛰어도 목표 지점에서 끊은 값이다 — 항상 구간 거리의 배수다
     @Column(name = "total_distance", nullable = false, updatable = false)
     private int totalDistance;
-    // 구간 duration의 합. 일시정지 시간은 빠져 end_at - start_at보다 작을 수 있다
+    // 구간 duration의 합. 서버는 일시정지를 모르므로 지금은 end_at - start_at과 같다
     @Column(name = "total_duration", nullable = false, updatable = false)
     private int totalDuration;
     // 보수 센서가 있어야 온다

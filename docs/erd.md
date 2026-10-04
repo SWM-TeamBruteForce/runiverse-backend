@@ -8,7 +8,7 @@
 
 - **PK 타입**: `users.user_id`만 **UUID**, 그 외 자체 PK는 **bigint**(auto-increment, `running_splits`만 시퀀스 — 표 참고). 연결·좋아요류(`friendships`·`user_colors`·`feed_likes`·`comment_likes`·`running_room_sessions`)는 **복합 PK**, 유저당 1 row(`user_onboardings`·`oauth_users`·`delete_users`)는 **참조 키가 곧 PK**. → API: `userId`만 UUID 문자열, 나머지 Long.
 - **FK/참조 네이밍**: 참조 테이블 PK명 그대로(예: `running_records.running_room_id`). 같은 테이블 이중 참조는 역할명(`friendships.requester_id`/`receiver_id`). `feeds.running_record_id`는 논리 참조(아래 정책).
-- **UNIQUE 표기**: 단일 컬럼 = 제약칸, 복합 UNIQUE = 표 아래 블록쿼트(`oauth_users`·`running_records`·`running_splits`·`colors`).
+- **UNIQUE 표기**: 단일 컬럼 = 제약칸, 복합 UNIQUE = 표 아래 블록쿼트(`oauth_users`·`running_records`·`running_splits`·`scheduled_jobs`·`colors`).
 - **타임스탬프**: **접미사가 타입을 말한다** — 시점은 전부 `*_at`(`timestamp`, 시간대 없음, **KST 벽시계로 저장**). 앱이 JVM 기본 타임존을 `APP_TIME_ZONE`으로 고정한다(`TimeZoneConfig`). DB에 저장하는 달력 날짜 컬럼은 `user_onboardings.birthday`뿐이며 API에서는 `YYYY-MM-DD`로 표현한다.
 - **감사 컬럼**: `created_at`·`updated_at`은 `NOT NULL`, 앱이 자동 세팅(Hibernate `@CreationTimestamp`/`@UpdateTimestamp`). **write-once 테이블은 `created_at`만 둔다**(`running_records`·`running_splits`·`feed_images`·좋아요류·`user_colors`) — 고치지 않으므로 `updated_at`이 늘 같은 값이다. 엔티티는 `BaseCreatedAtEntity`를 상속한다.
 - **지표 컬럼 접두어**: 실적 합계는 `total_*`(`total_distance`·`total_duration`·`total_calories`·`total_elevation_gain`), 평균은 `avg_*`(`avg_pace`·`avg_cadence`), 목표는 `target_*`(`target_distance`). **구간(`running_splits`)은 부분값이라 접두어 없이 적는다**(`distance`·`duration`·`calories`) — 접두어의 유무가 전체와 구간을 가른다. 개수 컬럼은 `*_count`(`max_player_count`·`current_player_count`·`desired_player_count`·`leave_count`·`like_count`·`comment_count`)로 예외가 없다.
@@ -44,7 +44,7 @@
 
 | 컬럼 | 타입 | 제약 | 비고 |
 |---|---|---|---|
-| user_id | UUID | PK, FK → users | 참조 키가 곧 PK — 1:1 강제 (온보딩 1 row) |
+| user_id | UUID | PK, FK → users, ON DELETE CASCADE | 참조 키가 곧 PK — 1:1 강제 (온보딩 1 row) |
 | nickname | varchar | UNIQUE, NOT NULL | 중복 시 409. 프로필 표시명(닉네임 변경도 이 컬럼 갱신) |
 | gender | enum | NOT NULL |  |
 | birthday | date | NOT NULL | |
@@ -59,7 +59,7 @@
 
 | 컬럼 | 타입 | 제약 | 비고 |
 |---|---|---|---|
-| user_id | UUID | PK, FK → users | 참조 키가 곧 PK — 유저당 소셜 1개(1:1 확정) |
+| user_id | UUID | PK, FK → users, ON DELETE CASCADE | 참조 키가 곧 PK — 유저당 소셜 1개(1:1 확정) |
 | provider | enum | NOT NULL |  |
 | provider_id | varchar | NOT NULL | provider 내 유저 식별자 |
 | created_at / updated_at | timestamp | NOT NULL | |
@@ -95,26 +95,26 @@
 | start_at | timestamp | NOT NULL | 예약 시작 시각 |
 | close_at | timestamp | nullable | **방이 닫힌 시각.** `FINISHED`·`CANCELLED`로 갈 때 찍고, 그 전까지는 null이다 — 종류와 무관하게 열려 있는 방은 전부 null. 모집 마감 시각이 아니다(그건 `start_at - 오프셋`으로 계산한다) |
 | target_distance | int | nullable | 방의 목표 거리(미터). **솔로 방은 null** — 목표가 없어야 조기 종료 페널티 판정을 건너뛴다. 매칭 조건이라 **정해진 뒤에는 바뀌지 않는다**. 참가자에게서 유추하지 않고 방이 직접 가져 후보 방 조회가 단일 테이블에서 끝난다 |
-| avg_pace | int | nullable | 참가자 평균 페이스(초/km). 참가·이탈마다 갱신. 배정 후보의 순위 재료로 쓰고(자격 조건이 아니다 — 멀어도 매칭한다), `RoomInfo.teamAveragePaceSecondsPerKm`로도 나간다. **nullable인 이유는 참가자가 0이면 평균 낼 대상이 없기 때문이다** — 마지막 값을 남기지 않고 지운다(그 방은 같은 순간 닫힌다 — `FINISHED`·`CANCELLED` 판정은 아래 `current_player_count`) |
+| avg_pace | int | nullable | 참가자 평균 페이스(초/km). 참가·이탈마다 갱신. 배정 후보의 순위 재료로 쓰고(자격 조건이 아니다 — 멀어도 매칭한다), `RoomInfo.teamAveragePaceSecondsPerKm`로도 나간다. **nullable인 이유는 참가자가 0이면 평균 낼 대상이 없기 때문이다** — 마지막 값을 남기지 않고 지운다(참가자가 0이 되는 건 시작 전 이탈뿐이고, 그 방은 같은 순간 `CANCELLED`로 닫힌다 — 아래 `current_player_count`) |
 | max_player_count | int | NOT NULL | 자리 수 — 매칭 `4`, 솔로 `1`, **[MVP 제외]** 초대 `4`. 생성 시 확정·불변 |
-| current_player_count | int | NOT NULL | 현재 인원. 생성 시 `1`, 참가·이탈마다 갱신한다. `current_player_count < max_player_count`면 들어갈 수 있다. **`1`은 정상 상태다** — 마감 전이면 계속 모집하고 마감 후면 혼자 뛴다. `0`이 되면 방을 닫는다. **시작 전이면 항상 `CANCELLED`**(빈 방이 후보로 남지 않게), **시작 후면 유효 기록 유무로 갈린다** — 저장된 기록이 하나라도 있으면 `FINISHED`, 없으면 `CANCELLED`. 이탈 페널티 면제 판정에도 쓴다 |
+| current_player_count | int | NOT NULL | 현재 인원. 생성 시 `1`, 참가·이탈마다 갱신한다. `current_player_count < max_player_count`면 들어갈 수 있다. **`1`은 정상 상태다** — 마감 전이면 계속 모집하고 마감 후면 혼자 뛴다. **인원은 시작 전에만 줄어든다** — `0`이 되면 방을 `CANCELLED`로 닫는다(빈 방이 후보로 남지 않게). 시작 후에는 인원이 줄지 않고, 뛰던 참가자가 모두 종료됐을 때 유효 기록 유무로 `FINISHED`/`CANCELLED`가 갈린다(아래 생명주기). 확정 후 이탈·미출석 제재의 면제 판정에도 쓴다(조기 종료 제재는 쓰지 않는다) |
 | created_at / updated_at | timestamp | NOT NULL | |
 | deleted_at | timestamp | nullable | **[MVP 제외]** 관리자 부정 방 숨김용 |
 
 > **후보 방 배정**: 매칭 신청 시 `type='MATCH' AND status='MATCHING' AND current_player_count < max_player_count`인 방 중 `target_distance`·`start_at`이 맞는 방을 후보로 삼고, `avg_pace`가 가까운 순으로 고른다 — 페이스는 순위 재료라 멀어도 후보에서 빠지지 않는다(`feature-spec.md` 방 배정 기준). 후보가 하나도 없을 때만 새 방을 만든다(1인 방).
-> **마감 판정**: 모집 마감(`start_at - 운영 설정 오프셋`)에 도달하면 스케줄러가 **인원과 무관하게** `MATCHED`로 확정한다(1인이면 1인으로 확정돼 혼자 뛴다). `max_player_count` 도달 여부와도 무관하다. 마감 시각은 컬럼이 아니라 계산값이라 스케줄러가 `start_at`으로 찾는다.
+> **마감 판정**: 모집 마감(`start_at - 운영 설정 오프셋`)에 도달하면 스케줄러가 **인원과 무관하게** `MATCHED`로 확정한다(1인이면 1인으로 확정돼 혼자 뛴다). `max_player_count` 도달 여부와도 무관하다. 마감 시각은 방 컬럼이 아니다 — 방을 만들 때 `scheduled_jobs`에 `MATCH_CLOSE`(`execute_at = start_at - 오프셋`)를 걸어 그 시각에 확정한다.
 
 ### running_players
 
 | 컬럼 | 타입 | 제약 | 비고 |
 |---|---|---|---|
 | running_player_id | bigint | PK | 매칭 신청·솔로 참가 단위 |
-| user_id | UUID | → users, NOT NULL | 논리 참조(FK 제약 없음). 탈퇴 시 조건부 유지·삭제 — [§0](#0-공통-규칙) |
+| user_id | UUID | → users, NOT NULL | 논리 참조(FK 제약 없음). 탈퇴해도 유지 — [§0](#0-공통-규칙) |
 | status | enum | NOT NULL | 참가·진행 상태 — [§6 enum 사전](#6-enum-사전) |
 | start_at | timestamp | NOT NULL | 희망 시작 시각 |
 | target_distance | int | NOT NULL | 목표 거리(미터, API `targetDistanceMeters`). 솔로는 목표가 없어 도달 불가능한 상한(500000)으로 "끝은 유저가 정한다"를 표현한다 — 판정 기준은 이 값이 아니라 방(`running_rooms.target_distance`)이다. `running_records.total_distance`(실제 이동 거리)와 이름으로 갈린다 |
 | avg_pace | int | NOT NULL | 신청 시점의 사용자 평균 페이스(초/km). **입력받지 않는다** — 매칭 조건에 페이스 항목이 없어(5-A) 서버가 `user_onboardings.avg_pace`에서 복사한다. 배정 시 방 평균과의 차이로 **후보 순위를 매기는 데 쓴다 — 자격을 가르지는 않는다**(feature-spec 방 배정 기준). 신청 시점 스냅샷이라 이후 원본이 갱신돼도 소급하지 않는다 |
-| desired_player_count | int | nullable | **[MVP 제외]** 향후 사용자가 선택할 희망 매칭 인원 |
+| desired_player_count | int | nullable | **[MVP 제외]** 향후 사용자가 선택할 희망 매칭 인원. 입력 UI가 없는 동안 항상 `4`로 저장한다(솔로 포함) — 읽는 로직은 없다 |
 | created_at / updated_at | timestamp | NOT NULL | |
 | deleted_at | timestamp | nullable | **신청이 끝난 시각** — 대기 취소·이탈·완주 공통. 완주도 그 신청이 끝난 것이라 찍는다. 비우면 활성 신청으로 남아 다음 매칭을 신청할 수 없다. 한 번 찍히면 바뀌지 않는다 |
 
@@ -123,13 +123,13 @@
 > **`status`와 `deleted_at`은 축이 다르다** — `status`가 "어떻게 끝났나"(사유·제재 여부), `deleted_at`이 "언제 끝났나"다. `updated_at`을 이탈 시각으로 쓰지 않는다 — 그 row가 한 번만 더 갱신돼도 값이 밀려 이탈 시각을 잃는다.
 > **row 생명주기**: 생성 = 매칭 신청·솔로 개시 / 대기 취소 = `status=MATCHED_LEFT_NO_PENALTY` + `deleted_at` 기록(마감 전이라 언제나 미제재다) / 러닝 시작 = 각자의 WS `RUNNING_START`가 본인을 `RUNNING`으로 전환(일괄 전환 없음) / 이탈 = `status=*_LEFT_*` + `deleted_at` 기록 / 완주 = `status=COMPLETED` + `deleted_at` 기록. **시작 전** 대기 취소·이탈 시 배정 행은 `is_connected=false`로 바꾸고 방 인원을 하나 줄이며, 그 결과 인원이 `0`이면 방을 `CANCELLED`로 닫는다. **러닝이 시작된 뒤에는 인원이 줄지 않는다** — 완주·조기 종료든, 방이 시작된 뒤 `JOINED`인 채로 나가든 배정 행만 `is_connected=false`로 내리고 `leave_count`도 올리지 않는다. 그래서 `current_player_count`는 시작 이후 "이 방이 몇 명으로 확정됐나"로 고정되며, 미출석 제재(취소·탈퇴·강제 종료)는 그 값이 1이면 면제된다. 조기 종료 제재는 이 값이 아니라 판정 순간 러닝 단계 참가자 수로 판정한다(feature-spec). 줄이면 마지막 완주자가 방을 `CANCELLED`로 만들어 버리기도 한다 — 시작 후 방을 닫는 건 전원 종료를 확인하는 별도 경로이고, 유효 기록이 있으면 `FINISHED`, 하나도 없으면 `CANCELLED`다. 친구 초대 생명주기는 MVP에서 정의하지 않는다.
 > **활성 신청 판정**: `deleted_at IS NULL`. `status`는 보지 않는다 — 러닝 중(`RUNNING`)인 참가자도 활성이어야 다음 매칭이 막힌다.
-> **러닝 종료 판정**: 목표 거리 도달은 `COMPLETED`, 미달은 실제 거리 비율에 따라 `RUNNING_LEFT_*`다. 종료 신호·강제 종료·러닝 중 탈퇴에 같은 규칙을 적용하고, 유효 러닝 판정(거리·시간·경로 산출 가능 + 최소 거리·최소 시간 통과)을 지난 트랙만 기록으로 만든다. 산출할 수 없으면 실제 거리를 0으로 판정한다. **미달이어도 `status`는 그대로 남는다** — 기록 유무와 개인 종료 상태는 별개다.
+> **러닝 종료 판정**: 목표 거리 도달은 `COMPLETED`, 미달은 실제 거리 비율에 따라 `RUNNING_LEFT_*`다(목표가 없는 솔로는 끝내면 `COMPLETED`). 종료 신호·목표 도달 자동 종료·강제 종료·러닝 중 탈퇴에 같은 규칙을 적용하고, 유효 러닝 판정(거리·시간·경로 산출 가능 + 평균 페이스 허용 범위 + 최소 거리·최소 시간 통과)을 지난 트랙만 기록으로 만든다. 산출할 수 없으면 실제 거리를 0으로 판정한다. **미달이어도 `status`는 그대로 남는다** — 기록 유무와 개인 종료 상태는 별개다.
 
 ### running_room_sessions (참가자 ↔ 방 배정)
 
 | 컬럼 | 타입 | 제약 | 비고 |
 |---|---|---|---|
-| running_room_id | bigint | PK1, FK → running_rooms | 배정된 방 |
+| running_room_id | bigint | PK1, FK → running_rooms, ON DELETE CASCADE | 배정된 방 |
 | user_id | UUID | PK2, → users | 논리 참조(FK 제약 없음). **키를 신청이 아니라 유저로 잡는다** — 취소 후 같은 방에 다시 신청해도 행이 늘지 않고 기존 행을 되살린다 |
 | running_player_id | bigint | NOT NULL, → running_players | 논리 참조(FK 제약 없음) — 무결성은 앱이 관리한다. 탈퇴해도 세션은 지우지 않는다. **현재 이 방에 들어와 있는 신청.** PK가 아니라 재배정 시 새 신청으로 갱신된다. 참가자의 상태·페이스·기록을 읽는 조인 경로이며, 지우고 `user_id`로 우회하면 유저의 과거 신청까지 딸려 오거나 완주(`deleted_at` 기록) 후 조인이 끊긴다 |
 | leave_count | int | NOT NULL | **이 유저가** 이 방에서 이탈한 **누적** 횟수 — 방 이동(향후 매칭 알고리즘)이 생기면 같은 방을 다시 거쳐 2 이상이 될 수 있다. 배정 시 **페이스 구간이 같은 방들의 순위를 가르는 데 쓴다** — 신청자 본인이 등지고 나왔던 방으로 되돌리지 않기 위한 것이다. **방 전체의 이탈 합이 아니다**: 후보를 훑을 때 `user_id`가 신청자인 행만 읽고, 거쳐 간 적 없는 방은 행이 없어 0으로 본다 |
@@ -149,16 +149,16 @@
 | user_id | UUID | → users, NOT NULL | |
 | avg_pace | int | NOT NULL | 초/km |
 | total_distance | int | NOT NULL | 미터. **목표 거리에서 끊는다** — 목표를 넘겨 뛰어도 `running_rooms.target_distance` 지점을 보간해 그 값으로 확정하고 `end_at`·`total_duration`도 같은 지점 기준으로 맞춘다(거리만 자르면 페이스가 틀어진다). 참가자 전원이 같은 구간 경계를 갖게 하려는 것이다 — 6-2 응답은 구간 경계를 참가자별이 아니라 구간 레벨에 둔다. 목표에 못 미치면 마지막 10m 경계까지로 확정한다 — 10m 미만 꼬리는 버려 구간 합과 어긋나지 않게 한다. **S3 원본 트랙에는 목표 이후 좌표도 전부 남긴다**(재계산용) |
-| total_duration | int | NOT NULL | 초. 구간(`running_splits.duration`)의 합. **일시정지 시간은 빠진다** — 멈춘 동안은 어느 구간에도 쌓이지 않으므로 `end_at - start_at`보다 작을 수 있다 |
-| avg_cadence | int | nullable | spm (선택). 러닝 전체 평균 — 점별 순간 케이던스(`cadenceSpm`)는 저장하지 않는다 |
+| total_duration | int | NOT NULL | 초. 구간(`running_splits.duration`)의 합. 지금은 `end_at - start_at`과 같다 — 서버는 일시정지를 모른다(반영 방식 미정) |
+| avg_cadence | int | nullable | spm (선택). 러닝 전체 평균 — 점별 순간 케이던스(`cadenceSpm`)는 DB에 저장하지 않는다(S3 원본 트랙에는 남는다) |
 | total_elevation_gain | int | nullable | 누적 상승 고도(미터). 기기 GPS 고도를 운영 임계값으로 필터링해 계산하며 유효 표본이 부족하면 null. 구간(`running_splits.elevation_change`)의 합과는 다르다 |
 | total_calories | int | NOT NULL | 종료 시 서버가 확정 거리·시간과 사용자 체중으로 계산한 kcal |
-| gps_track_key | varchar | NOT NULL | S3 key — 전체 좌표·시각·기기 GPS 고도를 담은 **원본 트랙**. 재계산·분석용이라 **API 응답에는 쓰지 않는다** |
-| route_polyline | text | NOT NULL | 다운샘플 경로(encoded polyline, precision 5) — **API가 내려주는 유일한 경로 데이터**. 대시보드·기록 상세(6-1·6-2)·기록 목록(7-1)·피드 카드가 전부 이 값을 쓴다. **다운샘플 시 구간 경계점을 반드시 보존한다** — `running_splits`의 `route_start_index`·`route_end_index`가 이 배열의 위치를 가리키므로 경계가 틀어지면 구간이 어긋난다 |
-| weather_code | int | NOT NULL | WMO 4677 코드(0~99) — 날씨 API 원본값 그대로. 악조건 여부는 저장하지 않고 판정 시 계산한다 |
+| gps_track_key | varchar | NOT NULL | S3 key — 받은 좌표를 그대로(위치·시각·고도·정확도·속도·방위·케이던스·순간 페이스) 담은 **원본 트랙**. 재계산·분석용이라 **API 응답에는 쓰지 않는다** |
+| route_polyline | text | NOT NULL | 10m 경계점 경로(encoded polyline, precision 5) — 원본 트랙을 0m부터 10m마다 보간한 경계점만 담는다(구간 수 + 1개). **API가 내려주는 유일한 경로 데이터**. 대시보드·기록 상세(6-1·6-2)·기록 목록(7-1)·피드 카드가 전부 이 값을 쓴다. `running_splits`의 `route_start_index`·`route_end_index`가 이 배열의 위치를 가리킨다 |
+| weather_code | int | NOT NULL | WMO 4677 코드(0~99) — 날씨 API 원본값 그대로. 조회에 실패하거나 값이 없으면 폴백(`0` 맑음, 기온 `15.0`)이 들어간다. 악조건 여부는 저장하지 않고 판정 시 계산한다 |
 | temperature | numeric(3,1) | NOT NULL | 섭씨. 영하 포함 |
 | start_at / end_at | timestamp | NOT NULL | |
-| created_at | timestamp | NOT NULL | 종료 메시지·강제 종료·탈퇴로 기록을 확정할 때 일괄 INSERT. 진행 중 PATCH 없음(write-once) |
+| created_at | timestamp | NOT NULL | 종료 메시지·목표 도달 자동 종료·강제 종료·탈퇴로 기록을 확정할 때 일괄 INSERT. 진행 중 PATCH 없음(write-once) |
 
 > UNIQUE (running_room_id, user_id) — 유저당 방별 1기록. 솔로도 방을 가지므로 부분 인덱스 조건이 필요 없다.
 > **개인 단위 진행 상태는 `running_players.status`가 갖는다.** 기록은 `COMPLETED`뿐 아니라 `RUNNING_LEFT_*`와도 함께 생성될 수 있으며, 기록 생성 가능한 트랙이 없으면 종료 상태만 남는다.
@@ -169,7 +169,7 @@
 | 컬럼 | 타입 | 제약 | 비고 |
 |---|---|---|---|
 | running_split_id | bigint | PK | 시퀀스 `running_split_seq`로 채번한다(`allocationSize=100`) — IDENTITY면 Hibernate가 배치 INSERT를 끈다 |
-| running_record_id | bigint | FK → running_records, NOT NULL | |
+| running_record_id | bigint | FK → running_records, NOT NULL, ON DELETE CASCADE | |
 | split_number | int | NOT NULL | 구간 번호(1부터). API `splitNumber` |
 | avg_pace | int | NOT NULL | 초/km |
 | distance | int | NOT NULL | 구간 거리(미터) — **10m 고정**. 경계는 0-10, 10-20…으로 끊고, 정확히 10m가 되도록 경계 지점을 보간해 만든다. 목표 5,000m면 구간이 500개다. 목표 미달로 끝난 참가자는 도달한 구간까지만 행이 생긴다 |
@@ -185,7 +185,7 @@
 > UNIQUE (running_record_id, split_number) — 기록당 구간 번호 중복 방지.
 > **구간 경계는 방 전체가 공유한다.** 참가자별 실제 거리가 아니라 0m부터 10m씩 자르는 고정 경계라, 같은 방 참가자의 `split_number` N은 언제나 같은 거리 구간을 가리킨다. 6-2가 구간 하나에 참가자 여럿을 묶어 내려줄 수 있는 근거다.
 > **행 수가 방마다 수천 개다** — 목표 5,000m·4인 방이면 2,000행이다. 건별 INSERT가 아니라 배치로 넣는다.
-> **성립 조건은 다운샘플이 구간 경계점을 보존하는 것이다.** 서버가 Redis 버퍼에서 구간을 나누며 만드는 값이라 경계는 이미 알고 있다 — 구간별로 나눠 다운샘플한 뒤 이으면 자연히 만족한다.
+> **경계점 목록이 곧 경로라 인덱스가 구조적으로 맞물린다.** 경로가 0m부터 10m마다의 경계점이라 `N`번 구간은 언제나 `N-1`~`N`번 점이다.
 > **대가는 `running_records`와의 결합이다** — `route_polyline`을 재생성하면 점 개수가 달라져 그 기록의 모든 구간 인덱스가 무효가 되므로 항상 함께 갱신한다. 둘 다 write-once라 재생성 자체가 예외적 상황이다.
 
 ---
@@ -206,7 +206,7 @@
 
 > UNIQUE (job_type, target_id) — 한 대상에 같은 종류의 예약은 하나다. 인스턴스 여럿이 같은 예약을 넣으려 해도 DB가 막는다.
 > **정본은 이 표고 메모리 타이머는 사본이다.** 각 인스턴스가 `execute_at`에 깨도록 타이머를 걸지만 재시작하면 사라지므로, 부팅 때 `is_sent=false`를 전부 읽어 **지난 것은 즉시 실행하고 남은 것은 다시 건다**. 그래서 타이머가 여러 인스턴스에 중복으로 걸리는 것은 낭비가 아니라 이중화다 — 한 대가 죽어도 남은 대가 쏜다.
-> **실행 직전 조건부 UPDATE로 이긴 하나만 일한다** — `SET is_sent=true WHERE scheduled_job_id=? AND is_sent=false`가 0행이면 남이 이미 했다는 뜻이라 그냥 빠진다. 대상 테이블을 잠그기 전에 걸러지므로 중복 발화 비용이 UPDATE 한 번이다. 대상 쪽 상태 재확인은 이것과 별개로 남는다 — 예약이 아닌 경로(사용자 취소 등)로 이미 상태가 넘어가 있을 수 있다.
+> **실행 직전에 예약 행을 잠가 이긴 하나만 일한다** — `SELECT … FOR UPDATE`로 잠그고 `is_sent`를 다시 읽어, 이미 true면 남이 실행한 것이라 그냥 빠진다. 선점(`is_sent=true`)과 실행이 한 트랜잭션이라 실행이 실패하면 선점도 롤백되고, 잠금을 기다리던 인스턴스가 다시 시도한다. 대신 진 쪽은 이긴 쪽의 실행이 끝날 때까지 기다린다. 대상 쪽 상태 재확인은 이것과 별개로 남는다 — 예약이 아닌 경로(사용자 취소 등)로 이미 상태가 넘어가 있을 수 있다.
 > **`execute_at`을 저장하는 대가는 오프셋 변경이다** — 모집 마감 오프셋을 바꾸면 아직 실행되지 않은 `MATCH_CLOSE`의 `execute_at`을 함께 UPDATE 해야 한다. 방에서 매번 계산하지 않고 시각을 굳히는 대신 치르는 값이다.
 > **행은 지우지 않는다** — 실행 이력이 곧 "그 시각에 확정이 실제로 돌았는가"의 근거다. 보존 기간은 운영에서 정한다.
 
@@ -393,7 +393,7 @@ FK 강제 없는 독립 테이블(원본 삭제/수정된 row를 참조하므로
 
 ## 7. 인덱스 (조회 성능)
 
-> 복합 PK는 첫 컬럼 조회를 커버한다(`user_colors`·`feed_likes`·`comment_likes`는 별도 불필요). `running_splits (running_record_id, split_number)` UNIQUE도 마찬가지. `colors`는 마스터라 전체 조회만 하므로 인덱스가 없다.
+> 복합 PK는 첫 컬럼 조회를 커버한다(`user_colors`·`feed_likes`·`comment_likes`는 별도 불필요). `running_splits (running_record_id, split_number)` UNIQUE도 마찬가지고, `running_records (running_room_id, user_id)` UNIQUE가 방 결과 조회를 커버한다. `colors`는 마스터라 전체 조회만 하므로 인덱스가 없다.
 
 | 인덱스 대상 | 용도 |
 |---|---|
@@ -405,8 +405,7 @@ FK 강제 없는 독립 테이블(원본 삭제/수정된 row를 참조하므로
 | comments.feed_id | **[MVP 제외]** 댓글 목록 |
 | comments.parent_comment_id | **[MVP 제외]** 답글 지연 로딩 |
 | running_records.(user_id, start_at) | 내 기록 조회 — 기간 조회(`start_at` 범위)와 시작 시각 정렬을 인덱스가 함께 처리한다 |
-| running_records.running_room_id | 방 결과 조회 |
-| running_room_sessions.user_id | 유저의 현재 방 조회 — 복합 PK가 `running_room_id` 방향만 커버해 역방향이 미커버다. 활성 신청에서 배정된 방을 찾을 때 탄다 |
+| running_room_sessions.(user_id, is_connected) | 유저의 현재 방 조회 — 복합 PK가 `running_room_id` 방향만 커버해 역방향이 미커버다. 활성 신청에서 배정된 방을 찾을 때 타며, 현재 방 조회는 `is_connected=true`를 항상 함께 본다 |
 | running_rooms.(deleted_at, type, status, start_at, target_distance, avg_pace) | 매칭 후보 방 조회 — 같은 슬롯·거리에서 모집 중이고 자리가 남은 방(`type='MATCH' AND status='MATCHING'`). 솔로 방·초대방을 인덱스 단계에서 배제한다. **`avg_pace`는 거르는 조건이 아니라 순위 재료다** — 후보 자격에 페이스 조건이 없어(feature-spec 방 배정 기준) 조회가 값만 실어 나르고 정렬은 애플리케이션이 한다. **모집 마감은 이 인덱스를 타지 않는다** — 방을 훑는 대신 `scheduled_jobs`에 예약을 걸어 그 시각에만 깬다 |
 | scheduled_jobs.(is_sent, execute_at) | 부팅 복구 — 아직 실행되지 않은 예약 조회. `is_sent=false`가 선두라 실행이 끝난 대다수를 인덱스 단계에서 배제한다 |
 | running_players.(user_id, deleted_at) | 활성 신청 조회 — 중복 신청 검사·내 매칭 상태·러닝 시작 |
