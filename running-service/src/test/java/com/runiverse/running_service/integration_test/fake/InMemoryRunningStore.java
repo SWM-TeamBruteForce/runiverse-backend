@@ -1,5 +1,6 @@
 package com.runiverse.running_service.integration_test.fake;
 
+import com.runiverse.running_service.application.running.port.out.CountStartedRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.CreateRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.CreateRunningRoomPort;
 import com.runiverse.running_service.application.running.port.out.ExistsActiveRunningPlayerPort;
@@ -34,7 +35,7 @@ import java.util.stream.Stream;
 public class InMemoryRunningStore implements CreateRunningPlayerPort, CreateRunningRoomPort,
         ExistsActiveRunningPlayerPort, LoadRunningRoomPort, LockRunningRoomPort, UpdateRunningRoomPort,
         LockRunningPlayerPort, UpdateRunningPlayerPort, LoadRoomPlayerPort,
-        ExistsRunningPlayerPort {
+        ExistsRunningPlayerPort, CountStartedRunningPlayerPort {
 
     private final Map<Long, RunningPlayer> players = new LinkedHashMap<>();
     private final Map<Long, RunningRoom> rooms = new LinkedHashMap<>();
@@ -123,6 +124,13 @@ public class InMemoryRunningStore implements CreateRunningPlayerPort, CreateRunn
     public boolean existsRunning(RunningRoomId runningRoomId) {
         return playersOf(runningRoomId)
                 .anyMatch(player -> player.getStatus() == RunningPlayerStatus.RUNNING);
+    }
+
+    @Override
+    public int countStartedRunning(RunningRoomId runningRoomId) {
+        return (int) playersOf(runningRoomId)
+                .filter(player -> player.getStatus().hasStartedRunning())
+                .count();
     }
 
     private Stream<RunningPlayer> playersOf(RunningRoomId runningRoomId) {

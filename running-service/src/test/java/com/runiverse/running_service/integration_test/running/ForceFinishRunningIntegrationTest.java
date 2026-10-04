@@ -109,6 +109,7 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
                 runningStore,       // UpdateRunningPlayerPort
                 runningTrackStore,  // DeleteRunningTrackPort
                 runningStore,       // ExistsRunningPlayerPort
+                runningStore,       // CountStartedRunningPlayerPort
                 runningStore,       // UpdateRunningRoomPort
                 this::recordCooldown, // StartMatchCooldownPort
                 runningRecordStore, // ExistsRunningRecordPort
@@ -314,6 +315,49 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
                 .isEqualTo(RunningPlayerStatus.RUNNING_LEFT_NO_PENALTY);
         assertThat(cooldowns).containsOnlyKeys(runner);
         assertThat(cooldowns.get(runner)).isEqualTo(RUNNING_COOLDOWN);
+    }
+
+    @Test
+    @DisplayName("상대가 끝내 오지 않아 혼자 뛴 사람은 제재선에 못 미쳐도 제재하지 않는다")
+    void exemptsShortRunnerWhenNobodyElseRan() {
+        // given -> 2인 확정 방에서 A만 붙어 목표의 60%에서 멈췄고 B는 한 번도 오지 않았다
+        UUID runner = onboardedUser("runner@runiverse.com", "러너킴");
+        UUID noShow = onboardedUser("noshow@runiverse.com", "안온사람");
+        long roomId = givenStartedMatchRoom(runner, noShow);
+        runFor(runner, roomId, SHORT_POINTS);
+        schedule(roomId);
+
+        // when
+        fire(roomId);
+
+        // then -> 판정 순간 러닝에 들어온 사람이 A뿐이라 곤란해진 상대가 없다.
+        //         안 나타난 B는 확정 인원 기준 그대로 제재받는다
+        assertThat(storedPlayer(roomId, runner).getStatus())
+                .isEqualTo(RunningPlayerStatus.RUNNING_LEFT_NO_PENALTY);
+        assertThat(storedPlayer(roomId, noShow).getStatus())
+                .isEqualTo(RunningPlayerStatus.MATCHED_LEFT_PENALTY);
+        assertThat(cooldowns).containsOnlyKeys(noShow);
+    }
+
+    @Test
+    @DisplayName("먼저 끝낸 사람도 세므로 늦게 와 혼자 뛰다 그만둔 사람은 제재한다")
+    void penalizesLateShortRunnerAfterTeammateFinished() {
+        // given -> A가 목표를 채워 끝낸 뒤에야 B가 붙어 목표의 60%에서 멈췄다
+        UUID finisher = onboardedUser("finisher@runiverse.com", "먼저끝낸");
+        UUID lateRunner = onboardedUser("late@runiverse.com", "늦게온");
+        long roomId = givenStartedMatchRoom(finisher, lateRunner);
+        runFor(finisher, roomId, COMPLETING_POINTS);
+        runFor(lateRunner, roomId, SHORT_POINTS);
+        schedule(roomId);
+
+        // when
+        fire(roomId);
+
+        // then -> 판정 순간 러닝 단계 참가자는 이미 끝낸 A까지 둘이다
+        assertThat(storedPlayer(roomId, lateRunner).getStatus())
+                .isEqualTo(RunningPlayerStatus.RUNNING_LEFT_PENALTY);
+        assertThat(cooldowns).containsOnlyKeys(lateRunner);
+        assertThat(cooldowns.get(lateRunner)).isEqualTo(RUNNING_COOLDOWN);
     }
 
     @Test

@@ -9,6 +9,7 @@ import com.runiverse.running_service.application.match.port.out.LockMatchApplica
 import com.runiverse.running_service.application.match.port.out.LockMatchRoomPort;
 import com.runiverse.running_service.application.match.port.out.UpdateMatchApplicationPort;
 import com.runiverse.running_service.application.match.port.out.UpdateMatchRoomPort;
+import com.runiverse.running_service.application.running.port.out.CountStartedRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.CreateRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.CreateRunningRoomPort;
 import com.runiverse.running_service.application.running.port.out.DeleteRunningPlayerPort;
@@ -42,6 +43,7 @@ import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -53,7 +55,8 @@ import java.util.stream.Collectors;
 public class RunningPersistenceAdapter implements CreateRunningPlayerPort, CreateRunningRoomPort,
         ExistsActiveRunningPlayerPort, LoadRunningRoomPort, LockRunningRoomPort, UpdateRunningRoomPort,
         LockRunningPlayerPort, UpdateRunningPlayerPort, DeleteRunningPlayerPort, LoadRoomPlayerPort,
-        ExistsRunningPlayerPort, LoadRunningResultPlayersPort, LoadRunningResultRecordPort, LoadRunningSplitsPort,
+        ExistsRunningPlayerPort, CountStartedRunningPlayerPort,
+        LoadRunningResultPlayersPort, LoadRunningResultRecordPort, LoadRunningSplitsPort,
         // 매칭 유스케이스가 자기 포트로 같은 애그리거트를 다룬다
         CreateMatchApplicationPort, ExistsActiveApplicationPort,
         CreateMatchRoomPort, UpdateMatchRoomPort, LockMatchRoomPort,
@@ -63,6 +66,10 @@ public class RunningPersistenceAdapter implements CreateRunningPlayerPort, Creat
         LoadMatchRoomDetailPort,
         LoadUserStatusPort {
 
+    private static final List<RunningPlayerStatus> STARTED_STATUSES =
+            Arrays.stream(RunningPlayerStatus.values())
+                    .filter(RunningPlayerStatus::hasStartedRunning)
+                    .toList();
     private final EntityManager entityManager;
 
     @Override
@@ -255,6 +262,22 @@ public class RunningPersistenceAdapter implements CreateRunningPlayerPort, Creat
                 .setParameter("roomId", runningRoomId.value())
                 .setParameter("status", RunningPlayerStatus.RUNNING)
                 .getSingleResult() > 0;
+    }
+
+    @Override
+    public int countStartedRunning(RunningRoomId runningRoomId) {
+        return entityManager.createQuery("""
+                        SELECT COUNT(player)
+                        FROM RunningRoomSessionJpaEntity session
+                        JOIN RunningPlayerJpaEntity player
+                            ON player.runningPlayerId = session.runningPlayerId
+                        WHERE session.room.runningRoomId = :roomId
+                          AND player.status IN :statuses
+                        """, Long.class)
+                .setParameter("roomId", runningRoomId.value())
+                .setParameter("statuses", STARTED_STATUSES)
+                .getSingleResult()
+                .intValue();
     }
 
     @Override

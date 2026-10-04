@@ -4,6 +4,7 @@ import com.runiverse.running_service.application.common.port.out.UpdateUserAvgPa
 import com.runiverse.running_service.application.running.exception.NotRoomPlayerException;
 import com.runiverse.running_service.application.running.exception.RunningNotStartableException;
 import com.runiverse.running_service.application.running.exception.RunningRoomNotFoundException;
+import com.runiverse.running_service.application.running.port.out.CountStartedRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.CreateRunningRecordPort;
 import com.runiverse.running_service.application.running.port.out.DeleteRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.ExistsRunningPlayerPort;
@@ -61,15 +62,16 @@ public class RunningFinisher {
     private final UpdateRunningPlayerPort updateRunningPlayerPort;
     private final DeleteRunningTrackPort deleteRunningTrackPort;
     private final ExistsRunningPlayerPort existsRunningPlayerPort;
+    private final CountStartedRunningPlayerPort countStartedRunningPlayerPort;
     private final UpdateRunningRoomPort updateRunningRoomPort;
     private final StartMatchCooldownPort startMatchCooldownPort;
     private final ExistsRunningRecordPort existsRunningRecordPort;
     private final LoadRecentRunningPacesPort loadRecentRunningPacesPort;
     private final UpdateUserAvgPacePort updateUserAvgPacePort;
     private final RunningFinishProperties properties;
-    // 1인 확정 방에서 혼자 뛰다 그만두는 것은 제재하지 않는다 — 곤란해지는 상대가 없다.
-    // 시작 전 이탈(CancelMatchHandler)의 면제와 같은 기준이다.
-    // 러닝 시작 후에는 인원이 줄지 않으므로(erd) 이 값이 곧 확정 시점 인원이다
+    // 혼자 뛰다 그만두는 것은 제재하지 않는다 — 곤란해지는 상대가 없다.
+    // 확정 인원이 아니라 판정 순간 러닝에 들어온 사람(이미 끝낸 사람 포함)으로 센다 —
+    // 상대가 끝내 오지 않았으면 정시에 온 사람은 사실상 1인 러닝이었다
     private static final int PENALTY_MIN_PLAYER_COUNT = 2;
     // 이만큼 쌓여야 실측 평균으로 갈아탄다. 그전에는 온보딩 입력값을 쓴다.
     // 늘리면 자기 신고값이 오래 남고, 줄이면 한 번의 회복 러닝에 매칭 페이스가 흔들린다
@@ -192,7 +194,8 @@ public class RunningFinisher {
         }
         double ratio = (double) totalDistanceMeters / target.get().meters();
         boolean penalty = ratio < properties.penaltyDistanceRatio()
-                && room.getPlayerCount().current() >= PENALTY_MIN_PLAYER_COUNT;
+                && countStartedRunningPlayerPort.countStartedRunning(
+                        room.getRunningRoomId().orElseThrow()) >= PENALTY_MIN_PLAYER_COUNT;
         player.leave(penalty, finishedAt);
         if (penalty) {
             // 근거는 status(RUNNING_LEFT_PENALTY)에 남고, "지금 막혀 있나"는 Redis TTL이 답한다
