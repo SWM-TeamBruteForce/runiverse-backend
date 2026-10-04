@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-// RUNNING_STARTED가 나르는 진입·재연결 화면 복구용 스냅샷(api-spec 5-C).
+// RUNNING_STARTED가 나르는 진입·재연결 화면 복구용 스냅샷.
 // RoomInfo를 재사용하지 않는다 — 그쪽은 매칭 대기방 구조라 진행이라는 개념이 없고,
 // 러닝 중에는 closeAt·teamAveragePace가 의미를 잃는다
 public record GetRunningSnapshotResult(

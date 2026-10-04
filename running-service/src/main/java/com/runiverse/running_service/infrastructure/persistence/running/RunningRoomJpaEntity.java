@@ -25,7 +25,7 @@ import java.time.LocalDateTime;
         name = "running_rooms",
         indexes = {
                 // 매칭 후보 방 스캔 — 앞 4개는 등가 조건, avg_pace는 순위 재료라 마지막.
-                // 거르지 않고 값만 실어 나른다(feature-spec 방 배정 기준).
+                // 거르지 않고 값만 실어 나른다.
                 // 모집 마감은 방을 훑지 않고 방마다 건 MATCH_CLOSE 예약이 깨운다
                 @Index(name = "idx_running_room_candidate",
                         columnList = "deleted_at, type, status, start_at, target_distance, avg_pace")
@@ -71,7 +71,7 @@ public class RunningRoomJpaEntity extends BaseTimeEntity {
     // 자리 수 — 매칭 4, 솔로 1. 생성 시 정해지고 갱신하지 않는다
     @Column(name = "max_player_count", nullable = false, updatable = false)
     private int maxPlayerCount;
-    // 현재 인원. 러닝 중에는 변하지 않으므로 STARTED 이후 값이 곧 출발 인원이다
+    // 현재 인원. 시작 후에는 줄지 않아 STARTED 이후 값이 곧 확정 인원이다(미출석자 포함)
     @Column(name = "current_player_count", nullable = false)
     private int currentPlayerCount;
     // 관리자 부정 방 숨김 — 스캔·목록 조회는 전부 deleted_at IS NULL만 본다

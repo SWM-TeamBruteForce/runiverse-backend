@@ -30,7 +30,7 @@ public class OpenMatchStreamHandler implements OpenMatchStreamUsecase {
     public void handle(OpenMatchStreamCommand command) {
         UserId userId = new UserId(command.userId());
         // 활성 신청이 없으면 붙을 방이 없다 — 열어줘도 어느 방도 구독하지 못해
-        // 그 뒤에 신청해도 이벤트가 영영 오지 않는 연결이 된다. 열기 전에 막는다(api-spec 5-A).
+        // 그 뒤에 신청해도 이벤트가 영영 오지 않는 연결이 된다. 열기 전에 막는다.
         // 레지스트리를 건드리기 전에 검사해야 실패한 연결이 흔적을 남기지 않는다
         RoomInfo room = roomInfoAssembler.assembleFor(userId)
                 .orElseThrow(ActiveMatchNotFoundException::new);
@@ -40,7 +40,7 @@ public class OpenMatchStreamHandler implements OpenMatchStreamUsecase {
                 .ifPresent(MatchStreamConnection::closeSuperseded);
         // 구독을 먼저 건다 — 스냅샷을 보내는 사이에 온 갱신을 놓치지 않는다
         matchRoomMembershipPort.join(userId, room.runningRoomId());
-        // 재연결이 곧 스냅샷 재수신이다(feature-spec) — 놓친 이벤트를 되짚을 필요가 없다
+        // 재연결이 곧 스냅샷 재수신이다 — 놓친 이벤트를 되짚을 필요가 없다
         connection.send(MatchStreamEvent.updated(room));
     }
 }

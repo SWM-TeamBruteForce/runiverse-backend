@@ -7,7 +7,7 @@ import java.util.List;
 
 // RUNNING_START의 ack. 상태가 걸린 요청의 ack 중 유일하게 data를 채운다 —
 // 진입과 재연결에 똑같이 나가며, 이게 있어야 RUNNING_PROGRESS_UPDATED·
-// RUNNING_COMBO_UPDATED가 userId만 싣는 설계가 성립한다(api-spec 5-C)
+// RUNNING_COMBO_UPDATED가 userId만 싣는 설계가 성립한다
 public record RunningStartedPayload(
         Long runningRoomId,
         LocalDateTime startedAt,

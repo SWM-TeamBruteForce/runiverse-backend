@@ -41,7 +41,7 @@ public class MatchRoomAssigner {
     private final ScheduleJobPort scheduleJobPort;
     private final MatchProperties matchProperties;
 
-    // 붙을 방이 없으면 1인 방을 새로 연다 — "방 미배정" 상태는 없다(feature-spec).
+    // 붙을 방이 없으면 1인 방을 새로 연다 — "방 미배정" 상태는 없다.
     // 세션의 키가 유저라 배정에는 둘 다 필요하다 — 유저로 자리를 잡고 신청을 그 자리에 꽂는다
     public RunningRoom assign(UserId userId, RunningPlayerId playerId, Pace pace,
                               LocalDateTime startAt, int targetDistanceMeters) {
@@ -67,7 +67,7 @@ public class MatchRoomAssigner {
         return openNewRoom(userId, playerId, pace, startAt, targetDistanceMeters);
     }
 
-    // 페이스로도 이탈 이력으로도 거르지 않는다 — 둘 다 순위일 뿐이다(feature-spec 방 배정 기준).
+    // 페이스로도 이탈 이력으로도 거르지 않는다 — 둘 다 순위일 뿐이다.
     // ① 내 페이스에 가까운 방 ② 같은 구간이면 내가 덜 나갔던 방 ③ 그래도 같으면 오래된 방.
     // 후보가 하나도 없을 때만 새 방을 연다
     private List<MatchCandidate> ranked(UserId userId, Pace pace, LocalDateTime startAt,

@@ -33,7 +33,7 @@ public class MatchPersistenceAdapter implements LoadMatchRoomPort, LoadMatchPlay
                           AND s.connected = TRUE
                         """, Long.class)
                 .setParameter("userId", userId.value())
-                // 현재 배정된 행은 하나다(erd) — 어긋나도 깨지지 않게 첫 건만 쓴다
+                // 현재 배정된 행은 하나다 — 어긋나도 깨지지 않게 첫 건만 쓴다
                 .getResultStream()
                 .findFirst()
                 .map(RunningRoomId::new);
@@ -72,7 +72,7 @@ public class MatchPersistenceAdapter implements LoadMatchRoomPort, LoadMatchPlay
                           AND r.currentPlayerCount < r.maxPlayerCount
                           AND r.avgPace IS NOT NULL
                         """, MatchCandidate.class)
-                // 솔로·초대 방을 인덱스 단계에서 배제한다(erd 후보 방 조회 인덱스)
+                // 솔로·초대 방을 인덱스 단계에서 배제한다
                 .setParameter("type", RunningRoomType.MATCH)
                 .setParameter("status", RunningRoomStatus.MATCHING)
                 .setParameter("startAt", startAt)

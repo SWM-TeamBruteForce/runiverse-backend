@@ -126,7 +126,7 @@ public class RunningFinisher {
         confirmStatus(player, room, analysis.map(TrackAnalysis::totalDistanceMeters).orElse(0));
         updateRunningPlayerPort.update(player);
         // 6. 러닝이 끝났으니 자리를 비운다 — 인원과 방 상태는 건드리지 않는다.
-        //    러닝 시작 후 current_player_count는 "몇 명으로 확정됐나"로 고정된다(erd)
+        //    러닝 시작 후 current_player_count는 "몇 명으로 확정됐나"로 고정된다
         room.finishSession(userId);
         // 7. 방은 마지막 한 사람이 끝낼 때 닫힌다.
         //    참가자 갱신을 먼저 반영해야 방금 끝낸 자신이 RUNNING으로 세어지지 않는다

@@ -8,7 +8,7 @@ import lombok.Getter;
 @Getter
 public class RoomSession {
 
-    // 세션의 키는 유저다 — 같은 방에 다시 신청해도 행이 늘지 않는다(erd)
+    // 세션의 키는 유저다 — 같은 방에 다시 신청해도 행이 늘지 않는다
     private final UserId userId;
     // 지금 이 방에 들어와 있는 신청. 재배정되면 새 신청으로 갈린다
     private RunningPlayerId runningPlayerId;

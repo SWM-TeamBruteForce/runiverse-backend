@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
-// 모집 마감 — MATCHING 방을 인원과 무관하게 MATCHED로 굳힌다(feature-spec 확정 판정).
+// 모집 마감 — MATCHING 방을 인원과 무관하게 MATCHED로 굳힌다.
 // 1인도 확정이라 인원을 보지 않고, 참가자 status는 건드리지 않는다 —
 // JOINED→RUNNING은 각자의 RUNNING_START가 올린다
 @Slf4j
@@ -52,7 +52,7 @@ public class CloseMatchingHandler implements CloseMatchingUsecase {
         room.closeMatching();
         updateMatchRoomPort.update(room);
         // 확정된 그 순간에만 STARTED를 쓴다 — 재연결 스냅샷은 UPDATED라
-        // 확정 연출이 반복되지 않는다(api-spec 5-B).
+        // 확정 연출이 반복되지 않는다.
         // 빈 방은 leave()가 이미 CANCELLED로 닫아 여기 오지 않지만,
         // 받을 사람이 없으면 쏘지 않는 규칙은 취소 핸들러와 맞춘다
         if (room.getPlayerCount().current() > 0) {

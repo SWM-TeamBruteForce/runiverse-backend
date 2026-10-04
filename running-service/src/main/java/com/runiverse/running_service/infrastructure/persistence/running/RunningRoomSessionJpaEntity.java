@@ -43,7 +43,7 @@ public class RunningRoomSessionJpaEntity extends BaseTimeEntity {
     @OnDelete(action = OnDeleteAction.CASCADE)
     private RunningRoomJpaEntity room;
     // 키를 신청이 아니라 유저로 잡는다 — 취소 후 같은 방에 다시 신청해도 행이 늘지 않는다.
-    // users 논리 참조라 FK를 걸지 않는다(erd §0 user_id FK 정책)
+    // users 논리 참조라 FK를 걸지 않는다
     @Id
     @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;

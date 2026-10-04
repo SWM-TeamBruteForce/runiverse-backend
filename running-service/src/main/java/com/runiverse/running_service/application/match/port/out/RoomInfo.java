@@ -25,7 +25,7 @@ public record RoomInfo(
             String profileImageUrl,
             String introduction,
             int averagePaceSecondsPerKm,
-            // 탈퇴하면 users 행이 지워져 프로필 조회에서 빠진다(api-spec §0)
+            // 탈퇴하면 users 행이 지워져 프로필 조회에서 빠진다
             boolean isDeleted
     ) {
 

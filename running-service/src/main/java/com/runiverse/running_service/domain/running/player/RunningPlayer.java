@@ -102,7 +102,7 @@ public class RunningPlayer {
         return Optional.ofNullable(deletedAt);
     }
 
-    // 끝난 신청은 상태만 봐서는 살아 있어 보인다 — 취소가 status를 JOINED로 남기기 때문
+    // 끝난 신청(deleted_at 있음)은 더 바꾸지 않는다
     private void ensureActive() {
         if (!isActive()) {
             throw new PlayerAlreadyLeftException();

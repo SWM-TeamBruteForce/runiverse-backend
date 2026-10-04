@@ -39,7 +39,7 @@ public class GetRunningSnapshotHandler implements GetRunningSnapshotUsecase {
     public GetRunningSnapshotResult handle(GetRunningSnapshotQuery query) {
         RunningRoom room = loadRunningRoomPort.loadById(new RunningRoomId(query.runningRoomId()))
                 .orElseThrow(RunningRoomNotFoundException::new);
-        // 이탈·완주한 참가자는 세션이 끊겨 있다 — 러닝 화면에 그들을 그릴 자리가 없다(api-spec 5-C).
+        // 이탈·완주한 참가자는 세션이 끊겨 있다 — 러닝 화면에 그들을 그릴 자리가 없다.
         // 연결만 끊긴 참가자는 is_connected를 건드리지 않으므로 여기 남아 이어 뛴다
         List<UserId> actives = room.getSessions().stream()
                 .filter(RoomSession::isConnected)
@@ -65,7 +65,7 @@ public class GetRunningSnapshotHandler implements GetRunningSnapshotUsecase {
     private GetRunningSnapshotResult.Player toPlayer(
             Long runningRoomId, UserId userId, Map<UUID, PlayerProfile> profiles) {
         RunningDistance distance = loadRunningDistancePort.loadDistance(runningRoomId, userId);
-        // 신청은 남고 사용자만 사라진다 — users 행이 없으면 탈퇴다(api-spec §0)
+        // 신청은 남고 사용자만 사라진다 — users 행이 없으면 탈퇴다
         PlayerProfile profile = profiles.get(userId.value());
         boolean deleted = profile == null;
         return new GetRunningSnapshotResult.Player(

@@ -225,7 +225,7 @@ public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUser
     }
 
     // 칼로리 계산에만 쓴다. 온보딩을 안 끝낸 유저는 행이 없어 Optional이다 —
-    // 그 경우 기록 없이 상태만 확정하는 경로로 흘러간다
+    // 비어 있으면 종료 확정이 ONBOARDING_NOT_COMPLETED로 실패한다
     @Override
     public Optional<BigDecimal> loadWeightKg(UserId userId) {
         return entityManager.createQuery("""

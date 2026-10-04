@@ -56,7 +56,7 @@ public class GetRunningSplitResultsHandler implements GetRunningSplitResultsUsec
         }
         RunningRoomId roomId = new RunningRoomId(query.runningRoomId());
         UserId viewerId = new UserId(query.viewerId());
-        // 1. 없는 방과 남의 방을 나눈다 — 6-1과 같은 순서다
+        // 1. 없는 방과 남의 방을 나눈다 — 러닝 결과 조회와 같은 순서다
         loadRunningRoomPort.loadById(roomId).orElseThrow(RunningResultNotFoundException::new);
 
         List<RunningResultPlayer> roomPlayers = loadRunningResultPlayersPort.loadPlayers(roomId)

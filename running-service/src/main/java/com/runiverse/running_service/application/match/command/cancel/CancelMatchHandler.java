@@ -55,7 +55,7 @@ public class CancelMatchHandler implements CancelMatchUsecase {
         if (player.getStatus() == RunningPlayerStatus.RUNNING) {
             throw new MatchAlreadyStartedException();
         }
-        // 3. "방 미배정" 상태는 없다(feature-spec) — 비어 있으면 데이터 사고라 드러낸다
+        // 3. "방 미배정" 상태는 없다 — 비어 있으면 데이터 사고라 드러낸다
         RunningRoomId roomId = loadMatchRoomPort.findAssignedRoom(userId)
                 .orElseThrow(() -> new IllegalStateException(
                         "활성 신청에 배정된 방이 없다 — userId=" + userId.value()));
@@ -92,7 +92,7 @@ public class CancelMatchHandler implements CancelMatchUsecase {
         }
     }
 
-    // 마감·인원·방 종류가 함께 걸린다 — 혼자 남은 방을 나가는 데는 손해를 보는 상대가 없고(feature-spec),
+    // 마감·인원·방 종류가 함께 걸린다 — 혼자 남은 방을 나가는 데는 손해를 보는 상대가 없고,
     // 마감 전이면 아직 확정되지 않아 깰 약속도 없다
     private boolean isPenalty(RunningRoom room, LocalDateTime now) {
         return room.getType() == RunningRoomType.MATCH

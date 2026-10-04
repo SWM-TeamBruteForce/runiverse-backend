@@ -57,7 +57,7 @@ public class ApplyMatchHandler implements ApplyMatchUsecase {
         if (existsActiveApplicationPort.existsActive(userId)) {
             throw new MatchAlreadyInProgressException();
         }
-        // 4. 페이스는 입력받지 않고 온보딩 값을 쓴다(api-spec 5-A).
+        // 4. 페이스는 입력받지 않고 온보딩 값을 쓴다.
         //    온보딩 완료 = user_onboardings row 존재라, 비어 있으면 곧 온보딩 미완료다
         Pace pace = loadUserAvgPacePort.loadAvgPace(userId)
                 .orElseThrow(OnboardingNotCompletedException::new);

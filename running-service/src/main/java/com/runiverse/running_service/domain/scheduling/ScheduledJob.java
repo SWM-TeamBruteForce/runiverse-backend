@@ -16,7 +16,7 @@ import java.util.Optional;
 // 정해진 시각에 한 번만 실행되는 예약. 무엇을 언제 할지만 알고 무엇을 하는지는 모른다 —
 // 그건 타입별 유스케이스의 몫이다.
 // 여러 인스턴스가 같은 예약을 메모리 타이머로 들고 있으므로, 실행 직전에 잠그고
-// markSent()로 하나만 통과시킨다. 중복은 낭비가 아니라 이중화다(erd scheduled_jobs)
+// markSent()로 하나만 통과시킨다. 중복은 낭비가 아니라 이중화다
 @Getter
 public class ScheduledJob {
 

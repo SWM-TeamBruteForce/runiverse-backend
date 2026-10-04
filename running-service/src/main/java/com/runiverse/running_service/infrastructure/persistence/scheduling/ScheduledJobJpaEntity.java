@@ -44,7 +44,7 @@ public class ScheduledJobJpaEntity extends BaseCreatedAtEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "job_type", length = 50, nullable = false, updatable = false)
     private ScheduledJobType jobType;
-    // 타입마다 가리키는 테이블이 달라 FK를 걸지 않는다(erd §0 참조 정책과 같은 이유)
+    // 타입마다 가리키는 테이블이 달라 FK를 걸지 않는다
     @Column(name = "target_id", length = 100, nullable = false, updatable = false)
     private String targetId;
     // 오프셋을 바꾸면 아직 실행되지 않은 행의 이 값을 함께 옮겨야 한다 — 계산값을 굳힌 대가다

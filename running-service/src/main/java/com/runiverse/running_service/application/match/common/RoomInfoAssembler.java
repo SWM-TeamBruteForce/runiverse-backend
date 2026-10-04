@@ -55,7 +55,7 @@ public class RoomInfoAssembler {
     }
 
     private RoomInfo.RoomPlayer toPlayer(MatchPlayer player, Map<UUID, PlayerProfile> profiles) {
-        // 신청은 남고 사용자만 사라진다 — users 행이 없으면 탈퇴다(api-spec §0)
+        // 신청은 남고 사용자만 사라진다 — users 행이 없으면 탈퇴다
         PlayerProfile profile = profiles.get(player.userId());
         boolean deleted = profile == null;
         return new RoomInfo.RoomPlayer(

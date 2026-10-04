@@ -8,7 +8,7 @@ public record RunningResultRecord(
         String routePolyline,
         LocalDateTime startedAt,
         LocalDateTime finishedAt,
-        // 아래 둘은 6-2만 쓴다 — 같은 행에서 오는 값이라 따로 조회하지 않는다
+        // 아래 둘은 구간별 결과 조회만 쓴다 — 같은 행에서 오는 값이라 따로 조회하지 않는다
         int totalDistanceMeters,
         Integer totalElevationGainMeters
 ) {

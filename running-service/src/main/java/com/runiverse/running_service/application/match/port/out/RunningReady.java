@@ -8,7 +8,7 @@ public record RunningReady(
         Long runningRoomId,
         LocalDateTime scheduledStartAt,
         // 보낸 시점 기준 남은 시간. 시각 포맷이 초 단위까지라 밀리초를 시각으로는 실을 수 없고,
-        // 클라가 기기 시계를 믿지 않고 타이머를 걸려면 이 값이어야 한다(api-convention 물리량 단위)
+        // 클라가 기기 시계를 믿지 않고 타이머를 걸려면 이 값이어야 한다
         long startsInMs
 ) {
 

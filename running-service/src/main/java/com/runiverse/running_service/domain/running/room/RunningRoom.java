@@ -138,7 +138,7 @@ public class RunningRoom {
         if (existing.isConnected()) {
             throw new AlreadyRoomPlayerException();   // 한 플레이어 = 최대 한 방
         }
-        // 전에 거쳐 간 방이다 — 키가 유저라 행을 새로 만들지 않고 되살린다(erd).
+        // 전에 거쳐 간 방이다 — 키가 유저라 행을 새로 만들지 않고 되살린다.
         // 몇 번을 나갔든 다시 받아 준다 — 이탈 이력은 후보 순위만 낮출 뿐 문을 잠그지 않는다
         this.playerCount = playerCount.join();
         existing.reassign(runningPlayerId);
@@ -149,7 +149,7 @@ public class RunningRoom {
     public boolean canJoin() {
         return status == RunningRoomStatus.MATCHING
                 && playerCount.canJoin()
-                // 참가자가 0이면 평균이 지워지고(erd) 그 방은 같은 순간 닫힌다 —
+                // 참가자가 0이면 평균이 지워지고 그 방은 같은 순간 닫힌다 —
                 // 순위를 매길 기준이 없는 방에 붙이지 않는다
                 && avgPace != null;
     }
@@ -191,7 +191,7 @@ public class RunningRoom {
     }
 
     // 완주로 자리를 비운다 — 인원도 방 상태도 건드리지 않는다.
-    // leave()를 쓰면 마지막 완주자가 인원을 0으로 만들어 방이 CANCELLED가 된다(erd 생명주기)
+    // leave()를 쓰면 마지막 완주자가 인원을 0으로 만들어 방이 CANCELLED가 된다
     public void finishSession(UserId userId) {
         session(userId).finish();
     }
