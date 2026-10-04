@@ -41,6 +41,13 @@ public class ErrorExposurePolicyTest {
     }
 
     @Test
+    @DisplayName("탈퇴 중 일시 장애는 503 그대로 노출한다")
+    void accountDeletionUnavailableIsExposed() {
+        assertThat(ErrorExposurePolicy.isExposed(
+                HttpStatus.SERVICE_UNAVAILABLE, UserErrorCode.ACCOUNT_DELETION_UNAVAILABLE.getCode())).isTrue();
+    }
+
+    @Test
     @DisplayName("본인이 아닌 요청 거부는 403 그대로 노출한다")
     void accessDeniedIsExposed() {
         // 노출 목록에서 빠지면 아무 경고 없이 500으로 바뀌어 클라가 원인을 알 수 없다

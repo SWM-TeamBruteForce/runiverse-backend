@@ -2895,4 +2895,13 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   - **DB 밖**: 리프레시 토큰 삭제 + 액세스 토큰 블랙리스트 등록, S3 프로필 사진 90일 뒤 삭제, GPS 원본 유지, 카카오 unlink(`provider_id` 선확보).
   - `delete_users`의 `email`·`nickname`은 90일 뒤 `NULL`로 갱신한다(행은 유지).
 - **Response**: `204 No Content` (토큰 즉시 무효화)
+- **에러 (503 Service Unavailable — 진행 중인 러닝을 정리하다 저장소 장애)** — 탈퇴는 통째로 되돌려진다. 클라는 잠시 후 다시 시도하게 한다
+
+```json
+{
+  "code": "ACCOUNT_DELETION_UNAVAILABLE",
+  "message": "일시적인 오류로 탈퇴하지 못했습니다. 잠시 후 다시 시도해 주세요."
+}
+```
+
 - **인증**: 필요

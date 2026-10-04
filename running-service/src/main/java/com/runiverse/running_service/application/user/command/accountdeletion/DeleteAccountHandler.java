@@ -3,7 +3,10 @@ package com.runiverse.running_service.application.user.command.accountdeletion;
 import com.runiverse.running_service.application.auth.port.out.BlockAccessTokenPort;
 import com.runiverse.running_service.application.auth.port.out.DeleteRefreshTokenPort;
 import com.runiverse.running_service.application.running.command.accountdeletion.SettleRunningForAccountDeletionCommand;
+import com.runiverse.running_service.application.running.exception.RunningSessionUnavailableException;
+import com.runiverse.running_service.application.running.exception.RunningTrackUnavailableException;
 import com.runiverse.running_service.application.running.port.in.SettleRunningForAccountDeletionUsecase;
+import com.runiverse.running_service.application.user.exception.AccountDeletionUnavailableException;
 import com.runiverse.running_service.application.user.exception.UserNotFoundException;
 import com.runiverse.running_service.application.user.port.in.DeleteAccountUsecase;
 import com.runiverse.running_service.application.user.port.out.AccountSnapshot;
@@ -39,9 +42,13 @@ public class DeleteAccountHandler implements DeleteAccountUsecase {
         // 1. 지우기 전에 한 번에 읽는다 — 소셜 연동을 지운 뒤에는 login_type을 판정할 수 없다
         AccountSnapshot snapshot = loadAccountSnapshotPort.loadAccountSnapshot(userId)
                 .orElseThrow(UserNotFoundException::new);
-        // 2. 진행 중인 러닝·매칭을 먼저 정리한다
-        settleRunningForAccountDeletionUsecase.handle(
-                new SettleRunningForAccountDeletionCommand(command.userId()));
+        // 2. 진행 중인 러닝·매칭을 먼저 정리한다. 러닝 저장소 장애는 WS용 코드라 탈퇴용으로 바꿔 던진다
+        try {
+            settleRunningForAccountDeletionUsecase.handle(
+                    new SettleRunningForAccountDeletionCommand(command.userId()));
+        } catch (RunningTrackUnavailableException | RunningSessionUnavailableException e) {
+            throw new AccountDeletionUnavailableException();
+        }
         // 3. 스냅샷을 남긴 뒤 계정을 지운다
         saveDeletedUserPort.saveDeletedUser(toDeletedUser(snapshot));
         deleteUserPort.deleteUser(userId);

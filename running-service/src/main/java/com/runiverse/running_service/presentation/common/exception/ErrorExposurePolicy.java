@@ -23,6 +23,7 @@ public final class ErrorExposurePolicy {
             UserErrorCode.PROFILE_IMAGE_NOT_UPLOADED.getCode(),
             ResourceErrorCode.NOT_FOUND.getCode(),
             UserErrorCode.INVALID_PROFILE_IMAGE.getCode(),
+            UserErrorCode.ACCOUNT_DELETION_UNAVAILABLE.getCode(),
             AuthErrorCode.INVALID_CREDENTIALS.getCode(),
             AuthErrorCode.OAUTH_LOGIN_FAILED.getCode(),
             AuthErrorCode.OAUTH_PROVIDER_UNAVAILABLE.getCode(),

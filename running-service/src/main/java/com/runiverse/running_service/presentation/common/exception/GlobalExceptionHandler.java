@@ -184,6 +184,7 @@ public class GlobalExceptionHandler {
                  ONBOARDING_NOT_COMPLETED,
                  NICKNAME_ALREADY_EXISTS,
                  PASSWORD_NOT_SET -> HttpStatus.CONFLICT;
+            case ACCOUNT_DELETION_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
             // 계정 존재 여부를 숨기려고 노출하지 않는다 — ErrorExposurePolicy에서도 제외돼 500으로 응답한다
             case USER_NOT_FOUND -> HttpStatus.INTERNAL_SERVER_ERROR;
         };
