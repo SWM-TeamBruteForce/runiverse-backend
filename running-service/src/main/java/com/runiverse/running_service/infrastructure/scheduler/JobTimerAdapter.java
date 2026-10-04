@@ -34,7 +34,7 @@ public class JobTimerAdapter implements RegisterJobTimerPort {
                 .value();
         timers.computeIfAbsent(jobId, id -> taskScheduler.schedule(
                 () -> fire(id),
-                // 저장 시각이 KST 벽시계라 JVM 기본 타임존으로 되돌린다(TimeZoneConfig)
+                // 저장 시각이 KST 벽시계라 JVM 기본 타임존으로 되돌린다(DefaultTimeZoneInitializer)
                 job.getExecuteAt().atZone(ZoneId.systemDefault()).toInstant()));
     }
 

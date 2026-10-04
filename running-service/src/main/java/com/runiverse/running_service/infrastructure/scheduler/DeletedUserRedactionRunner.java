@@ -13,8 +13,8 @@ public class DeletedUserRedactionRunner {
 
     private final RedactDeletedUsersUsecase redactDeletedUsersUsecase;
 
-    // TimeZoneConfig가 기본값을 바꾸기 전에 트리거가 만들어질 수 있어 존을 명시한다
-    @Scheduled(cron = "${account-deletion.redaction-cron}", zone = "${APP_TIME_ZONE}")
+    // 크론 해석을 JVM 기본 시간대에 기대지 않고 앱 시간대로 명시한다
+    @Scheduled(cron = "${account-deletion.redaction-cron}", zone = "${app.time-zone}")
     public void redactOnSchedule() {
         try {
             redactDeletedUsersUsecase.redactAfterRetention();

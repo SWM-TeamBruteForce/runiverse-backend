@@ -36,7 +36,7 @@ public class OpenMeteoWeatherClient {
     // 앞은 재시도할 값어치가 있고 뒤는 다시 물어도 같은 답이다
     Optional<Weather> fetch(double latitude, double longitude, LocalDateTime at) {
         // 저장 시각과 조회 시각의 기준을 하나로 묶는다 —
-        // TimeZoneConfig가 JVM 기본 존을 APP_TIME_ZONE으로 고정해둔다
+        // DefaultTimeZoneInitializer가 JVM 기본 존을 app.time-zone으로 고정해둔다
         ZoneId zone = ZoneId.systemDefault();
         OpenMeteoResponse response = restClient.get()
                 .uri(uri -> uri.path("/v1/forecast")
