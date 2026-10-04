@@ -19,7 +19,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 // 시작 직전 통지 — 방 상태를 바꾸지 않는 유일한 예약이다.
-// MATCHED→STARTED는 start_at 정각의 시작 예약이 일으킨다(api-spec 5-C)
+// MATCHED→STARTED는 start_at 정각의 시작 예약이 일으킨다
 @Slf4j
 @Service
 @RequiredArgsConstructor

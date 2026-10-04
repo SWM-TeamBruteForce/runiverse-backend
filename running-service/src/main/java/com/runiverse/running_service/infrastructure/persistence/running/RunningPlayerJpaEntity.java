@@ -23,7 +23,7 @@ import java.util.UUID;
 @Entity
 @Table(
         name = "running_players",
-        // 내 신청 조회·중복 신청 검사·탈퇴 시 삭제. 검사가 deleted_at IS NULL을 항상 함께 보므로 복합으로 둔다
+        // 내 신청 조회·중복 신청 검사. 검사가 deleted_at IS NULL을 항상 함께 보므로 복합으로 둔다
         // (논리 참조라 FK 인덱스가 없어서 이게 유일한 진입 인덱스다)
         indexes = @Index(name = "idx_running_player_user", columnList = "user_id, deleted_at")
 )
@@ -43,7 +43,7 @@ public class RunningPlayerJpaEntity extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "running_player_id", nullable = false, updatable = false)
     private Long runningPlayerId;
-    // 논리 참조(FK 제약 없음) — 탈퇴 시 앱이 명시적으로 삭제한다
+    // 논리 참조(FK 제약 없음) — 탈퇴해도 지우지 않고 신청 이력으로 남긴다
     @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
     @Enumerated(EnumType.STRING)

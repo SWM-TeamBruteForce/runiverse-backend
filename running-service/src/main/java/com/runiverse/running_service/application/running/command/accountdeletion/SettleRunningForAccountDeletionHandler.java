@@ -103,7 +103,7 @@ public class SettleRunningForAccountDeletionHandler
         updateMatchRoomPort.update(room);
     }
 
-    // 일반 취소처럼 닫는다 — 신청은 지우지 않고 통계로 남긴다(erd).
+    // 일반 취소처럼 닫는다 — 신청은 지우지 않고 통계로 남긴다.
     // 사유도 취소와 같게 남기지만 쿨다운은 걸지 않는다 — 막을 다음 신청이 없다
     private void leaveBeforeStart(UserId userId, RunningPlayer player, RunningRoom room) {
         LocalDateTime now = LocalDateTime.now();

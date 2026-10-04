@@ -74,7 +74,7 @@ public class CancelMatchHandler implements CancelMatchUsecase {
             matchCooldownPort.start(userId, matchProperties.cooldown());
         }
         updateMatchApplicationPort.update(player);
-        // 6. 시작 후에는 인원을 줄이지 않는다 — current_player_count는 확정 인원으로 고정되고(erd),
+        // 6. 시작 후에는 인원을 줄이지 않는다 — current_player_count는 확정 인원으로 고정되고,
         //    방은 강제 종료가 기록 유무로 닫는다. 탈퇴 정산의 미출석 처리와 같다
         if (!room.getStatus().isBeforeStart()) {
             room.finishSession(userId);
