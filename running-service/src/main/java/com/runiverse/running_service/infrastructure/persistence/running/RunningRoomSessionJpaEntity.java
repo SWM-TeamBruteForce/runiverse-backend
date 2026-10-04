@@ -49,10 +49,10 @@ public class RunningRoomSessionJpaEntity extends BaseTimeEntity {
     private UUID userId;
     // 지금 이 방에 들어와 있는 신청 — 다른 애그리거트라 ID로만 참조한다(Reference by Identity).
     // PK가 아니라 재배정 시 갱신되며, 참가자의 상태·페이스·기록을 읽는 조인 경로다.
-    // 무결성은 앱이 관리한다 — 탈퇴 정리 때 세션도 user_id로 함께 지운다
+    // 무결성은 앱이 관리한다 — 탈퇴해도 세션은 지우지 않는다
     @Column(name = "running_player_id", nullable = false)
     private Long runningPlayerId;
-    // 이 방에서 나간 누적 횟수 — 나갔다 다시 들어오면 또 쌓인다. 페널티 판정 근거
+    // 이 유저가 이 방에서 나간 누적 횟수 — 나갔다 다시 들어오면 또 쌓인다. 배정 후보의 순위 재료
     @Column(name = "leave_count", nullable = false)
     private int leaveCount;
     // 이 방에 남아 있는지 여부 — WS 연결 상태가 아니다.

@@ -176,8 +176,8 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
         return fragments;
     }
 
-    // 종료 확정 뒤 버퍼를 비운다. TTL이 있어 남겨도 새지는 않지만,
-    // 끝난 러닝에 재연결 재전송이 다시 쌓이는 걸 막는다.
+    // 종료 확정 뒤 버퍼를 비운다. TTL이 있어 남겨도 새지는 않는다.
+    // 중복 판정 비트맵도 지우므로 늦게 온 재전송은 다시 쌓이지만, 기록은 이미 DB에 있어 쓰이지 않고 TTL이 지운다.
     // 실패해도 종료를 되돌리지 않는다 — 이미 기록은 DB에 있고 TTL이 결국 지운다
     @Override
     public void delete(Long runningRoomId, UserId userId) {
