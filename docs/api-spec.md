@@ -59,14 +59,14 @@
 | 이벤트 | 비고 |
 |--------|------|
 | `MATCH_STARTED` | 매칭 성사 통지 (`RoomInfo`) |
-| `MATCH_ROOM_UPDATED` | 방 상태 갱신 (`RoomInfo`) — 인원 변동·취소 포함 |
+| `MATCH_ROOM_UPDATED` | 방 상태 갱신 (`RoomInfo`) — 인원 변동 |
 | `RUNNING_READY` | 곧 시작 통지 — `start_at` 직전(리드타임은 운영값)에 서버가 한 번 보낸다. 클라의 `RUNNING_START` 발사 타이머 기준 (5-C) |
 
 **러닝 WebSocket** — `/api/v1/ws/running`, 메시지 8종. 매칭 러닝과 솔로 러닝이 같은 채널을 쓴다. 이 외에 **ack 2종**(`RUNNING_STARTED`·`RUNNING_FINISHED`)과 **헬스 체크 2종**(`HEALTH_CHECK`·`HEALTH_CHECKED`)이 있다.
 
 | 그룹 | 메시지 | 방향 | 비고 |
 |------|--------|------|------|
-| 카운트 다운 | `RUNNING_START` | C→S | 방의 `STARTED` 확인 후 참가자 시작 통보 |
+| 카운트 다운 | `RUNNING_START` | C→S | 방 시작(`MATCHED`면 `STARTED`로)과 참가자 시작을 함께 처리 |
 | 러닝 중 | `RUNNING_LOCATION_UPDATE` | C→S | 고빈도 — ack 없음. 이 배치로 목표 거리를 채우면 서버가 종료하고 `RUNNING_FINISHED`를 보낸다 |
 | 러닝 중 | `RUNNING_PROGRESS_UPDATED` | S→C | `paused` 포함 — 멈춘 것과 느려진 것을 구분 |
 | 러닝 중 | `RUNNING_COMBO_UPDATED` | S→C | 나란히 달리는 상대와의 콤보 — 참가자 쌍마다 따로 센다 |
@@ -172,7 +172,7 @@
 
 ### 공통 에러 응답
 
-인증 필요(`인증: 필요`) API → **401**, 모든 API → **400**·**500** 공통 발생. 각 엔드포인트 명세엔 특유 에러만 표기. 검증 실패 시 `code`는 `INVALID_REQUEST` 공통이고 `message`로 사유를 구분한다.
+인증 필요(`인증: 필요`) API → **401**, 모든 API → **400**·**500** 공통 발생. 등록되지 않은 경로는 **404** `NOT_FOUND`("요청한 리소스를 찾을 수 없습니다.")다 — 공개 경로가 아니면 토큰 검증이 먼저라 토큰 없이 부르면 401이 나간다. 각 엔드포인트 명세엔 특유 에러만 표기. 검증 실패 시 `code`는 `INVALID_REQUEST` 공통이고 `message`로 사유를 구분한다.
 `인증: 불필요` API도 `Authorization` 헤더가 있으면 토큰을 검증하며, 실패하면 아래 401을 낸다 — 클라이언트는 공개 API(1-1~1-7·11-3·11-8)에 헤더를 싣지 않는다.
 
 검증에 실패한 필드가 둘 이상이거나 한 필드에서 제약이 둘 이상 깨지면 `message`는 각 사유를 공백으로 이어 붙인 한 문자열이며, **문장 순서는 보장하지 않는다**. 각 엔드포인트의 400 예시는 사유를 하나씩 보여주는 것이지 나올 수 있는 조합을 모두 나열한 것이 아니다. 클라이언트는 `message`를 문서 문구와 정확히 비교하거나 파싱해 어느 필드가 틀렸는지 역추적하지 않는다 — 필드 단위 안내는 클라이언트 자체 검증으로 처리하고, 서버 `message`는 그대로 노출한다.
@@ -673,7 +673,7 @@
 ```json
 {
   "nickname": "완두콩",
-  "gender": "MALE",                  // MALE | FEMALE
+  "gender": "MALE",                  // MALE | FEMALE (대소문자 무시, 저장·응답은 대문자)
   "birthday": "1998-12-16",
   "averagePaceSecondsPerKm": 359,    // 초/km 정수 (5'59") — 초기값. 이후 러닝 기록 기반 서버 자동 갱신 (수정 UI 없음)
   "weightKg": 77,
@@ -922,7 +922,7 @@
   - **이 응답에만 본문이 없다.** 요청 `Accept`가 `text/event-stream`이라 다른 에러처럼 JSON 본문을 실을 수 없다. 클라는 상태 코드로 판단하고, 신청 응답을 받기 전에는 스트림을 열지 않는다.
   - 앱 재시작·포그라운드 복귀 시엔 스트림을 다시 열고, **연결 직후 내려오는 `RoomInfo` 스냅샷으로 상태를 복원한다.**
 - **종료 시점**: `RUNNING_STARTED` ack 뒤, 또는 매칭 취소(`DELETE /running-matches`)의 204를 받은 뒤 클라이언트가 닫는다.
-- **서버도 스트림을 닫는다** — 열린 지 운영값(현재 30분)이 지나면, 같은 사용자의 새 연결이 들어오면, 탈퇴하면 닫는다(탈퇴를 처리한 서버 인스턴스에 붙은 스트림만 닫는다). 활성 신청이 남아 있으면 클라는 다시 연결하고 연결 직후 스냅샷으로 상태를 복원한다.
+- **서버도 스트림을 닫는다** — 열린 지 운영값(현재 30분)이 지나면, 같은 사용자의 새 연결이 들어오면, 탈퇴하면 닫는다(새 연결·탈퇴는 그 요청을 처리한 서버 인스턴스에 붙은 스트림만 닫는다 — 다른 인스턴스의 옛 스트림은 30분 만료나 전송 실패로 정리된다). 활성 신청이 남아 있으면 클라는 다시 연결하고 연결 직후 스냅샷으로 상태를 복원한다.
 - **연결을 화면 생명주기에 묶지 않는다.** 홈을 벗어나도 스트림은 살아 있어야 한다(근거는 `feature-spec.md` 매칭·러닝 설계 절)
 - **이벤트 형식** — 타입은 SSE `event` 필드로, 본문은 `data`에 JSON으로 싣는다
 
@@ -981,8 +981,8 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **입력값은 정해진 선택지 안에서만 받는다** — 자유 입력이 아니다
 - **활성 신청은 1개** — 이미 있으면 `409 MATCH_ALREADY_IN_PROGRESS`. 확정된 신청도 활성이므로 재신청은 막힌다. 혼자 확정된 경우에는 페널티 없이 나갈 수 있고(5-B) 나가면 곧바로 다시 신청할 수 있다. 이 API로 만드는 방은 전부 공개 랜덤 매칭이라 공개 범위를 받지 않는다
 - 페이스 조건은 입력받지 않음 — 서버가 보관한 사용자 평균 페이스 자동 사용. 그 값이 없으면(온보딩 미완료) `409 ONBOARDING_NOT_COMPLETED`
-- **모집 인원도 입력받지 않음** — 서버가 2~4명 범위에서 자동 편성 (`desiredPlayerCount` 필드 없음)
-- **Response `201 Created`** — 신청이 접수되면 `running_players` row와 `running_room_sessions` 배정 row가 생긴다. 같은 조건에 모집 중인 방이 있으면 거기 배정되고, 없으면 **1인 방**(`running_rooms`, `type='MATCH'`, `status='MATCHING'`, `max_player_count=4`, `current_player_count=1`)이 새로 생긴다
+- **모집 인원도 입력받지 않음** — 서버가 최대 4명까지 모으고, 마감 때 1명이면 1인으로 확정한다 (`desiredPlayerCount` 필드 없음)
+- **Response `201 Created`** — 신청이 접수되면 `running_players` row와 `running_room_sessions` 배정 row가 생긴다(예전에 거쳐 간 방에 다시 배정되면 그 배정 row를 되살린다). 같은 조건에 모집 중인 방이 있으면 거기 배정되고, 없으면 **1인 방**(`running_rooms`, `type='MATCH'`, `status='MATCHING'`, `max_player_count=4`, `current_player_count=1`)이 새로 생긴다
 
 ```json
 {
@@ -1074,6 +1074,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 #### `DELETE /api/v1/running-matches` — 매칭 취소·방 나가기 (겸용)
 
 - **토큰 주체의 활성 신청 하나를 취소한다** — 경로가 복수형이지만 컬렉션 전체를 지우는 것이 아니다. 신청은 유저당 하나뿐이라 경로에 식별자를 두지 않으며, `POST /running-matches`로 만든 것을 같은 경로에서 지운다
+- **솔로 방의 시작 전 신청도 이 경로로 닫는다** — 솔로를 열고 WS에 붙기 전에 그만둘 때 쓴다. 방은 `CANCELLED`, 신청은 `MATCHED_LEFT_NO_PENALTY`이며 제재는 없다. 이미 뛰는 중(`RUNNING`)이면 아래와 같이 409다
 - **서버가 모집 마감 시각으로 분기**
   - 대기 중(마감 전) = 대기 취소(`status=MATCHED_LEFT_NO_PENALTY` + `deleted_at` 기록). **본인이 마지막 참가자였으면 방도 `CANCELLED`**. 제재 없음
   - **분기는 방의 `status`가 아니라 모집 마감 시각으로 한다** — 마감이 지났는데 스케줄러가 아직 `MATCHING`을 안 닫은 틈에 나가면 제재를 피할 수 있기 때문이다
@@ -1084,6 +1085,14 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **시각으로 취소를 차단하지 않는다.** 시작 직전까지 호출할 수 있고 늦은 이탈은 쿨다운으로 다룬다
 - **Response `204 No Content`** — 이후 클라는 SSE 스트림을 닫는다
 - **에러 (404 Not Found)**: 활성 신청이 없다
+
+```json
+{
+  "code": "NOT_FOUND",
+  "message": "요청한 리소스를 찾을 수 없습니다."
+}
+```
+
 - **에러 (409 Conflict)**: 본인이 이미 러닝을 시작했다(참가자 `RUNNING`)
 
 ```json
@@ -1223,6 +1232,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **토큰은 핸드셰이크에서 한 번만 검증한다** — 연결 유지 중 `accessToken`이 만료돼도 끊지 않는다. 러닝 구간이 토큰 수명보다 길어 만료마다 끊으면 좌표 전달이 그때마다 멈추고 갱신·재연결·재전송 비용이 든다. 재연결은 같은 러닝으로 이어지므로 기록이 갈리지는 않는다. 단 탈퇴하면 서버가 연결을 닫는다(close code `1000`). 탈퇴를 처리한 서버 인스턴스에 붙은 연결만 닫으며, 여러 대로 운영하면 다른 인스턴스의 연결은 남을 수 있다. 토큰이 폐기돼 재연결 핸드셰이크가 401로 막힌다. 클라는 REST용 토큰을 평소대로 갱신하고, 새 토큰은 재연결할 때만 쓴다
 - **중복 연결은 마지막 것만 남긴다** — 같은 사용자의 새 연결이 `RUNNING_START`를 보내면 서버가 기존 연결을 close code `4001`로 닫는다. 기기 전환·앱 재시작 때 이전 소켓이 남아 있을 수 있는데 둘 다 살려두면 같은 `(runningRoomId, userId, sequence)`에 서로 다른 트랙이 섞인다. `4001`을 받은 클라는 재연결하지 않는다 — 다른 기기가 이어받은 것이다
 - **보낼 메시지가 밀려 한도(운영값)를 넘으면 서버가 close code `4500`으로 닫는다** — 네트워크가 끊긴 것에 가까운 상태라 연결을 정리하고 재연결로 복구한다. `4001`이 아니므로 클라는 평소대로 재연결한다
+- **클라가 보내는 텍스트 메시지 한 건은 운영값(현재 64KB) 이하여야 한다** — 넘으면 서버(WebSocket 컨테이너)가 close code `1009`로 닫는다. 재연결 뒤 로컬 트랙을 다시 보낼 때도 한 번에 몰아 보내지 말고 이 크기 안으로 나눠 보낸다 — 한 번에 보내면 다시 `1009`로 끊겨 재연결·재전송이 되풀이된다
 - **keep-alive**: 클라가 주기적으로 `HEALTH_CHECK`(C→S)를 보내고 서버가 `HEALTH_CHECKED`(S→C)로 응답한다. 둘 다 `data`는 비운다. **유휴 상태가 서버 설정 시간(운영값)을 넘으면 서버가 연결을 닫는다** — 좌표를 계속 보내는 러닝 중에는 별도 신호가 필요 없고, 시작 전 대기 구간에서 의미가 있다. 프록시 유휴 타임아웃을 막는 목적은 SSE와 같다
 - **연결이 끊겨도 러닝은 끝나지 않는다** — 방·참가자 상태는 그대로 두고 재연결을 기다린다. 서버의 강제 종료는 **`start_at`부터 잰 유예**(운영값) 기준이라 연결 상태와 축이 다르다(`running_room_sessions.is_connected`도 방 배정 여부이지 접속 여부가 아니다)
 - **메시지 공통 형식**
@@ -1263,11 +1273,11 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   | `INVALID_REQUEST` | `data` 검증 실패 |
   | `RUNNING_NOT_STARTED` | `RUNNING_START` 없이 러닝 중 메시지를 보냄 — 형식은 맞지만 서버에 정해진 방이 없다 |
   | `RUNNING_SESSION_UNAVAILABLE` | 외부 저장소 장애로 세션을 등록하지 못함 — 이 연결로는 러닝 메시지를 처리할 수 없다(참가자 상태는 이미 `RUNNING`일 수 있다). 잠시 뒤 `RUNNING_START`를 다시 보낸다 — 멱등이다 |
-  | `RUNNING_TRACK_UNAVAILABLE` | 외부 저장소 장애로 좌표를 저장하지 못함 — 러닝은 계속된다 |
+  | `RUNNING_TRACK_UNAVAILABLE` | 외부 저장소 장애로 좌표를 저장하지 못함 — 러닝은 계속된다. 종료(`RUNNING_FINISH`·목표 도달 자동 종료) 중 트랙을 읽지 못한 경우에도 나가며, 이때는 종료가 확정되지 않았으니 잠시 뒤 `RUNNING_FINISH`를 다시 보낸다 |
   | `ROOM_NOT_FOUND` | 방 없음 |
   | `NOT_ROOM_PLAYER` | 이 방 참가자가 아님 |
   | `INVALID_ROOM_STATE` | 현재 상태에서 불가한 요청 |
-  | `ONBOARDING_NOT_COMPLETED` | `RUNNING_FINISH` 처리 중 온보딩 정보가 없음 |
+  | `ONBOARDING_NOT_COMPLETED` | 종료(`RUNNING_FINISH`·목표 도달 자동 종료) 처리 중 온보딩 정보가 없음 — 자동 종료면 `sourceType`이 `RUNNING_LOCATION_UPDATE`다 |
   | `INTERNAL_SERVER_ERROR` | 예기치 못한 서버 오류 — 러닝은 계속된다. 표에 없는 오류는 이 코드로 마스킹된다 |
 
 - **`ERROR`로는 연결을 끊지 않는다.** 잘못된 메시지 하나 때문에 러닝 전체가 끊기면 안 되므로, 오류를 돌려주고 연결은 유지한다
@@ -1416,6 +1426,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **받는 사람의 상태 전체를 담는다.** 콤보가 끊긴 상대는 목록에서 빠지므로 **끊김을 알리는 별도 이벤트가 없다** — 클라는 이 목록으로 화면을 갈아끼운다
   - 통이 유실돼도 다음 통이 현재 상태를 다시 실어 온다. 놓친 이벤트를 되짚을 필요가 없다
   - 아무와도 겹치지 않으면 `peers`는 빈 배열이다
+- **`RUNNING_START`로 처음 들어올 때 한 번 나간다.** 출발선에서 바로 콤보를 세우기 위해서다 — 안 하면 첫 좌표 배치까지 비어 있다. 재연결·중복 `RUNNING_START`에는 다시 판정하지 않는다
 - **위치 배치를 받을 때마다 나간다.** 보낸 참가자와 **그와 관계가 얽힌 참가자**(지금 겹친 사람·방금 끊긴 사람)에게 보내며, 무관한 참가자에게는 보내지 않는다
   - 방금 끊긴 상대에게도 보내야 한다 — 안 보내면 그쪽 화면에 끊긴 콤보가 남는다
   - 같은 관계를 두고 양쪽의 배치가 각각 통을 만들어 내용이 겹칠 수 있다. `comboCount`는 콤보 시작 시각에서 계산하므로 두 통의 값이 같고, 화면은 같은 값으로 덮여 바뀌지 않는다
@@ -1735,6 +1746,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 ```
 
 - 기간에 기록이 없으면 `runningRecords`는 빈 배열이다
+- **숨긴 방(`running_rooms.deleted_at` 있음)의 기록은 빠진다** — 6-1·6-2가 그 방을 404로 보는 것과 맞춘다. 숨김은 [MVP 제외]라 지금은 해당하는 방이 없다
 - **페이지를 나누지 않는다** — 한 번에 받는 범위가 31일로 묶여 있어 커서를 두지 않는다
 - **`type`은 방 종류다** — `SOLO`는 솔로 러닝, `MATCH`는 매칭 러닝이다. `INVITE`는 [MVP 제외] 예약값이라 나오지 않는다
 - **`playerCount`는 6-1 결과의 `players` 수와 같다** — 러닝 단계에 들어간 참가자(`RUNNING`·`RUNNING_LEFT_*`·`COMPLETED`)를 본인과 탈퇴자까지 포함해 센다. 확정됐지만 나타나지 않은 참가자는 세지 않으므로 `running_rooms.current_player_count`와 다를 수 있다. `MATCH`인데 `1`이면 혼자 뛴 매칭 러닝이다
@@ -2202,7 +2214,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 {
   "userId": "550e8400-e29b-41d4-a716-446655440015",
   "isMe": false,
-  "nickname": "동완러너",
+  "nickname": "동완러너",              // 온보딩 전이면 null
   "profileImageUrl": "https://...",
   "introduction": "즐겁게 달려요",
   "friendCount": 42,                   // friendships에서 COUNT (status=ACCEPTED)
@@ -2393,7 +2405,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 }
 ```
 
-`profileImageKey` 포맷은 `profiles/{userId}/{imageId}.{확장자}` — 소유자 검증에 쓰이므로 클라가 임의로 만들지 않는다. 확장자는 `mimeType`이 정한다(`image/jpeg`→`jpg`, `image/png`→`png`, `image/webp`→`webp`). 클라는 `uploadUrl`로 S3에 직접 업로드하며, 업로드 헤더의 `Content-Type`은 요청한 `mimeType`과 일치해야 한다(서명에 포함).
+`profileImageKey` 포맷은 `profiles/{userId}/{imageId}.{확장자}` — 소유자 검증에 쓰이므로 클라가 임의로 만들지 않는다. 확장자는 `mimeType`이 정한다(`image/jpeg`→`jpg`, `image/png`→`png`, `image/webp`→`webp`). 클라는 `uploadUrl`로 S3에 직접 업로드하며, 업로드 헤더의 `Content-Type`은 소문자 정규값(`image/jpeg`·`image/png`·`image/webp`)이어야 한다(서명에 포함) — 요청 `mimeType`을 대문자로 보냈어도 서명에는 소문자가 들어간다. `uploadUrl`은 운영값(현재 10분) 동안만 유효하다.
 
 - **에러 (400 Bad Request)**
 
@@ -2494,7 +2506,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 }
 ```
 
-사진이 등록돼 있지 않으면 `profileImageUrl`은 `null`이다.
+사진이 등록돼 있지 않으면 `profileImageUrl`은 `null`이다. URL은 운영값(현재 1시간) 동안만 유효하다 — 10-2의 `profileImageUrl`도 같다.
 
 - **에러 (404 Not Found — 대상 사용자 없음)**
 
@@ -2564,8 +2576,8 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | 필드 | 타입 | 제약 | 저장 위치 |
 |---|---|---|---|
 | `introduction` | String | 선택. 100자 이하. 빈 문자열이면 소개글을 지운다 | `users` |
-| `gender` | String | 선택. `MALE` \| `FEMALE` | `user_onboardings` |
-| `birthday` | String | 선택. `YYYY-MM-DD`, 1900-01-01 이후이며 미래일 수 없다 | `user_onboardings` |
+| `gender` | String | 선택. `MALE` \| `FEMALE`(대소문자 무시, 저장·응답은 대문자) | `user_onboardings` |
+| `birthday` | String | 선택. `YYYY-MM-DD`, 1900-01-01 이후이며 미래일 수 없다. 만 14세 이상 | `user_onboardings` |
 | `weightKg` | Number | 선택. 20 이상 300 이하. 소수점 둘째 자리 이하는 반올림해 저장한다 | `user_onboardings` |
 | `heightCm` | Number | 선택. 20 이상 300 이하. 소수점 둘째 자리 이하는 반올림해 저장한다 | `user_onboardings` |
 
@@ -2722,6 +2734,8 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 }
 ```
 
+- **본인이 지금 쓰는 닉네임도 `false`다** — 공개 API라 호출자를 모르고 사용 중인지만 본다. 편집 화면에서는 값이 바뀌지 않았으면 확인하지 않는다(11-7은 같은 값이면 그대로 200이다)
+
 - **에러 (400 Bad Request)**
 
 ```json
@@ -2846,7 +2860,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | 필드 | 타입 | 제약 |
 |---|---|---|
 | `alertConsent` | Boolean | 선택. 전체 알림 on/off |
-| `profileVisibility` | String | 선택. `FRIENDS` \| `PUBLIC` |
+| `profileVisibility` | String | 선택. `FRIENDS` \| `PUBLIC`(대소문자 무시, 저장·응답은 대문자) |
 
 - **Response `200 OK`** — 12-2와 같은 형식으로 저장 후 설정 전체를 담는다
 
