@@ -359,24 +359,25 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("먼저 끝낸 사람도 세므로 늦게 와 혼자 뛰다 그만둔 사람은 제재한다")
-    void penalizesLateShortRunnerAfterTeammateFinished() {
-        // given -> A가 목표를 채워 끝낸 뒤에야 B가 붙어 목표의 60%에서 멈췄다
+    @DisplayName("먼저 끝낸 사람도 세므로 상대가 완주한 뒤 그만둔 사람은 제재한다")
+    void penalizesShortRunnerAfterTeammateFinished() {
+        // given -> 둘 다 뛰다가 A가 먼저 목표를 채워 끝났고, B는 목표의 60%에서 멈췄다.
+        //          B가 뛰고 있어 A가 끝나도 방은 닫히지 않는다
         UUID finisher = onboardedUser("finisher@runiverse.com", "먼저끝낸");
-        UUID lateRunner = onboardedUser("late@runiverse.com", "늦게온");
-        long roomId = givenStartedMatchRoom(finisher, lateRunner);
+        UUID quitter = onboardedUser("quitter@runiverse.com", "그만둔");
+        long roomId = givenStartedMatchRoom(finisher, quitter);
+        runFor(quitter, roomId, SHORT_POINTS);
         runFor(finisher, roomId, COMPLETING_POINTS);
-        runFor(lateRunner, roomId, SHORT_POINTS);
         schedule(roomId);
 
         // when
         fire(roomId);
 
         // then -> 판정 순간 러닝 단계 참가자는 이미 끝낸 A까지 둘이다
-        assertThat(storedPlayer(roomId, lateRunner).getStatus())
+        assertThat(storedPlayer(roomId, quitter).getStatus())
                 .isEqualTo(RunningPlayerStatus.RUNNING_LEFT_PENALTY);
-        assertThat(cooldowns).containsOnlyKeys(lateRunner);
-        assertThat(cooldowns.get(lateRunner)).isEqualTo(RUNNING_COOLDOWN);
+        assertThat(cooldowns).containsOnlyKeys(quitter);
+        assertThat(cooldowns.get(quitter)).isEqualTo(RUNNING_COOLDOWN);
     }
 
     @Test
