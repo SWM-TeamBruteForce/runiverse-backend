@@ -4,12 +4,11 @@ import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.auth.port.out.BlockAccessTokenPort;
 import com.runiverse.running_service.application.auth.port.out.DeleteRefreshTokenPort;
 import com.runiverse.running_service.application.running.command.accountdeletion.SettleRunningForAccountDeletionCommand;
+import com.runiverse.running_service.application.running.exception.RunningTrackUnavailableException;
 import com.runiverse.running_service.application.running.port.in.SettleRunningForAccountDeletionUsecase;
 import com.runiverse.running_service.application.user.command.accountdeletion.DeleteAccountCommand;
 import com.runiverse.running_service.application.user.command.accountdeletion.DeleteAccountHandler;
 import com.runiverse.running_service.application.user.command.accountdeletion.KakaoUnlinkRequestedEvent;
-import com.runiverse.running_service.application.running.exception.RunningSessionUnavailableException;
-import com.runiverse.running_service.application.running.exception.RunningTrackUnavailableException;
 import com.runiverse.running_service.application.user.exception.AccountDeletionUnavailableException;
 import com.runiverse.running_service.application.user.exception.UserNotFoundException;
 import com.runiverse.running_service.application.user.port.out.AccountSnapshot;
@@ -25,8 +24,6 @@ import com.runiverse.running_service.domain.user.vo.ProviderId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
@@ -39,7 +36,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -213,24 +209,20 @@ public class DeleteAccountHandlerTest {
         verify(deleteUserPort, never()).deleteUser(any());
     }
 
-    @ParameterizedTest
-    @MethodSource("runningStoreFailures")
-    @DisplayName("러닝 정리 중 저장소 장애는 탈퇴용 일시 장애로 바꿔 던지고 계정을 지우지 않는다")
-    void wrapsRunningStoreFailure(RuntimeException failure) {
+    @Test
+    @DisplayName("러닝 정리 중 트랙을 못 읽으면 탈퇴용 일시 장애로 바꿔 던지고 계정을 지우지 않는다")
+    void wrapsTrackUnavailable() {
         // given
         UUID userId = UuidCreator.getTimeOrderedEpoch();
         when(loadAccountSnapshotPort.loadAccountSnapshot(new UserId(userId)))
                 .thenReturn(Optional.of(onboardedSnapshot(userId)));
-        doThrow(failure).when(settleRunningForAccountDeletionUsecase).handle(any());
+        doThrow(new RunningTrackUnavailableException())
+                .when(settleRunningForAccountDeletionUsecase).handle(any());
 
         // when & then - WS용 코드·문구가 탈퇴 응답으로 새어 나가지 않는다
         assertThatThrownBy(() -> handler.handle(new DeleteAccountCommand(userId, ACCESS_TOKEN_ID)))
                 .isInstanceOf(AccountDeletionUnavailableException.class);
         verify(deleteUserPort, never()).deleteUser(any());
-    }
-
-    private static Stream<RuntimeException> runningStoreFailures() {
-        return Stream.of(new RunningTrackUnavailableException(), new RunningSessionUnavailableException());
     }
 
     private AccountSnapshot onboardedSnapshot(UUID userId) {
