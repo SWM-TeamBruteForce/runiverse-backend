@@ -196,12 +196,6 @@ public class RunningRoom {
         session(userId).finish();
     }
 
-    // 후보가 여럿일 때 순위를 가른다 — 사람들이 잘 떠나지 않은 방이 매칭 품질이 좋다는 신호다(erd).
-    // 나간 사람의 세션(is_connected=false)도 센다. 그게 곧 "떠난 사람이 많았다"는 뜻이다
-    public int totalLeaveCount() {
-        return sessions.stream().mapToInt(session -> session.getLeaveCount().value()).sum();
-    }
-
     public boolean isNew() {
         return runningRoomId == null;
     }

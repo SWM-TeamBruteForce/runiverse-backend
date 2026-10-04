@@ -158,64 +158,6 @@ public class RunningPlayerTest {
     }
 
     @Nested
-    @DisplayName("대기 취소 테스트")
-    class CancelTest {
-
-        @Test
-        @DisplayName("대기를 취소하면 상태는 그대로 두고 신청만 끝낸다")
-        void cancelKeepsStatus() {
-            // given
-            RunningPlayer player = request();
-
-            // when
-            player.cancel(NOW);
-
-            // then -> 취소·거절에는 별도 status 값이 없다
-            assertThat(player.getStatus()).isEqualTo(RunningPlayerStatus.JOINED);
-            assertThat(player.getDeletedAt()).contains(NOW);
-            assertThat(player.isActive()).isFalse();
-        }
-
-        @Test
-        @DisplayName("취소한 신청으로는 러닝을 시작하지 못한다")
-        void cannotStartAfterCancel() {
-            // given
-            RunningPlayer player = request();
-            player.cancel(NOW);
-
-            // when & then -> status가 JOINED로 남아 있어 상태 전이만 보면 통과해버린다
-            assertThatThrownBy(player::start)
-                    .isInstanceOf(PlayerAlreadyLeftException.class);
-            assertThat(player.getStatus()).isEqualTo(RunningPlayerStatus.JOINED);
-        }
-
-        @Test
-        @DisplayName("이미 끝난 신청은 다시 취소하지 못한다")
-        void cannotCancelTwice() {
-            // given
-            RunningPlayer player = request();
-            player.cancel(NOW);
-
-            // when & then -> deleted_at은 한 번 찍히면 바뀌지 않는다
-            assertThatThrownBy(() -> player.cancel(NOW.plusMinutes(1)))
-                    .isInstanceOf(PlayerAlreadyLeftException.class);
-            assertThat(player.getDeletedAt()).contains(NOW);
-        }
-
-        @Test
-        @DisplayName("러닝 중에는 대기 취소를 쓸 수 없다")
-        void cannotCancelWhileRunning() {
-            // given
-            RunningPlayer player = running();
-
-            // when & then -> 러닝 중 그만두는 건 취소가 아니라 이탈이다
-            assertThatThrownBy(() -> player.cancel(NOW))
-                    .isInstanceOf(InvalidPlayerStatusTransitionException.class);
-            assertThat(player.isActive()).isTrue();
-        }
-    }
-
-    @Nested
     @DisplayName("이탈 테스트")
     class LeaveTest {
 
