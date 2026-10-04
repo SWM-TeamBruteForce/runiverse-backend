@@ -15,7 +15,6 @@ import com.runiverse.running_service.application.running.command.accountdeletion
 import com.runiverse.running_service.application.running.command.finish.FinishRunningCommand;
 import com.runiverse.running_service.application.running.command.session.RunningConnectionCloseRequestedEvent;
 import com.runiverse.running_service.application.running.port.in.FinishRunningUsecase;
-import com.runiverse.running_service.application.running.port.out.DeleteRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.LockRunningRoomPort;
 import com.runiverse.running_service.application.running.port.out.StartMatchCooldownPort;
 import com.runiverse.running_service.application.running.port.out.UpdateRunningPlayerPort;
@@ -82,8 +81,6 @@ class SettleRunningForAccountDeletionHandlerTest {
     @Mock
     private UpdateMatchRoomPort updateMatchRoomPort;
     @Mock
-    private DeleteRunningPlayerPort deleteRunningPlayerPort;
-    @Mock
     private UpdateRunningPlayerPort updateRunningPlayerPort;
     @Mock
     private StartMatchCooldownPort startMatchCooldownPort;
@@ -100,7 +97,7 @@ class SettleRunningForAccountDeletionHandlerTest {
     void setUp() {
         handler = new SettleRunningForAccountDeletionHandler(
                 lockMatchApplicationPort, loadMatchRoomPort, lockRunningRoomPort,
-                updateMatchRoomPort, deleteRunningPlayerPort, updateRunningPlayerPort,
+                updateMatchRoomPort, updateRunningPlayerPort,
                 startMatchCooldownPort, finishRunningUsecase, roomInfoAssembler,
                 MATCH_PROPERTIES, eventPublisher);
     }
@@ -118,26 +115,41 @@ class SettleRunningForAccountDeletionHandlerTest {
         // then -> 연결은 커밋 뒤에 닫는다. 여기서 닫으면 롤백돼도 되살릴 수 없다
         verify(eventPublisher).publishEvent(new MatchStreamCloseRequestedEvent(new UserId(USER_ID)));
         verify(eventPublisher).publishEvent(new RunningConnectionCloseRequestedEvent(new UserId(USER_ID)));
-        verifyNoInteractions(loadMatchRoomPort, lockRunningRoomPort,
-                deleteRunningPlayerPort, finishRunningUsecase);
+        verifyNoInteractions(loadMatchRoomPort, lockRunningRoomPort, finishRunningUsecase);
     }
 
     @Test
-    @DisplayName("시작 전 방이면 신청과 세션을 지운다")
-    void deletesApplicationWhenRoomNotStarted() {
-        // given -> 모집 중인 방. 이탈 이력이 아니라 신청 자체가 없던 일이 된다
+    @DisplayName("시작 전 방이면 신청을 지우지 않고 일반 취소처럼 닫는다")
+    void closesApplicationLikeCancelWhenRoomNotStarted() {
+        // given -> 모집 중인 방. 신청 이력은 통계로 남긴다(erd)
         givenActiveApplication(room(RunningRoomStatus.MATCHING, 2));
         given(roomInfoAssembler.assemble(any(RunningRoom.class))).willReturn(ROOM_INFO);
 
         // when
         handler.handle(new SettleRunningForAccountDeletionCommand(USER_ID));
 
-        // then
-        ArgumentCaptor<RunningPlayer> captor = ArgumentCaptor.forClass(RunningPlayer.class);
-        verify(deleteRunningPlayerPort).delete(captor.capture());
-        assertThat(captor.getValue().getRunningPlayerId())
-                .contains(new RunningPlayerId(PLAYER_ID));
-        verify(finishRunningUsecase, never()).handle(any());
+        // then -> 마감 전이라 대기 취소다
+        assertThat(updatedPlayer().getStatus())
+                .isEqualTo(RunningPlayerStatus.MATCHED_LEFT_NO_PENALTY);
+        assertThat(updatedPlayer().getDeletedAt()).isPresent();
+        verifyNoInteractions(startMatchCooldownPort, finishRunningUsecase);
+    }
+
+    @Test
+    @DisplayName("마감이 지난 2인 이상 방이면 제재 대상으로 남기되 쿨다운은 걸지 않는다")
+    void recordsPenaltyWithoutCooldownAfterClose() {
+        // given -> 시작 5분 전이라 마감(10분 전)이 지났다. 일반 취소라면 제재 대상이다
+        givenActiveApplication(room(RunningRoomStatus.MATCHED, 2,
+                LocalDateTime.now().plusMinutes(5)));
+        given(roomInfoAssembler.assemble(any(RunningRoom.class))).willReturn(ROOM_INFO);
+
+        // when
+        handler.handle(new SettleRunningForAccountDeletionCommand(USER_ID));
+
+        // then -> 사유는 취소와 같게 남기고, 막을 다음 신청이 없으니 쿨다운은 걸지 않는다
+        assertThat(updatedPlayer().getStatus())
+                .isEqualTo(RunningPlayerStatus.MATCHED_LEFT_PENALTY);
+        verifyNoInteractions(startMatchCooldownPort);
     }
 
     @Test
@@ -211,7 +223,6 @@ class SettleRunningForAccountDeletionHandlerTest {
 
         // then
         verify(finishRunningUsecase).handle(new FinishRunningCommand(ROOM_ID, USER_ID, true));
-        verify(deleteRunningPlayerPort, never()).delete(any());
         verify(updateMatchRoomPort, never()).update(any());
         verifyNoInteractions(updateRunningPlayerPort);
     }
@@ -232,8 +243,7 @@ class SettleRunningForAccountDeletionHandlerTest {
         assertThat(updatedPlayer().getDeletedAt()).isPresent();
         verify(startMatchCooldownPort).start(new UserId(USER_ID), MATCH_COOLDOWN);
         verifyNoInteractions(finishRunningUsecase);
-        // 신청 행은 남고 인원도 그대로다
-        verify(deleteRunningPlayerPort, never()).delete(any());
+        // 인원은 그대로다
         assertThat(updatedRoom().getPlayerCount().current()).isEqualTo(2);
         assertThat(updatedRoom().getStatus()).isEqualTo(RunningRoomStatus.STARTED);
     }
@@ -305,8 +315,13 @@ class SettleRunningForAccountDeletionHandlerTest {
                 .build();
     }
 
-    // 나 말고 나머지 인원은 다른 유저의 세션으로 채운다 — 세션 키가 유저다
     private static RunningRoom room(RunningRoomStatus status, int currentPlayerCount) {
+        return room(status, currentPlayerCount, LocalDateTime.now().plus(Duration.ofHours(2)));
+    }
+
+    // 나 말고 나머지 인원은 다른 유저의 세션으로 채운다 — 세션 키가 유저다
+    private static RunningRoom room(RunningRoomStatus status, int currentPlayerCount,
+                                    LocalDateTime startAt) {
         List<SessionDraft> sessions = new ArrayList<>();
         sessions.add(new SessionDraft(
                 new UserId(USER_ID), new RunningPlayerId(PLAYER_ID), 0, true));
@@ -319,7 +334,7 @@ class SettleRunningForAccountDeletionHandlerTest {
                 .runningRoomId(ROOM_ID)
                 .type(RunningRoomType.MATCH)
                 .status(status)
-                .startAt(LocalDateTime.now().plus(Duration.ofHours(2)))
+                .startAt(startAt)
                 // 닫힌 시각은 종료 상태와 짝이라 어긋나면 복원이 막힌다
                 .closeAt(status.isTerminal() ? LocalDateTime.now() : null)
                 .targetDistance(TARGET_DISTANCE)

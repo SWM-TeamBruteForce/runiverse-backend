@@ -12,7 +12,6 @@ import com.runiverse.running_service.application.match.port.out.UpdateMatchRoomP
 import com.runiverse.running_service.application.running.port.out.CountStartedRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.CreateRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.CreateRunningRoomPort;
-import com.runiverse.running_service.application.running.port.out.DeleteRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.ExistsActiveRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.ExistsRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.LoadRoomPlayerPort;
@@ -54,7 +53,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class RunningPersistenceAdapter implements CreateRunningPlayerPort, CreateRunningRoomPort,
         ExistsActiveRunningPlayerPort, LoadRunningRoomPort, LockRunningRoomPort, UpdateRunningRoomPort,
-        LockRunningPlayerPort, UpdateRunningPlayerPort, DeleteRunningPlayerPort, LoadRoomPlayerPort,
+        LockRunningPlayerPort, UpdateRunningPlayerPort, LoadRoomPlayerPort,
         ExistsRunningPlayerPort, CountStartedRunningPlayerPort,
         LoadRunningResultPlayersPort, LoadRunningResultRecordPort, LoadRunningSplitsPort,
         // 매칭 유스케이스가 자기 포트로 같은 애그리거트를 다룬다
@@ -205,27 +204,6 @@ public class RunningPersistenceAdapter implements CreateRunningPlayerPort, Creat
         RunningPlayerJpaEntity entity = entityManager.find(RunningPlayerJpaEntity.class, playerId);
         entity.changeStatus(player.getStatus());
         entity.changeDeletedAt(player.getDeletedAt().orElse(null));
-    }
-
-    // 세션은 user_id가 아니라 이 신청으로 지운다 — 유저로 지우면 같은 사람이
-    // 거쳐 간 다른 방의 세션까지 날아간다
-    @Override
-    public void delete(RunningPlayer player) {
-        Long playerId = player.getRunningPlayerId()
-                .orElseThrow(() -> new IllegalStateException("저장되지 않은 신청은 지울 수 없다"))
-                .value();
-        entityManager.createQuery("""
-                        DELETE FROM RunningRoomSessionJpaEntity session
-                        WHERE session.runningPlayerId = :playerId
-                        """)
-                .setParameter("playerId", playerId)
-                .executeUpdate();
-        entityManager.createQuery("""
-                        DELETE FROM RunningPlayerJpaEntity player
-                        WHERE player.runningPlayerId = :playerId
-                        """)
-                .setParameter("playerId", playerId)
-                .executeUpdate();
     }
 
     // deleted_at을 보지 않는다 — 이미 종료된 참가자도 찾아야 RUNNING_FINISH가 멱등이 된다.

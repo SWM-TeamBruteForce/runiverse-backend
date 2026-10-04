@@ -19,7 +19,7 @@
   - **`running_players.deleted_at`은 "신청이 끝난 시각"이다** — 활성 신청은 값의 유무로 판정하고, 값은 신청이 끝난 시각으로 남아 쿨다운 DB 폴백을 얹을 때의 기준이 된다.
 - **`user_id` FK 정책 (회원탈퇴 연동)**: 탈퇴 시 **CASCADE 삭제**되는 테이블(`user_onboardings`·`oauth_users`·`user_devices`·`friendships`·`user_colors`)은 `user_id` **FK + ON DELETE CASCADE**. **유지**되는 테이블(`feeds`·`comments`·`running_records`·`feed_likes`·`comment_likes`)은 `user_id`를 **논리 참조**(FK 제약 없음 — `users` 하드delete 후 값 유지, 무결성은 앱 레벨). 표기 `→ users`
   - **CASCADE에 기대지 않고 앱이 먼저 지운다** — 온보딩 값과 로그인 수단은 `delete_users`로 옮겨야 하는데 DB 연쇄 삭제는 애플리케이션을 거치지 않는다. 기존 개발 DB처럼 FK가 붙지 않은 환경도 있어 CASCADE 유무와 무관하게 동작해야 한다.
-- **`running_players`는 조건부 유지다.** 탈퇴 전 일반 취소·이탈·러닝 종료 처리를 적용한다. 시작 전 신청 row와 세션은 삭제하고, 이미 시작한 방의 참가 row와 세션은 기록 없는 참가자도 과거 결과에 남기기 위해 유지한다.
+- **`running_players`는 상태와 무관하게 유지한다.** 탈퇴 전 일반 취소·이탈·러닝 종료 처리를 적용한다(시작 전 신청도 지우지 않고 취소처럼 닫는다). 시작한 방의 참가 row와 세션은 기록 없는 참가자도 과거 결과에 남기기 위해, 그 밖의 신청 이력은 통계에 쓰기 위해 남긴다.
   - 논리 참조 `user_id` 컬럼은 전부 **NOT NULL**이다(nullable은 스냅샷 테이블 `delete_feeds`·`delete_comments`뿐).
 - **`feeds.running_record_id` 참조 정책**: 별개 애그리거트라 하드 FK 없이 **ID로만 논리 참조**(DDD *Reference by Identity*). 표기 `→ running_records`. **무결성은 앱 레벨**: 저장 시 존재 검증, 조회 시 유령 참조 방어(기록 카드 미표시).
 
@@ -131,7 +131,7 @@
 |---|---|---|---|
 | running_room_id | bigint | PK1, FK → running_rooms | 배정된 방 |
 | user_id | UUID | PK2, → users | 논리 참조(FK 제약 없음). **키를 신청이 아니라 유저로 잡는다** — 취소 후 같은 방에 다시 신청해도 행이 늘지 않고 기존 행을 되살린다 |
-| running_player_id | bigint | NOT NULL, → running_players | 논리 참조(FK 제약 없음) — 무결성은 앱이 관리한다. 탈퇴 정리 때 세션도 `user_id`로 함께 지운다. **현재 이 방에 들어와 있는 신청.** PK가 아니라 재배정 시 새 신청으로 갱신된다. 참가자의 상태·페이스·기록을 읽는 조인 경로이며, 지우고 `user_id`로 우회하면 유저의 과거 신청까지 딸려 오거나 완주(`deleted_at` 기록) 후 조인이 끊긴다 |
+| running_player_id | bigint | NOT NULL, → running_players | 논리 참조(FK 제약 없음) — 무결성은 앱이 관리한다. 탈퇴해도 세션은 지우지 않는다. **현재 이 방에 들어와 있는 신청.** PK가 아니라 재배정 시 새 신청으로 갱신된다. 참가자의 상태·페이스·기록을 읽는 조인 경로이며, 지우고 `user_id`로 우회하면 유저의 과거 신청까지 딸려 오거나 완주(`deleted_at` 기록) 후 조인이 끊긴다 |
 | leave_count | int | NOT NULL | **이 유저가** 이 방에서 이탈한 **누적** 횟수 — 방 이동(향후 매칭 알고리즘)이 생기면 같은 방을 다시 거쳐 2 이상이 될 수 있다. 배정 시 **페이스 구간이 같은 방들의 순위를 가르는 데 쓴다** — 신청자 본인이 등지고 나왔던 방으로 되돌리지 않기 위한 것이다. **방 전체의 이탈 합이 아니다**: 후보를 훑을 때 `user_id`가 신청자인 행만 읽고, 거쳐 간 적 없는 방은 행이 없어 0으로 본다 |
 | is_connected | boolean | NOT NULL | 현재 방 배정 여부이며 WebSocket 연결 상태와 무관하다. 현재 배정 중인 참가자는 행 하나만 true이고, 취소·이탈·**완주** 후에는 모두 false다. **"이 유저가 이 방에서 뛰었나"를 판정하지 않는다** — 그건 `running_players.status`가 답하며, 결과 조회는 이 컬럼을 보지 않는다 |
 | created_at / updated_at | timestamp | NOT NULL | `updated_at` = 마지막 배정 변동 시각(`is_connected` 전환·`leave_count` 증가). **write-once가 아니라 두 컬럼 다 둔다** — 이탈, 그리고 향후 재배정·복귀로 갱신되는 테이블이다 |

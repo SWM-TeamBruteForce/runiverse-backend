@@ -2872,9 +2872,8 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **동작 (테이블별 정책)**:
   - 탈퇴는 활성 상태 때문에 막지 않는다. `MATCHING`이면 5-A의 대기 취소, `MATCHED`이면 방 나가기, `STARTED`이면 마지막 수신 데이터로 5-D의 종료 처리를 먼저 적용한다. 방 인원·상태를 갱신하고 남은 참가자에게 이벤트를 보낸다.
   - `delete_users` 스냅샷 후 `users`를 하드 삭제한다. `delete_users.created_at`은 스냅샷 시각이다.
-  - **유지**: `feeds`/`comments`/`running_records`(+splits)/좋아요. 이미 시작한 방의 `running_players`와 `running_room_sessions`도 기록 없는 참가자를 결과에 남기기 위해 유지한다. 사용자는 공통 탈퇴 유저 형식으로 표시한다.
+  - **유지**: `feeds`/`comments`/`running_records`(+splits)/좋아요. `running_players`와 `running_room_sessions`는 상태와 무관하게 전부 유지한다 — 시작 전 신청도 지우지 않고 일반 취소처럼 닫는다(쿨다운은 걸지 않는다). 시작한 방은 기록 없는 참가자도 결과에 남고, 신청 이력은 통계에 쓴다. 사용자는 공통 탈퇴 유저 형식으로 표시한다.
   - **삭제**: `user_onboardings`(값은 `delete_users`로 스냅샷 후)/`user_devices`/`oauth_users`(`login_type` 판정 후 — 먼저 지우면 `LOCAL`로 보인다)/`friendships`/`user_colors`.
-  - **명시적 삭제**: 시작 전 신청의 `running_players`; 연결된 `running_room_sessions`도 함께 지운다 — `running_player_id`에 FK가 없어 DB가 연쇄 삭제하지 않는다.
   - **DB 밖**: 리프레시 토큰 삭제 + 액세스 토큰 블랙리스트 등록, S3 프로필 사진 90일 뒤 삭제, GPS 원본 유지, 카카오 unlink(`provider_id` 선확보).
   - `delete_users`의 `email`·`nickname`은 90일 뒤 `NULL`로 갱신한다(행은 유지).
 - **Response**: `204 No Content` (토큰 즉시 무효화)

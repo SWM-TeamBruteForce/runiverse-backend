@@ -12,7 +12,6 @@ import com.runiverse.running_service.application.running.command.finish.FinishRu
 import com.runiverse.running_service.application.running.command.session.RunningConnectionCloseRequestedEvent;
 import com.runiverse.running_service.application.running.port.in.FinishRunningUsecase;
 import com.runiverse.running_service.application.running.port.in.SettleRunningForAccountDeletionUsecase;
-import com.runiverse.running_service.application.running.port.out.DeleteRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.LockRunningRoomPort;
 import com.runiverse.running_service.application.running.port.out.StartMatchCooldownPort;
 import com.runiverse.running_service.application.running.port.out.UpdateRunningPlayerPort;
@@ -42,7 +41,6 @@ public class SettleRunningForAccountDeletionHandler
     private final LoadMatchRoomPort loadMatchRoomPort;
     private final LockRunningRoomPort lockRunningRoomPort;
     private final UpdateMatchRoomPort updateMatchRoomPort;
-    private final DeleteRunningPlayerPort deleteRunningPlayerPort;
     private final UpdateRunningPlayerPort updateRunningPlayerPort;
     private final StartMatchCooldownPort startMatchCooldownPort;
     private final FinishRunningUsecase finishRunningUsecase;
@@ -105,16 +103,26 @@ public class SettleRunningForAccountDeletionHandler
         updateMatchRoomPort.update(room);
     }
 
+    // 일반 취소처럼 닫는다 — 신청은 지우지 않고 통계로 남긴다(erd).
+    // 사유도 취소와 같게 남기지만 쿨다운은 걸지 않는다 — 막을 다음 신청이 없다
     private void leaveBeforeStart(UserId userId, RunningPlayer player, RunningRoom room) {
+        LocalDateTime now = LocalDateTime.now();
+        player.leave(isCancelPenalty(room, now), now);
+        updateRunningPlayerPort.update(player);
         // 인원을 줄이고, 0이 되면 방이 CANCELLED로 닫힌다
-        room.leave(userId, LocalDateTime.now());
+        room.leave(userId, now);
         updateMatchRoomPort.update(room);
-        // 이탈 이력이 아니라 신청 자체가 없던 일이 된다 — 세션도 함께 지워진다
-        deleteRunningPlayerPort.delete(player);
         // 남은 참가자에게 알린다. 인원이 0이면 받을 사람이 없다
         if (room.getPlayerCount().current() > 0) {
             eventPublisher.publishEvent(new MatchRoomChangedEvent(
                     MatchStreamEvent.updated(roomInfoAssembler.assemble(room))));
         }
+    }
+
+    // 매칭 취소(CancelMatchHandler)와 같은 기준이다 — 마감이 지난 2인 이상 매칭 방을 깨면 제재 대상이다
+    private boolean isCancelPenalty(RunningRoom room, LocalDateTime now) {
+        return room.getType() == RunningRoomType.MATCH
+                && !now.isBefore(room.getStartAt().minus(matchProperties.closeOffset()))
+                && room.getPlayerCount().current() >= PENALTY_MIN_PLAYER_COUNT;
     }
 }
