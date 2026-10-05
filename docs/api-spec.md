@@ -898,7 +898,7 @@
 
 - **동작**: `running_rooms` 행을 `type='SOLO'`, `status='MATCHED'`, `max_player_count=1`, `current_player_count=1`로 만들고 본인 `running_players(status='JOINED')`와 배정 세션을 함께 만든다
   - **`STARTED`·`RUNNING`은 이 API가 만들지 않는다.** 모집을 건너뛴 확정 상태까지만 만들고, 시작 전이는 WS `RUNNING_START`가 일으킨다(5-C). 솔로에는 시작 예약을 걸지 않는다 — `start_at`이 개시 시각이라 `RUNNING_START`가 도착하는 순간 이미 지나 있다
-  - **강제 종료 예약은 건다.** 같은 트랜잭션에서 `start_at + 솔로 유예`(운영값)에 강제 종료를 예약한다 — 앱이 방 번호를 잃어 종료가 오지 않아도 신청이 풀린다. 방 번호를 잃었을 때의 복구는 `GET /users/me/status`의 `runningRoomId`로 한다
+  - **강제 종료 예약도 걸지 않는다.** 앱이 방 번호를 잃었을 때의 복구는 `GET /users/me/status`의 `runningRoomId`로 한다 — `READY`면 `DELETE /running-matches`로 정리하고, `RUNNING`이면 `RUNNING_START`로 다시 붙어 `RUNNING_FINISH`로 끝낸다
 - 이 방은 `GET /running-matches/slots`의 대기 인원 집계에 포함되지 않는다(`type='SOLO'`로 제외). 모집 중인 자리가 아니다
 - **에러 (409 Conflict)**
   - `RUNNING_ALREADY_IN_PROGRESS` — 진행 중인 러닝이나 활성 매칭 신청이 있다
@@ -1291,7 +1291,6 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **WS 연결 후 클라가 보내는 첫 메시지다.** 채널 등록·방 시작·참가자 시작을 이 하나가 다 한다 — 클라는 최초 진입인지 재연결인지 구분하지 않고 언제나 같은 메시지를 보낸다
   - **의도적으로 나간 사람은 돌아오지 못한다.** 나가기는 활성 신청을 닫으므로(`running_players.deleted_at`) 이후 `RUNNING_START`는 참가자 확인 단계에서 `NOT_ROOM_PLAYER`로 거부된다. 반면 네트워크가 끊긴 것뿐이면 신청도 배정도 그대로라 이어 뛴다 — 서버는 끊긴 원인을 추측하지 않고 나가기 요청이 있었는지만 본다
-  - **강제 종료로 닫힌 러닝에도 돌아오지 못한다.** 강제 종료(`start_at + 유예`)가 신청을 닫으므로 이후 `RUNNING_START`는 `NOT_ROOM_PLAYER`다. 클라는 로컬에 남은 방 번호와 트랙을 지우고 `GET /users/me/status`로 현재 상태를 다시 받는다
 - `runningRoomId`는 이미 손에 있다 — 솔로는 `POST /running-rooms/solo`의 201 응답, 매칭은 SSE `RoomInfo`에서 받는다
 - **서버 처리 순서**
 

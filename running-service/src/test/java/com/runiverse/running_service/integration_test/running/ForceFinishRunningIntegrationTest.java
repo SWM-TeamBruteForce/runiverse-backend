@@ -285,25 +285,6 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("채널에 붙지 못한 솔로 방도 제재 없이 닫혀 다음 러닝을 열 수 있다")
-    void closesSoloRoomNeverStarted() {
-        // given -> 솔로를 열었지만 앱이 방 번호를 잃어 한 번도 붙지 못했다
-        UUID owner = onboardedUser("solo@runiverse.com", "혼자뛴사람");
-        long roomId = givenOpenedSoloRoom(owner);
-        schedule(roomId);
-
-        // when
-        fire(roomId);
-
-        // then -> 혼자라 곤란해진 상대가 없고, 남길 기록도 없어 방은 취소로 닫힌다
-        assertThat(storedPlayer(roomId, owner).getStatus())
-                .isEqualTo(RunningPlayerStatus.MATCHED_LEFT_NO_PENALTY);
-        assertThat(cooldowns).isEmpty();
-        assertThat(storedRoom(roomId).getStatus()).isEqualTo(RunningRoomStatus.CANCELLED);
-        assertThat(runningStore.existsActive(new UserId(owner))).isFalse();
-    }
-
-    @Test
     @DisplayName("예약이 두 번 깨도 한 번만 실행된다")
     void firesOnlyOnce() {
         // given -> 인스턴스 여럿이 같은 예약을 타이머로 들고 있다.
@@ -476,15 +457,6 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
                 .sessions(sessions)
                 .build());
         return saved.getRunningRoomId().orElseThrow().value();
-    }
-
-    // 강제 종료가 도는 시점의 솔로 방 — 열기만 하고 채널에 붙지 않아 MATCHED로 남았다
-    private long givenOpenedSoloRoom(UUID owner) {
-        LocalDateTime startAt = LocalDateTime.now().minus(FORCE_FINISH_OFFSET);
-        RunningPlayer saved = runningStore.create(RunningPlayer.requestSolo(owner, AVG_PACE, startAt));
-        RunningRoom room = runningStore.create(RunningRoom.openSolo(
-                new UserId(owner), saved.getRunningPlayerId().orElseThrow(), AVG_PACE, null, startAt));
-        return room.getRunningRoomId().orElseThrow().value();
     }
 
     // 채널에 붙어 좌표를 밀어 넣은 사람 = RUNNING. 안 부르면 JOINED로 남아 미출석이 된다
