@@ -898,7 +898,7 @@
 
 - **동작**: `running_rooms` 행을 `type='SOLO'`, `status='MATCHED'`, `max_player_count=1`, `current_player_count=1`로 만들고 본인 `running_players(status='JOINED')`와 배정 세션을 함께 만든다
   - **`STARTED`·`RUNNING`은 이 API가 만들지 않는다.** 모집을 건너뛴 확정 상태까지만 만들고, 시작 전이는 WS `RUNNING_START`가 일으킨다(5-C). 솔로에는 시작 예약을 걸지 않는다 — `start_at`이 개시 시각이라 `RUNNING_START`가 도착하는 순간 이미 지나 있다
-  - **강제 종료 예약도 걸지 않는다.** 앱이 방 번호를 잃었을 때의 복구는 `GET /users/me/status`의 `runningRoomId`로 한다 — `READY`면 `DELETE /running-matches`로 정리하고, `RUNNING`이면 `RUNNING_START`로 다시 붙어 `RUNNING_FINISH`로 끝낸다
+  - **강제 종료 예약도 걸지 않는다.** 앱이 방 번호를 잃었을 때의 복구는 `GET /users/me/status`의 `runningRoomId`로 한다 — `READY`면 이어 뛸 때 `RUNNING_START`, 그만둘 때 `DELETE /running-matches`이고, `RUNNING`이면 `RUNNING_START`로 다시 붙어 `RUNNING_FINISH`로 끝낸다
 - 이 방은 `GET /running-matches/slots`의 대기 인원 집계에 포함되지 않는다(`type='SOLO'`로 제외). 모집 중인 자리가 아니다
 - **에러 (409 Conflict)**
   - `RUNNING_ALREADY_IN_PROGRESS` — 진행 중인 러닝이나 활성 매칭 신청이 있다
@@ -1157,7 +1157,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 #### `MATCH_ROOM_UPDATED` (SSE) — 매칭방 정보 갱신
 
-- `data` = `RoomInfo` 전체 재전송. **모집 중 인원 변동과 연결 직후 스냅샷이 이 이벤트로 나간다**
+- `data` = `RoomInfo` 전체 재전송. **인원 변동과 연결 직후 스냅샷이 이 이벤트로 나간다** — 모집 중 참가·이탈뿐 아니라 확정 후 이탈, 시작 후 미접속자(`JOINED`)의 취소·탈퇴로 인원이 줄 때도 나간다
 - **`STARTED` 전환은 이 이벤트로 알리지 않는다** — 시작 통지는 `RUNNING_READY`가 맡고(5-C), 방의 `STARTED` 전환은 `start_at` 정각의 시작 스케줄러가 일으킨다. 다만 그 뒤에 붙은 스냅샷에는 `status: "STARTED"`가 실려 온다
 - 클라는 **받으면 무조건 `RoomInfo`로 화면을 다시 그린다.** 무슨 일이 있었는지는 `status`와 `players`가 말해주므로 이벤트를 더 쪼개지 않는다
 
@@ -1233,7 +1233,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **보낼 메시지가 밀려 한도(운영값)를 넘으면 서버가 close code `4500`으로 닫는다** — 네트워크가 끊긴 것에 가까운 상태라 연결을 정리하고 재연결로 복구한다. `4001`이 아니므로 클라는 평소대로 재연결한다
 - **클라가 보내는 텍스트 메시지 한 건은 운영값(현재 64KB) 이하여야 한다** — 넘으면 서버(WebSocket 컨테이너)가 close code `1009`로 닫는다. 재연결 뒤 로컬 트랙을 다시 보낼 때도 한 번에 몰아 보내지 말고 이 크기 안으로 나눠 보낸다 — 한 번에 보내면 다시 `1009`로 끊겨 재연결·재전송이 되풀이된다
 - **keep-alive**: 클라가 주기적으로 `HEALTH_CHECK`(C→S)를 보내고 서버가 `HEALTH_CHECKED`(S→C)로 응답한다. 둘 다 `data`는 비운다. **유휴 상태가 서버 설정 시간(운영값)을 넘으면 서버가 연결을 닫는다** — 좌표를 계속 보내는 러닝 중에는 별도 신호가 필요 없고, 시작 전 대기 구간에서 의미가 있다. 프록시 유휴 타임아웃을 막는 목적은 SSE와 같다
-- **연결이 끊겨도 러닝은 끝나지 않는다** — 방·참가자 상태는 그대로 두고 재연결을 기다린다. 서버의 강제 종료는 **`start_at`부터 잰 유예**(운영값) 기준이라 연결 상태와 축이 다르다(`running_room_sessions.is_connected`도 방 배정 여부이지 접속 여부가 아니다)
+- **연결이 끊겨도 러닝은 끝나지 않는다** — 방·참가자 상태는 그대로 두고 재연결을 기다린다. 서버의 강제 종료(매칭 방에만 건다)는 **`start_at`부터 잰 유예**(운영값) 기준이라 연결 상태와 축이 다르다(`running_room_sessions.is_connected`도 방 배정 여부이지 접속 여부가 아니다)
 - **메시지 공통 형식**
 
 ```json
