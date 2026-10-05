@@ -126,7 +126,7 @@ public class RunningFinisher {
         confirmStatus(player, room, analysis.map(TrackAnalysis::totalDistanceMeters).orElse(0));
         updateRunningPlayerPort.update(player);
         // 6. 러닝이 끝났으니 자리를 비운다 — 인원과 방 상태는 건드리지 않는다.
-        //    러닝 시작 후 current_player_count는 "몇 명으로 확정됐나"로 고정된다
+        //    시작 후 인원은 접속 전 참가자의 취소·탈퇴로만 줄어든다
         room.finishSession(userId);
         // 7. 방은 마지막 한 사람이 끝낼 때 닫힌다.
         //    참가자 갱신을 먼저 반영해야 방금 끝낸 자신이 RUNNING으로 세어지지 않는다
@@ -208,7 +208,7 @@ public class RunningFinisher {
     }
 
     // 시작 때 RUNNING이 된 참가자가 전원 종료되면 방도 끝난다.
-    // 1인 방도 같은 규칙이다 — 인원이 0이 됐다고 닫지 않는다(시작 후 인원은 확정 시점 값으로 고정된다)
+    // 1인 방도 같은 규칙이다 — 완주·조기 종료는 인원을 줄이지 않으므로 인원으로 판정하지 않는다
     private void closeRoomIfLastPlayer(RunningRoom room) {
         RunningRoomId roomId = room.getRunningRoomId().orElseThrow();
         // 강제 종료가 먼저 닫았을 수 있다 — 끝난 방에 다시 부르면 도메인 예외다

@@ -91,7 +91,7 @@ public class ForceFinishRunningRoomHandler implements ForceFinishRunningRoomUsec
             leaveWithoutShowing(player, penalty);
             room.finishSession(userId);
         }
-        // 인원은 줄이지 않는다 — 시작 후 current_player_count는 "몇 명으로 확정됐나"로 고정된다.
+        // 인원은 줄이지 않는다 — 면제 판정은 순회 전에 굳힌 인원으로 이미 끝났다.
         // leave()를 쓰면 마지막 한 명에서 방이 CANCELLED가 돼 종료 경로가 무너진다
         updateRunningRoomPort.update(room);
         // 2. 뛰던 사람은 평소 종료와 똑같이 확정한다 — 트랙 분석·기록 생성·거리 비율 판정이 그대로 돈다.
