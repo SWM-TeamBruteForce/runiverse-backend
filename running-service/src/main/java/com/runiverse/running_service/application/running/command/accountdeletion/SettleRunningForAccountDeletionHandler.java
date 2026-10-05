@@ -34,7 +34,7 @@ import java.time.LocalDateTime;
 public class SettleRunningForAccountDeletionHandler
         implements SettleRunningForAccountDeletionUsecase {
 
-    // 확정 인원이 1이면 안 나타나도 곤란해지는 상대가 없다 — 강제 종료의 면제 기준과 같다
+    // 인원이 1이면 안 나타나도 곤란해지는 상대가 없다 — 강제 종료의 면제 기준과 같다
     private static final int PENALTY_MIN_PLAYER_COUNT = 2;
 
     private final LockMatchApplicationPort lockMatchApplicationPort;
@@ -91,16 +91,16 @@ public class SettleRunningForAccountDeletionHandler
     // 강제 종료가 유예 뒤에 할 일을 앞당겨 한다 — 탈퇴 시점 때문에 판정이 달라지면 안 되므로
     // 제재 조건도 그쪽과 같다
     private void leaveWithoutRunning(UserId userId, RunningPlayer player, RunningRoom room) {
+        LocalDateTime now = LocalDateTime.now();
         boolean penalty = room.getType() == RunningRoomType.MATCH
                 && room.getPlayerCount().current() >= PENALTY_MIN_PLAYER_COUNT;
-        player.leave(penalty, LocalDateTime.now());
+        player.leave(penalty, now);
         updateRunningPlayerPort.update(player);
         if (penalty) {
             startMatchCooldownPort.start(userId, matchProperties.cooldown());
         }
-        // 인원은 줄이지 않는다. 방도 닫지 않는다 — 강제 종료가 기록 유무로 판정한다
-        room.finishSession(userId);
-        updateMatchRoomPort.update(room);
+        // 인원은 시작 후 취소처럼 줄인다 — 혼자 남은 사람이 이어서 나가거나 강제 종료될 때 면제된다
+        leaveRoom(userId, room, now);
     }
 
     // 일반 취소처럼 닫는다 — 신청은 지우지 않고 통계로 남긴다.
@@ -109,7 +109,11 @@ public class SettleRunningForAccountDeletionHandler
         LocalDateTime now = LocalDateTime.now();
         player.leave(isCancelPenalty(room, now), now);
         updateRunningPlayerPort.update(player);
-        // 인원을 줄이고, 0이 되면 방이 CANCELLED로 닫힌다
+        leaveRoom(userId, room, now);
+    }
+
+    // 인원을 줄이고, 0이 되면 방이 CANCELLED로 닫힌다
+    private void leaveRoom(UserId userId, RunningRoom room, LocalDateTime now) {
         room.leave(userId, now);
         updateMatchRoomPort.update(room);
         // 남은 참가자에게 알린다. 인원이 0이면 받을 사람이 없다

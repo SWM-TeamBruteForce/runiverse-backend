@@ -233,6 +233,7 @@ class SettleRunningForAccountDeletionHandlerTest {
         // given -> 시작 시각에 앱을 켜지 않으면 방만 STARTED가 되고 참가자는 JOINED로 남는다.
         //          종료 경로로 보내면 확정할 러닝이 없어 거절당한다
         givenActiveApplication(room(RunningRoomStatus.STARTED, 2), RunningPlayerStatus.JOINED);
+        given(roomInfoAssembler.assemble(any(RunningRoom.class))).willReturn(ROOM_INFO);
 
         // when
         handler.handle(new SettleRunningForAccountDeletionCommand(USER_ID));
@@ -243,9 +244,10 @@ class SettleRunningForAccountDeletionHandlerTest {
         assertThat(updatedPlayer().getDeletedAt()).isPresent();
         verify(startMatchCooldownPort).start(new UserId(USER_ID), MATCH_COOLDOWN);
         verifyNoInteractions(finishRunningUsecase);
-        // 인원은 그대로다
-        assertThat(updatedRoom().getPlayerCount().current()).isEqualTo(2);
+        // 취소처럼 인원을 줄인다 — 혼자 남은 사람이 이어서 나가거나 강제 종료될 때 면제된다
+        assertThat(updatedRoom().getPlayerCount().current()).isOne();
         assertThat(updatedRoom().getStatus()).isEqualTo(RunningRoomStatus.STARTED);
+        verify(eventPublisher).publishEvent(any(MatchRoomChangedEvent.class));
     }
 
     @Test
@@ -261,6 +263,8 @@ class SettleRunningForAccountDeletionHandlerTest {
         assertThat(updatedPlayer().getStatus())
                 .isEqualTo(RunningPlayerStatus.MATCHED_LEFT_NO_PENALTY);
         verifyNoInteractions(startMatchCooldownPort);
+        // 아무도 뛰지 않은 채 인원이 0이 되어 방이 닫힌다
+        assertThat(updatedRoom().getStatus()).isEqualTo(RunningRoomStatus.CANCELLED);
     }
 
     @ParameterizedTest
@@ -270,6 +274,7 @@ class SettleRunningForAccountDeletionHandlerTest {
         // given -> 뛰던 사람이 전원 끝내면 방은 그 시점에 닫히고 미출석자만 JOINED로 남는다.
         //          남길 기록이 있었으면 FINISHED, 없었으면 CANCELLED다
         givenActiveApplication(room(status, 2), RunningPlayerStatus.JOINED);
+        given(roomInfoAssembler.assemble(any(RunningRoom.class))).willReturn(ROOM_INFO);
 
         // when
         handler.handle(new SettleRunningForAccountDeletionCommand(USER_ID));

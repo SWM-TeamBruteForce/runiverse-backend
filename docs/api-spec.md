@@ -910,7 +910,7 @@
 - **DB row 트리거** — `running_room_sessions`가 신청과 방을 잇는다(신청 즉시 방이 생기므로 배정 row도 항상 있다). 현재 속한 방은 `is_connected=true`인 행이다
   - row 생성 = 매칭 신청·솔로 개시 시. 새 방을 만들거나 기존 모집 중인 방에 배정된다
   - 취소·나가기 요청 시 서버가 모집 마감 시각으로 분기한다(5-A 참고). 어느 쪽이든 배정 행은 `is_connected=false`로 남아 이력이 된다
-  - 참가자가 모두 빠져 `current_player_count`가 `0`이 되면 방을 `CANCELLED`로 닫는다. **시작 후에는 접속 전(`JOINED`) 참가자의 취소만 인원을 줄이며**, `RUNNING` 참가자가 모두 종료되면 유효 기록이 하나라도 저장됐을 때 `FINISHED`, 없으면 `CANCELLED`다. 각 참가자 row는 유지하되 취소·이탈 시각을 `deleted_at`에 기록하고 배정 행은 `is_connected=false`로 남긴다
+  - 참가자가 모두 빠져 `current_player_count`가 `0`이 되면 방을 `CANCELLED`로 닫는다. **시작 후에는 접속 전(`JOINED`) 참가자의 취소·탈퇴만 인원을 줄이며**, `RUNNING` 참가자가 모두 종료되면 유효 기록이 하나라도 저장됐을 때 `FINISHED`, 없으면 `CANCELLED`다. 각 참가자 row는 유지하되 취소·이탈 시각을 `deleted_at`에 기록하고 배정 행은 `is_connected=false`로 남긴다
 
 ### 5-A. 매칭 중 (홈 → 매칭 대기 화면)
 
@@ -1148,7 +1148,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 ```
 
 - **참가자별 `status`는 내려보내지 않는다** — 이탈자는 배정 행이 `is_connected=false`가 되어 목록에서 빠지므로 남아 있는 참가자는 아직 끝나지 않은 참가자(`JOINED`·`RUNNING`)다. 방의 진행 단계는 위 `status`가 나른다
-- **탈퇴한 참가자는 목록에서 빠진다** — 시작 전 탈퇴는 일반 취소처럼 방에서 빠지며 인원도 줄고, 시작 후 탈퇴는 배정이 끊겨 목록에서 빠진다. `isDeleted`는 §0 공통 형식이라 계약에 남지만 이 목록에서는 현재 항상 `false`다
+- **탈퇴한 참가자는 목록에서 빠진다** — 시작 전 탈퇴는 일반 취소처럼 방에서 빠지며 인원도 줄고, 시작 후 탈퇴는 배정이 끊겨 목록에서 빠진다(접속 전이었으면 인원도 준다). `isDeleted`는 §0 공통 형식이라 계약에 남지만 이 목록에서는 현재 항상 `false`다
 
 #### `MATCH_STARTED` (SSE) — 매칭 성사 통지
 
@@ -2886,7 +2886,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **화면**: 설정 (확인 팝업 후)
 - **동작 (테이블별 정책)**:
-  - 탈퇴는 활성 상태 때문에 막지 않는다. `MATCHING`이면 5-A의 대기 취소, `MATCHED`이면 방 나가기를 적용하고 인원을 갱신해 남은 참가자에게 이벤트를 보낸다. `STARTED`이면 본인이 `RUNNING`일 때 마지막 수신 데이터로 5-D의 종료 처리를, `JOINED`(미접속)일 때 강제 종료와 같은 기준의 이탈 처리를 먼저 적용한다(인원·방 상태는 그대로 둔다).
+  - 탈퇴는 활성 상태 때문에 막지 않는다. `MATCHING`이면 5-A의 대기 취소, `MATCHED`이면 방 나가기를 적용하고 인원을 갱신해 남은 참가자에게 이벤트를 보낸다. `STARTED`이면 본인이 `RUNNING`일 때 마지막 수신 데이터로 5-D의 종료 처리를, `JOINED`(미접속)일 때 강제 종료와 같은 기준의 이탈 처리를 먼저 적용한다. 미접속이면 시작 후 취소처럼 인원을 줄여 남은 참가자에게 이벤트를 보내고, 0이 되면 방을 `CANCELLED`로 닫는다.
   - `delete_users` 스냅샷 후 `users`를 하드 삭제한다. `delete_users.created_at`은 스냅샷 시각이다.
   - **유지**: `feeds`/`comments`/`running_records`(+splits)/좋아요. `running_players`와 `running_room_sessions`는 상태와 무관하게 전부 유지한다 — 시작 전 신청도 지우지 않고 일반 취소처럼 닫는다(쿨다운은 걸지 않는다). 시작한 방은 기록 없는 참가자도 결과에 남고, 신청 이력은 통계에 쓴다. 사용자는 공통 탈퇴 유저 형식으로 표시한다.
   - **삭제**: `user_onboardings`(값은 `delete_users`로 스냅샷 후)/`user_devices`/`oauth_users`(`login_type` 판정 후 — 먼저 지우면 `LOCAL`로 보인다)/`friendships`/`user_colors`.
