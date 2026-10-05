@@ -910,7 +910,7 @@
 - **DB row 트리거** — `running_room_sessions`가 신청과 방을 잇는다(신청 즉시 방이 생기므로 배정 row도 항상 있다). 현재 속한 방은 `is_connected=true`인 행이다
   - row 생성 = 매칭 신청·솔로 개시 시. 새 방을 만들거나 기존 모집 중인 방에 배정된다
   - 취소·나가기 요청 시 서버가 모집 마감 시각으로 분기한다(5-A 참고). 어느 쪽이든 배정 행은 `is_connected=false`로 남아 이력이 된다
-  - 시작 전에는 참가자가 모두 빠져 `current_player_count`가 `0`이 되면 방을 `CANCELLED`로 닫는다. **시작 후에는 인원이 줄지 않으며**, `RUNNING` 참가자가 모두 종료되면 유효 기록이 하나라도 저장됐을 때 `FINISHED`, 없으면 `CANCELLED`다. 각 참가자 row는 유지하되 취소·이탈 시각을 `deleted_at`에 기록하고 배정 행은 `is_connected=false`로 남긴다
+  - 참가자가 모두 빠져 `current_player_count`가 `0`이 되면 방을 `CANCELLED`로 닫는다. **시작 후에는 접속 전(`JOINED`) 참가자의 취소만 인원을 줄이며**, `RUNNING` 참가자가 모두 종료되면 유효 기록이 하나라도 저장됐을 때 `FINISHED`, 없으면 `CANCELLED`다. 각 참가자 row는 유지하되 취소·이탈 시각을 `deleted_at`에 기록하고 배정 행은 `is_connected=false`로 남긴다
 
 ### 5-A. 매칭 중 (홈 → 매칭 대기 화면)
 
@@ -1080,7 +1080,6 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   - **분기는 방의 `status`가 아니라 모집 마감 시각으로 한다** — 마감이 지났는데 스케줄러가 아직 `MATCHING`을 안 닫은 틈에 나가면 제재를 피할 수 있기 때문이다
   - **러닝이 시작된 뒤(`status='RUNNING'`)에는 이 API를 쓸 수 없다** — `409 MATCH_ALREADY_STARTED`. 종료는 WS `RUNNING_FINISH`가 맡으며, 여기서 끊으면 GPS 트랙과 기록이 저장되지 않는다
   - 확정 후(`MATCHED`) = 이탈(`status=MATCHED_LEFT_PENALTY` 또는 `MATCHED_LEFT_NO_PENALTY`, `deleted_at` 기록). 제재 대상 여부는 **이 시점에 모집 마감(`start_at - 오프셋`)과 `current_player_count`로 판정해 값에 굳힌다** — 혼자 남은 방(`1`)에서 나가면 마감이 지났어도 면제다. 쿨다운이 걸리는 경우에만 클라는 나가기 전에 그 사실을 안내한다
-  - 방이 시작된 뒤(`STARTED`) 본인이 아직 `JOINED`(WS 미접속)면 확정 후 이탈과 같게 판정하되 **방 인원은 줄이지 않는다** — 시작 후 `current_player_count`는 확정 인원으로 고정된다. 인원이 그대로라 `MATCH_ROOM_UPDATED`도 보내지 않으며, 방은 강제 종료가 닫는다
   - 남은 인원에게는 `MATCH_ROOM_UPDATED`를 스트림으로 발신한다. **혼자 남아도 방은 취소하지 않는다**
 - **시각으로 취소를 차단하지 않는다.** 시작 직전까지 호출할 수 있고 늦은 이탈은 쿨다운으로 다룬다
 - **Response `204 No Content`** — 이후 클라는 SSE 스트림을 닫는다

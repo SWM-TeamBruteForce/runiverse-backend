@@ -230,30 +230,6 @@ class CancelMatchHandlerTest {
     }
 
     @Test
-    @DisplayName("러닝이 시작된 방에서 나가면 인원을 줄이지 않고 자리만 비운다")
-    void leavingStartedRoomKeepsPlayerCount() {
-        // given -> 3인 확정 방이 시작됐는데 앱을 켜지 않아 JOINED로 남았다
-        givenActiveMatch(room(startAfter(Duration.ofMinutes(-5)), RunningRoomStatus.STARTED, 3));
-
-        // when
-        cancelMatchHandler.handle(new CancelMatchCommand(USER_ID));
-
-        // then -> 시작 후 인원은 확정 인원으로 고정된다(erd). 방은 강제 종료가 닫는다
-        RunningRoom updated = updatedRoom();
-        assertThat(updated.getPlayerCount().current()).isEqualTo(3);
-        assertThat(updated.getStatus()).isEqualTo(RunningRoomStatus.STARTED);
-        var session = updated.getSessions().stream()
-                .filter(it -> it.isSameUser(new UserId(USER_ID)))
-                .findFirst()
-                .orElseThrow();
-        assertThat(session.isConnected()).isFalse();
-        assertThat(session.getLeaveCount().value()).isZero();
-        assertThat(leftPlayer().getStatus()).isEqualTo(RunningPlayerStatus.MATCHED_LEFT_PENALTY);
-        // 인원이 그대로라 남은 사람 화면에 줄 정보가 없다
-        verifyNoInteractions(eventPublisher);
-    }
-
-    @Test
     @DisplayName("러닝이 시작된 뒤에는 취소할 수 없다")
     void cannotCancelAfterRunningStarted() {
         // given -> 여기서 끊으면 WS 종료 경로를 건너뛰어 GPS 트랙과 기록이 저장되지 않는다.
@@ -320,21 +296,15 @@ class CancelMatchHandlerTest {
     }
 
     private static RunningRoom room(LocalDateTime startAt, int currentPlayerCount) {
-        return room(startAt, RunningRoomStatus.MATCHING, currentPlayerCount);
-    }
-
-    private static RunningRoom room(LocalDateTime startAt, RunningRoomStatus status,
-                                    int currentPlayerCount) {
-        return matchRoom(RunningRoomType.MATCH, status, startAt, currentPlayerCount, 4);
+        return matchRoom(RunningRoomType.MATCH, startAt, currentPlayerCount, 4);
     }
 
     private static RunningRoom soloRoom(LocalDateTime startAt) {
-        return matchRoom(RunningRoomType.SOLO, RunningRoomStatus.MATCHING, startAt, 1, 1);
+        return matchRoom(RunningRoomType.SOLO, startAt, 1, 1);
     }
 
     // 나 말고 나머지 인원은 다른 유저의 세션으로 채운다 — 세션 키가 유저다
-    private static RunningRoom matchRoom(RunningRoomType type, RunningRoomStatus status,
-                                         LocalDateTime startAt,
+    private static RunningRoom matchRoom(RunningRoomType type, LocalDateTime startAt,
                                          int currentPlayerCount, int maxPlayerCount) {
         List<SessionDraft> sessions = new ArrayList<>();
         sessions.add(new SessionDraft(
@@ -347,7 +317,7 @@ class CancelMatchHandlerTest {
         return RunningRoom.builder()
                 .runningRoomId(ROOM_ID)
                 .type(type)
-                .status(status)
+                .status(RunningRoomStatus.MATCHING)
                 .startAt(startAt)
                 .targetDistance(TARGET_DISTANCE)
                 .avgPace(AVG_PACE)
