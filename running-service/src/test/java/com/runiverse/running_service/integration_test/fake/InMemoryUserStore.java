@@ -5,10 +5,12 @@ import com.runiverse.running_service.application.auth.port.out.LoadUserByEmailPo
 import com.runiverse.running_service.application.auth.port.out.LoadUserByProviderPort;
 import com.runiverse.running_service.application.auth.port.out.SaveUserPort;
 import com.runiverse.running_service.application.user.exception.UserNotFoundException;
+import com.runiverse.running_service.application.user.port.out.ClearProfileImagePort;
 import com.runiverse.running_service.application.user.port.out.LoadOauthProviderPort;
 import com.runiverse.running_service.application.user.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.port.out.UpdateIntroductionPort;
 import com.runiverse.running_service.application.user.port.out.UpdatePasswordPort;
+import com.runiverse.running_service.application.user.port.out.UpdateProfileImagePort;
 import com.runiverse.running_service.application.user.port.out.UpdateSettingsPort;
 import com.runiverse.running_service.domain.user.User;
 import com.runiverse.running_service.domain.user.vo.Introduction;
@@ -25,7 +27,7 @@ import java.util.UUID;
 
 public class InMemoryUserStore implements SaveUserPort, CheckEmailDuplicatePort, LoadUserByEmailPort,
         LoadUserByProviderPort, LoadUserByIdPort, UpdatePasswordPort, UpdateIntroductionPort,
-        UpdateSettingsPort, LoadOauthProviderPort {
+        UpdateSettingsPort, LoadOauthProviderPort, UpdateProfileImagePort, ClearProfileImagePort {
 
     private final Map<UUID, User> users = new LinkedHashMap<>();
     private final Map<UUID, PasswordHash> updatedPasswords = new LinkedHashMap<>();
@@ -119,6 +121,37 @@ public class InMemoryUserStore implements SaveUserPort, CheckEmailDuplicatePort,
                 alertConsent == null ? user.isAlertConsent() : alertConsent,
                 user.getProfileImageKey().map(ProfileImageKey::value).orElse(null),
                 profileVisibility == null ? user.getProfileVisibility() : profileVisibility,
+                user.getIntroduction().value()
+        );
+        user.getOauthUser().ifPresent(oauth ->
+                replaced.linkOauth(oauth.getProvider(), oauth.getProviderId().value()));
+        users.put(userId.value(), replaced);
+    }
+
+    // 사진 URL 조회가 users에서 key를 읽어 반영도 여기에 남긴다
+    @Override
+    public void updateProfileImage(UserId userId, ProfileImageKey profileImageKey) {
+        replaceProfileImageKey(userId, profileImageKey.value());
+    }
+
+    @Override
+    public void clearProfileImage(UserId userId) {
+        replaceProfileImageKey(userId, null);
+    }
+
+    // profileImageKey도 final이라 같은 이유로 애그리거트를 갈아끼운다
+    private void replaceProfileImageKey(UserId userId, String profileImageKey) {
+        User user = users.get(userId.value());
+        if (user == null) {
+            throw new UserNotFoundException();
+        }
+        User replaced = new User(
+                user.getUserId().value(),
+                user.getEmail().value(),
+                user.getPasswordHash().value(),
+                user.isAlertConsent(),
+                profileImageKey,
+                user.getProfileVisibility(),
                 user.getIntroduction().value()
         );
         user.getOauthUser().ifPresent(oauth ->

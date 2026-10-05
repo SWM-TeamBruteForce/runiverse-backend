@@ -1,0 +1,25 @@
+filebeat.inputs:
+  - type: filestream
+    id: runiverse-running-service
+    paths:
+      - /logs/running-service.log
+    parsers:
+      - ndjson:
+          target: ""            # JSON 필드를 최상위에 그대로 펼침
+          overwrite_keys: true
+          add_error_key: true   # JSON이 아닌 줄이 있으면 에러 필드를 붙이고 버리지 않음
+
+processors:
+  - add_fields:
+      target: labels
+      fields:
+        env: local              # 나중에 운영 로그와 구분하는 용도
+
+output.elasticsearch:
+  hosts: ["${ES_HOST}"]
+  username: "${ES_USERNAME}"
+  password: "${ES_PASSWORD}"
+  ssl.certificate_authorities: ["/usr/share/filebeat/certs/http_ca.crt"]
+
+# 쓰기 계정은 템플릿을 만들 권한이 없음 → 템플릿은 elastic으로 한 번만 따로 등록
+setup.template.enabled: false

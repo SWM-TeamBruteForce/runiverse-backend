@@ -1,5 +1,14 @@
 package com.runiverse.running_service.integration_test.fake;
 
+import com.runiverse.running_service.application.match.port.out.CreateMatchApplicationPort;
+import com.runiverse.running_service.application.match.port.out.CreateMatchRoomPort;
+import com.runiverse.running_service.application.match.port.out.ExistsActiveApplicationPort;
+import com.runiverse.running_service.application.match.port.out.LoadActiveApplicationPort;
+import com.runiverse.running_service.application.match.port.out.LoadMatchRoomDetailPort;
+import com.runiverse.running_service.application.match.port.out.LockMatchApplicationPort;
+import com.runiverse.running_service.application.match.port.out.LockMatchRoomPort;
+import com.runiverse.running_service.application.match.port.out.UpdateMatchApplicationPort;
+import com.runiverse.running_service.application.match.port.out.UpdateMatchRoomPort;
 import com.runiverse.running_service.application.running.port.out.CountStartedRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.CreateRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.CreateRunningRoomPort;
@@ -7,10 +16,12 @@ import com.runiverse.running_service.application.running.port.out.ExistsActiveRu
 import com.runiverse.running_service.application.running.port.out.ExistsRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.LoadRoomPlayerPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningRoomPort;
+import com.runiverse.running_service.application.running.port.out.LoadUserStatusPort;
 import com.runiverse.running_service.application.running.port.out.LockRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.LockRunningRoomPort;
 import com.runiverse.running_service.application.running.port.out.UpdateRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.UpdateRunningRoomPort;
+import com.runiverse.running_service.application.running.port.out.UserStatusRow;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.metric.vo.Distance;
 import com.runiverse.running_service.domain.running.metric.vo.Pace;
@@ -35,7 +46,12 @@ import java.util.stream.Stream;
 public class InMemoryRunningStore implements CreateRunningPlayerPort, CreateRunningRoomPort,
         ExistsActiveRunningPlayerPort, LoadRunningRoomPort, LockRunningRoomPort, UpdateRunningRoomPort,
         LockRunningPlayerPort, UpdateRunningPlayerPort, LoadRoomPlayerPort,
-        ExistsRunningPlayerPort, CountStartedRunningPlayerPort {
+        ExistsRunningPlayerPort, CountStartedRunningPlayerPort, LoadUserStatusPort,
+        // 실제 어댑터처럼 매칭 유스케이스의 포트도 같은 메서드로 만족시킨다
+        CreateMatchApplicationPort, ExistsActiveApplicationPort,
+        CreateMatchRoomPort, UpdateMatchRoomPort, LockMatchRoomPort,
+        LoadActiveApplicationPort, LockMatchApplicationPort, UpdateMatchApplicationPort,
+        LoadMatchRoomDetailPort {
 
     private final Map<Long, RunningPlayer> players = new LinkedHashMap<>();
     private final Map<Long, RunningRoom> rooms = new LinkedHashMap<>();
@@ -88,10 +104,20 @@ public class InMemoryRunningStore implements CreateRunningPlayerPort, CreateRunn
 
     @Override
     public Optional<RunningPlayer> lockActive(UserId userId) {
+        return loadActive(userId);
+    }
+
+    @Override
+    public Optional<RunningPlayer> loadActive(UserId userId) {
         return players.values().stream()
                 .filter(player -> player.getUserId().equals(userId) && player.isActive())
                 .findFirst()
                 .map(player -> copyWithId(player, player.getRunningPlayerId().orElseThrow().value()));
+    }
+
+    @Override
+    public Optional<RunningRoom> loadDetailById(RunningRoomId runningRoomId) {
+        return loadById(runningRoomId);
     }
 
     // 실제 어댑터처럼 세션을 거쳐 방의 활성 참가자를 user_id 순으로 찾는다 — 잠그지는 않는다
@@ -131,6 +157,24 @@ public class InMemoryRunningStore implements CreateRunningPlayerPort, CreateRunn
         return (int) playersOf(runningRoomId)
                 .filter(player -> player.getStatus().hasStartedRunning())
                 .count();
+    }
+
+    // 목표 거리는 방 값을 쓴다 — 솔로의 목표 없음(null)은 방에만 남는다
+    @Override
+    public Optional<UserStatusRow> loadStatus(UserId userId) {
+        return rooms.values().stream()
+                .flatMap(room -> room.getSessions().stream()
+                        .filter(session -> session.isConnected())
+                        .map(session -> players.get(session.getRunningPlayerId().value()))
+                        .filter(player -> player != null
+                                && player.getUserId().equals(userId) && player.isActive())
+                        .map(player -> new UserStatusRow(
+                                room.getRunningRoomId().orElseThrow().value(),
+                                room.getType(),
+                                room.getStatus(),
+                                room.getStartAt(),
+                                room.getTargetDistance().map(Distance::meters).orElse(null))))
+                .findFirst();
     }
 
     private Stream<RunningPlayer> playersOf(RunningRoomId runningRoomId) {
@@ -208,6 +252,10 @@ public class InMemoryRunningStore implements CreateRunningPlayerPort, CreateRunn
 
     public int playerCount() {
         return players.size();
+    }
+
+    public List<RunningRoom> findAllRooms() {
+        return List.copyOf(rooms.values());
     }
 
     public int roomCount() {

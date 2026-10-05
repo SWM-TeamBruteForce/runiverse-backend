@@ -72,4 +72,8 @@ public class InMemoryRunningRecordStore
     public int size() {
         return records.size();
     }
+
+    public List<RunningRecord> findAll() {
+        return List.copyOf(records.values());
+    }
 }

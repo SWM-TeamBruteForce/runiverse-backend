@@ -134,6 +134,22 @@ class UserProfileE2eTest extends E2eTestSupport {
     }
 
     @Test
+    @DisplayName("프로필 사진 URL은 토큰 없이 조회되고, 사진이 없으면 null, 없는 사용자는 404다")
+    void profileImageUrlIsPublic() {
+        // given
+        TestUser user = signUpAndOnboard();
+        // when - 인증이 필요 없는 경로다
+        Response found = get("/users/" + user.userId() + "/profile-image", null);
+        Response notFound = get("/users/00000000-0000-7000-8000-000000000000/profile-image", null);
+        // then - 사진이 없으면 서명할 key도 없다
+        assertThat(found.status()).isEqualTo(200);
+        assertThat(found.body()).containsKey("profileImageUrl");
+        assertThat(found.text("profileImageUrl")).isNull();
+        assertThat(notFound.status()).isEqualTo(404);
+        assertThat(notFound.text("code")).isEqualTo("NOT_FOUND");
+    }
+
+    @Test
     @DisplayName("업로드하지 않은 키로는 프로필 사진을 반영할 수 없다")
     void unuploadedProfileImageKeyIsRejected() {
         // given - URL만 받고 실제 업로드는 하지 않는다

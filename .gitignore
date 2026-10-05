@@ -18,5 +18,9 @@ CLAUDE.local.md
 *.pem
 *.key
 
+# filebeat
+infra/filebeat/.env
+infra/filebeat/http_ca.crt
+
 # log
 logs/
