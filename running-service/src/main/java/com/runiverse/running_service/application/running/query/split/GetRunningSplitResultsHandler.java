@@ -50,10 +50,6 @@ public class GetRunningSplitResultsHandler implements GetRunningSplitResultsUsec
 
     @Override
     public GetRunningSplitResultsResult handle(GetRunningSplitResultsQuery query) {
-        // 방 ID는 서버가 발급한 참조라 1 미만은 없는 방이다 — VO 검증(500)까지 보내지 않는다
-        if (query.runningRoomId() < 1) {
-            throw new RunningResultNotFoundException();
-        }
         RunningRoomId roomId = new RunningRoomId(query.runningRoomId());
         UserId viewerId = new UserId(query.viewerId());
         // 1. 없는 방과 남의 방을 나눈다 — 러닝 결과 조회와 같은 순서다

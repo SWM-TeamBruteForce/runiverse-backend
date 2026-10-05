@@ -42,10 +42,6 @@ public class GetRunningResultsHandler implements GetRunningResultsUsecase {
 
     @Override
     public GetRunningResultsResult handle(GetRunningResultsQuery query) {
-        // 방 ID는 서버가 발급한 참조라 1 미만은 없는 방이다 — VO 검증(500)까지 보내지 않는다
-        if (query.runningRoomId() < 1) {
-            throw new RunningResultNotFoundException();
-        }
         RunningRoomId roomId = new RunningRoomId(query.runningRoomId());
         UserId viewerId = new UserId(query.viewerId());
         // 1. 없는 방과 남의 방을 나눈다 — 방이 없으면 404, 있는데 참가자가 아니면 403.

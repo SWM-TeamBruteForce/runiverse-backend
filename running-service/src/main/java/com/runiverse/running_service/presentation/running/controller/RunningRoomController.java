@@ -2,6 +2,7 @@ package com.runiverse.running_service.presentation.running.controller;
 
 import com.runiverse.running_service.application.running.command.solo.OpenSoloRoomCommand;
 import com.runiverse.running_service.application.running.command.solo.OpenSoloRoomResult;
+import com.runiverse.running_service.application.running.exception.RunningResultNotFoundException;
 import com.runiverse.running_service.application.running.port.in.GetRunningResultsUsecase;
 import com.runiverse.running_service.application.running.port.in.GetRunningSplitResultsUsecase;
 import com.runiverse.running_service.application.running.port.in.OpenSoloRoomUsecase;
@@ -48,6 +49,7 @@ public class RunningRoomController {
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable Long runningRoomId
     ) {
+        requireIssuedRoomId(runningRoomId);
         // 조회자는 토큰에서만 온다 — 클라가 보낸 값이면 남의 결과를 볼 수 있다
         UUID userId = UUID.fromString(jwt.getSubject());
         GetRunningResultsResult result = getRunningResultsUsecase.handle(
@@ -60,9 +62,17 @@ public class RunningRoomController {
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable Long runningRoomId
     ) {
+        requireIssuedRoomId(runningRoomId);
         UUID userId = UUID.fromString(jwt.getSubject());
         GetRunningSplitResultsResult result = getRunningSplitResultsUsecase.handle(
                 new GetRunningSplitResultsQuery(runningRoomId, userId));
         return ResponseEntity.ok(RunningSplitResultsResponse.from(result));
+    }
+
+    // 방 ID는 1부터 발급된다 — 1 미만은 없는 방이다. 유스케이스로 넘기면 VO 검증에서 500이 된다
+    private static void requireIssuedRoomId(Long runningRoomId) {
+        if (runningRoomId < 1) {
+            throw new RunningResultNotFoundException();
+        }
     }
 }

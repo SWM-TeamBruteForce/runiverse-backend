@@ -18,6 +18,7 @@ import com.runiverse.running_service.application.user.command.profileimage.Creat
 import com.runiverse.running_service.application.user.command.profileimage.DeleteProfileImageCommand;
 import com.runiverse.running_service.application.user.command.settings.ChangeMySettingsCommand;
 import com.runiverse.running_service.application.user.command.settings.ChangeMySettingsResult;
+import com.runiverse.running_service.application.user.exception.ProfileNotFoundException;
 import com.runiverse.running_service.application.user.port.in.ChangeMyProfileUsecase;
 import com.runiverse.running_service.application.user.port.in.ChangeMySettingsUsecase;
 import com.runiverse.running_service.application.user.port.in.ChangeNicknameUsecase;
@@ -140,6 +141,7 @@ public class UserController {
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID userId
     ) {
+        requireIssuedUserId(userId);
         UUID viewerId = UUID.fromString(jwt.getSubject());
         GetUserProfileResult result = getUserProfileUsecase.handle(
                 new GetUserProfileQuery(viewerId, userId));
@@ -216,6 +218,7 @@ public class UserController {
 
     @GetMapping("/{userId}/profile-image")
     public ResponseEntity<ProfileImageUrlResponse> getProfileImageUrl(@PathVariable UUID userId) {
+        requireIssuedUserId(userId);
         GetProfileImageUrlResult result = getProfileImageUsecase.handle(
                 new GetProfileImageUrlQuery(userId));
         return ResponseEntity.ok(new ProfileImageUrlResponse(result.profileImageUrl()));
@@ -306,5 +309,12 @@ public class UserController {
                 result.scheduledStartAt(),
                 result.targetDistanceMeters(),
                 result.cooldownUntil()));
+    }
+
+    // userId는 v7로만 발급된다 — 다른 버전은 없는 사용자다. 유스케이스로 넘기면 VO 검증에서 500이 된다
+    private static void requireIssuedUserId(UUID userId) {
+        if (userId.version() != 7) {
+            throw new ProfileNotFoundException();
+        }
     }
 }

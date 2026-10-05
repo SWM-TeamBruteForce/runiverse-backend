@@ -1,6 +1,5 @@
 package com.runiverse.running_service.application.user.query.profile;
 
-import com.runiverse.running_service.application.user.common.TargetUserIdPolicy;
 import com.runiverse.running_service.application.user.exception.ProfileNotFoundException;
 import com.runiverse.running_service.application.user.port.in.GetUserProfileUsecase;
 import com.runiverse.running_service.application.user.port.out.GenerateViewUrlPort;
@@ -29,7 +28,7 @@ public class GetUserProfileHandler implements GetUserProfileUsecase {
 
     @Override
     public GetUserProfileResult handle(GetUserProfileQuery query) {
-        UserId targetUserId = TargetUserIdPolicy.resolve(query.targetUserId());
+        UserId targetUserId = new UserId(query.targetUserId());
 
         // 1. 없는 사용자와 탈퇴한 사용자를 구분하지 않는다
         User user = loadUserByIdPort.loadById(targetUserId).orElseThrow(ProfileNotFoundException::new);

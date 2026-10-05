@@ -276,17 +276,6 @@ public class GetRunningResultsIntegrationTest extends IntegrationTestSupport {
                 .isInstanceOf(RunningResultNotFoundException.class);
     }
 
-    @Test
-    @DisplayName("1 미만의 방 ID도 없는 방이라 404다")
-    void 방_ID가_1_미만이면_404다() {
-        // given
-        UUID userId = onboardedUser(EMAIL, NICKNAME);
-
-        // when & then -> 도메인 VO까지 가면 500으로 마스킹된다
-        assertThatThrownBy(() -> handler.handle(new GetRunningResultsQuery(0L, userId)))
-                .isInstanceOf(RunningResultNotFoundException.class);
-    }
-
     private UUID onboardedUser(String email, String nickname) {
         UUID userId = signUpHandler.handle(
                 new SignUpCommand(issueVerificationTicket(email), PASSWORD)).userId();
