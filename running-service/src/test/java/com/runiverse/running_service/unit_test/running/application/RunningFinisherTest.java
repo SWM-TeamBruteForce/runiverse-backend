@@ -8,7 +8,6 @@ import com.runiverse.running_service.application.running.common.RunningFinisher;
 import com.runiverse.running_service.application.running.exception.NotRoomPlayerException;
 import com.runiverse.running_service.application.running.exception.RunningNotStartableException;
 import com.runiverse.running_service.application.running.exception.RunningRoomNotFoundException;
-import com.runiverse.running_service.application.running.port.out.CountStartedRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.CreateRunningRecordPort;
 import com.runiverse.running_service.application.running.port.out.DeleteRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.ExistsRunningPlayerPort;
@@ -130,9 +129,6 @@ public class RunningFinisherTest {
     private ExistsRunningPlayerPort existsRunningPlayerPort;
 
     @Mock
-    private CountStartedRunningPlayerPort countStartedRunningPlayerPort;
-
-    @Mock
     private ExistsRunningRecordPort existsRunningRecordPort;
 
     @Mock
@@ -164,9 +160,9 @@ public class RunningFinisherTest {
         finisher = new RunningFinisher(lockRunningRoomPort, lockRunningPlayerPort,
                 loadRunningTrackPort, loadUserWeightPort, loadWeatherPort, saveGpsTrackPort,
                 createRunningRecordPort, updateRunningPlayerPort, deleteRunningTrackPort,
-                existsRunningPlayerPort, countStartedRunningPlayerPort, updateRunningRoomPort,
-                startMatchCooldownPort, existsRunningRecordPort, loadRecentRunningPacesPort,
-                updateUserAvgPacePort, eventPublisher, PROPERTIES);
+                existsRunningPlayerPort, updateRunningRoomPort, startMatchCooldownPort,
+                existsRunningRecordPort, loadRecentRunningPacesPort, updateUserAvgPacePort,
+                eventPublisher, PROPERTIES);
         // 이 클래스의 트랙은 대부분 유효 러닝을 통과해 기록이 남는다 —
         // 기록 없이 닫히는 경우만 개별 테스트가 뒤집는다
         lenient().when(existsRunningRecordPort.existsInRoom(new RunningRoomId(ROOM_ID)))
@@ -236,12 +232,6 @@ public class RunningFinisherTest {
 
     private void givenRoom(RunningRoom room) {
         given(lockRunningRoomPort.lockById(new RunningRoomId(ROOM_ID))).willReturn(Optional.of(room));
-    }
-
-    // 판정 순간 러닝 단계에 들어온 참가자 수 — 본인을 포함한다
-    private void givenStartedRunners(int count) {
-        given(countStartedRunningPlayerPort.countStartedRunning(new RunningRoomId(ROOM_ID)))
-                .willReturn(count);
     }
 
     private void givenTrack(RunningTrack track) {
@@ -365,7 +355,6 @@ public class RunningFinisherTest {
             givenPlayer(player);
             givenRoom(room(RunningRoomType.MATCH, TARGET));
             givenTrack(track(1_598, 2.5));
-            givenStartedRunners(2);
 
             // when
             finish();
@@ -381,7 +370,6 @@ public class RunningFinisherTest {
             givenPlayer(player(RunningPlayerStatus.RUNNING, null));
             givenRoom(room(RunningRoomType.MATCH, TARGET));
             givenTrack(track(1_598, 2.5));
-            givenStartedRunners(2);
 
             // when
             finish();
@@ -392,14 +380,13 @@ public class RunningFinisherTest {
         }
 
         @Test
-        @DisplayName("러닝에 들어온 사람이 본인뿐이면 확정 인원이 여럿이어도 제재하지 않는다")
+        @DisplayName("1인 확정 방에서는 비율이 미달이어도 제재하지 않는다")
         void exemptsSoleRunnerFromPenalty() {
-            // given -> 2인 확정 방이지만 상대는 끝내 오지 않았다. 곤란해지는 상대가 없다(feature-spec)
+            // given -> 아무도 안 붙어 혼자 확정된 방이다. 곤란해지는 상대가 없다
             RunningPlayer player = player(RunningPlayerStatus.RUNNING, null);
             givenPlayer(player);
-            givenRoom(room(RunningRoomType.MATCH, TARGET, RunningRoomStatus.STARTED, 2));
+            givenRoom(room(RunningRoomType.MATCH, TARGET, RunningRoomStatus.STARTED, 1));
             givenTrack(track(1_598, 2.5));
-            givenStartedRunners(1);
 
             // when
             finish();
@@ -432,7 +419,6 @@ public class RunningFinisherTest {
             givenPlayer(player);
             givenRoom(room(RunningRoomType.MATCH, TARGET));
             givenTrack(new RunningTrack("", List.of()));
-            givenStartedRunners(2);
 
             // when -> 상태는 확정한다. 기록만 남기지 않는다
             finish();

@@ -9,7 +9,6 @@ import com.runiverse.running_service.application.match.port.out.LockMatchApplica
 import com.runiverse.running_service.application.match.port.out.LockMatchRoomPort;
 import com.runiverse.running_service.application.match.port.out.UpdateMatchApplicationPort;
 import com.runiverse.running_service.application.match.port.out.UpdateMatchRoomPort;
-import com.runiverse.running_service.application.running.port.out.CountStartedRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.CreateRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.CreateRunningRoomPort;
 import com.runiverse.running_service.application.running.port.out.ExistsActiveRunningPlayerPort;
@@ -46,7 +45,7 @@ import java.util.stream.Stream;
 public class InMemoryRunningStore implements CreateRunningPlayerPort, CreateRunningRoomPort,
         ExistsActiveRunningPlayerPort, LoadRunningRoomPort, LockRunningRoomPort, UpdateRunningRoomPort,
         LockRunningPlayerPort, UpdateRunningPlayerPort, LoadRoomPlayerPort,
-        ExistsRunningPlayerPort, CountStartedRunningPlayerPort, LoadUserStatusPort,
+        ExistsRunningPlayerPort, LoadUserStatusPort,
         // 실제 어댑터처럼 매칭 유스케이스의 포트도 같은 메서드로 만족시킨다
         CreateMatchApplicationPort, ExistsActiveApplicationPort,
         CreateMatchRoomPort, UpdateMatchRoomPort, LockMatchRoomPort,
@@ -150,13 +149,6 @@ public class InMemoryRunningStore implements CreateRunningPlayerPort, CreateRunn
     public boolean existsRunning(RunningRoomId runningRoomId) {
         return playersOf(runningRoomId)
                 .anyMatch(player -> player.getStatus() == RunningPlayerStatus.RUNNING);
-    }
-
-    @Override
-    public int countStartedRunning(RunningRoomId runningRoomId) {
-        return (int) playersOf(runningRoomId)
-                .filter(player -> player.getStatus().hasStartedRunning())
-                .count();
     }
 
     // 목표 거리는 방 값을 쓴다 — 솔로의 목표 없음(null)은 방에만 남는다

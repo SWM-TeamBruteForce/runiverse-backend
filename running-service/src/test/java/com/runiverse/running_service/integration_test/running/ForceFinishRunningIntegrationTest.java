@@ -114,7 +114,6 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
                 runningStore,       // UpdateRunningPlayerPort
                 runningTrackStore,  // DeleteRunningTrackPort
                 runningStore,       // ExistsRunningPlayerPort
-                runningStore,       // CountStartedRunningPlayerPort
                 runningStore,       // UpdateRunningRoomPort
                 this::recordCooldown, // StartMatchCooldownPort
                 runningRecordStore, // ExistsRunningRecordPort
@@ -326,50 +325,6 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
                 .isEqualTo(RunningPlayerStatus.RUNNING_LEFT_NO_PENALTY);
         assertThat(cooldowns).containsOnlyKeys(runner);
         assertThat(cooldowns.get(runner)).isEqualTo(RUNNING_COOLDOWN);
-    }
-
-    @Test
-    @DisplayName("상대가 끝내 오지 않아 혼자 뛴 사람은 제재선에 못 미쳐도 제재하지 않는다")
-    void exemptsShortRunnerWhenNobodyElseRan() {
-        // given -> 2인 확정 방에서 A만 붙어 목표의 60%에서 멈췄고 B는 한 번도 오지 않았다
-        UUID runner = onboardedUser("runner@runiverse.com", "러너킴");
-        UUID noShow = onboardedUser("noshow@runiverse.com", "안온사람");
-        long roomId = givenStartedMatchRoom(runner, noShow);
-        runFor(runner, roomId, SHORT_POINTS);
-        schedule(roomId);
-
-        // when
-        fire(roomId);
-
-        // then -> 판정 순간 러닝에 들어온 사람이 A뿐이라 곤란해진 상대가 없다.
-        //         안 나타난 B는 확정 인원 기준 그대로 제재받는다
-        assertThat(storedPlayer(roomId, runner).getStatus())
-                .isEqualTo(RunningPlayerStatus.RUNNING_LEFT_NO_PENALTY);
-        assertThat(storedPlayer(roomId, noShow).getStatus())
-                .isEqualTo(RunningPlayerStatus.MATCHED_LEFT_PENALTY);
-        assertThat(cooldowns).containsOnlyKeys(noShow);
-    }
-
-    @Test
-    @DisplayName("먼저 끝낸 사람도 세므로 상대가 완주한 뒤 그만둔 사람은 제재한다")
-    void penalizesShortRunnerAfterTeammateFinished() {
-        // given -> 둘 다 뛰다가 A가 먼저 목표를 채워 끝났고, B는 목표의 60%에서 멈췄다.
-        //          B가 뛰고 있어 A가 끝나도 방은 닫히지 않는다
-        UUID finisher = onboardedUser("finisher@runiverse.com", "먼저끝낸");
-        UUID quitter = onboardedUser("quitter@runiverse.com", "그만둔");
-        long roomId = givenStartedMatchRoom(finisher, quitter);
-        runFor(quitter, roomId, SHORT_POINTS);
-        runFor(finisher, roomId, COMPLETING_POINTS);
-        schedule(roomId);
-
-        // when
-        fire(roomId);
-
-        // then -> 판정 순간 러닝 단계 참가자는 이미 끝낸 A까지 둘이다
-        assertThat(storedPlayer(roomId, quitter).getStatus())
-                .isEqualTo(RunningPlayerStatus.RUNNING_LEFT_PENALTY);
-        assertThat(cooldowns).containsOnlyKeys(quitter);
-        assertThat(cooldowns.get(quitter)).isEqualTo(RUNNING_COOLDOWN);
     }
 
     @Test
