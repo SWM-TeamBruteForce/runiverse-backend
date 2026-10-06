@@ -1,0 +1,89 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '4.1.0'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.runiverse'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+configurations {
+	mockitoAgent
+}
+
+dependencies {
+	// 환경변수 — .env 주입
+	developmentOnly platform("me.paulschwarz:spring-dotenv-bom:5.0.1")
+	developmentOnly "me.paulschwarz:springboot4-dotenv"
+
+	// 운영 지표 / 영속화 / Redis
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	runtimeOnly 'org.postgresql:postgresql'
+
+	// 보안 — Argon2 해시(bcprov) / JWT 검증(resource-server)
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.bouncycastle:bcprov-jdk18on:1.84'
+	implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-resource-server'
+	//testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
+
+	// 요청 검증 / UUIDv7 생성
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation "com.github.f4b6a3:uuid-creator:6.1.1"
+
+	// 통신 — REST / 외부 API 호출 / WebSocket
+	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	implementation 'org.springframework.boot:spring-boot-starter-restclient'
+	implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
+	// 코드 생성 — lombok / 설정 메타데이터
+	compileOnly 'org.projectlombok:lombok'
+	annotationProcessor 'org.projectlombok:lombok'
+	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+	// AWS 관련
+	implementation platform('software.amazon.awssdk:bom:2.31.+')
+	implementation 'software.amazon.awssdk:sesv2'
+	implementation 'software.amazon.awssdk:s3'
+
+	// 메트릭
+	runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
+	// 테스트
+	testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-data-redis-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-websocket-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testCompileOnly 'org.projectlombok:lombok'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testAnnotationProcessor 'org.projectlombok:lombok'
+
+	// 테스트 mock — javaagent로 로드 (test 태스크 jvmArgs)
+	mockitoAgent('org.mockito:mockito-core') {
+		transitive = false
+	}
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+
+	jvmArgs "-javaagent:${configurations.mockitoAgent.asPath}"
+}
+
+tasks.named('jar') {
+	enabled = false
+}

@@ -1,0 +1,30 @@
+# Git
+.git
+.github
+.gitignore
+
+# IDE
+.idea
+*.iml
+
+# Gradle
+.gradle
+
+# Local
+.env
+.env.example
+
+# Build
+build/reports
+build/test-results
+
+# Test
+src/test
+api.http
+
+#Docs
+HELP.md
+README.md
+
+# logs
+logs/

@@ -1,0 +1,28 @@
+name: Auto Assign
+
+# fork에서 온 PR도 토큰에 쓰기 권한이 필요해 pull_request_target을 쓴다.
+# PR 브랜치 코드를 체크아웃하거나 실행하지 않으므로 안전하다.
+on:
+  pull_request_target:
+    types: [opened]
+
+# workflows가 PR을 수정할 수 있는 권한 설정
+permissions:
+  pull-requests: write
+
+jobs:
+  assign-author:
+    name: PR 작성자를 담당자로 지정
+    runs-on: ubuntu-24.04
+
+    steps:
+      # 담당자 지정은 리포 권한이 있는 사용자에게만 가능하다.
+      # 외부 기여자의 PR에서는 실패하지만, PR 자체를 막을 이유는 아니라 넘긴다.
+      - name: Assign PR author
+        continue-on-error: true
+        run: gh pr edit "$PR_NUMBER" --repo "$GH_REPO" --add-assignee "$PR_AUTHOR"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}

@@ -1,0 +1,468 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches:
+      - dev
+
+# workflows가 git repo에 접근할 수 있는 권한 설정
+permissions:
+  contents: read
+
+# 같은 dev 브런치는 업데이트가 되면 가장 최신것만 실행됨
+concurrency:
+  group: dev
+  cancel-in-progress: true
+
+jobs:
+  # junit을 이용해서 단위테스트를 진행 (mock데이터 임으로 문제없이 진행해야 한다.)
+  runiverse-backend-test:
+    name: running-service 테스트 진행
+    runs-on: ubuntu-24.04
+
+    # 기본 파일 위치
+    defaults:
+      run:
+        working-directory: running-service
+
+    steps:
+      # repo에 있는 정보를 사용할 수 있게 해준다.
+      - name: Checkout backend
+        uses: actions/checkout@v6
+
+      # java 21 설치
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            running-service/*.gradle*
+            running-service/gradle/wrapper/gradle-wrapper.properties
+
+      # gradlew 권한 부여
+      - name: Grant execute permission for Gradle
+        run: chmod +x gradlew
+
+      # 단위 테스트 진행
+      - name: Run unit tests
+        run: ./gradlew test --no-daemon
+
+  # docker build
+  runiverse-backend-docker-build:
+    name: running-service 도커 이미지 빌드
+    needs: runiverse-backend-test
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read # 이 git레포를 읽을 수 있는 권한을 준다.
+      id-token: write # GitHub OIDC ID Token을 발급받을 수 있도록 허용한다.
+
+    defaults:
+      run:
+        working-directory: running-service
+
+    steps:
+      # repo에 있는 정보를 사용할 수 있게 해준다
+      - name: Checkout backend
+        uses: actions/checkout@v6
+
+      # java 21 설치
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            running-service/*.gradle*
+            running-service/gradle/wrapper/gradle-wrapper.properties
+
+      # gradlew 권한 부여
+      - name: Grant execute permission for Gradle
+        run: chmod +x gradlew
+
+      # 실행 가능한 jar 생성
+      - name: Build bootJar
+        run: ./gradlew bootJar -x test --no-daemon
+
+      # buildIdx 세팅 (레이어 캐시 사용을 위해 필요)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # github OIDC 토큰
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_TEST_ECR_PUSH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: runiverse-ecr-push
+
+      # ECR 로그인
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Build 하고 push
+      - name: Build and push Docker image to ECR
+        uses: docker/build-push-action@v6
+        with:
+          context: running-service
+          file: running-service/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_BACKEND_TEST_REPOSITORY }}:latest
+            ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_BACKEND_TEST_REPOSITORY }}:sha-${{ github.sha }}
+          cache-from: type=gha,scope=runiverse-backend-test
+          cache-to: type=gha,scope=runiverse-backend-test,mode=max
+
+  # E2E 테스트 진행
+  runiverse-backend-e2e-test:
+    name: running-service E2E 테스트 진행
+    needs: runiverse-backend-docker-build
+    runs-on: ubuntu-24.04
+    # 컨테이너가 멈춰도 러너를 오래 붙잡지 않도록 상한을 둔다
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: e2e_test
+    steps:
+      # repo에 있는 정보를 사용할 수 있게 해준다
+      - name: Checkout backend
+        uses: actions/checkout@v6
+      # e2e_test는 자체 래퍼 없이 running-service의 gradlew를 빌려 쓴다
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            e2e_test/*.gradle*
+            running-service/*.gradle*
+            running-service/gradle/wrapper/gradle-wrapper.properties
+      # 도커 빌드 컨텍스트에 들어갈 실행 가능한 jar (aws에 ECR의 권한이 push 뿐임으로 이를 유지하자)
+      - name: Build bootJar
+        working-directory: running-service # 통째로 뒤집어 쓰는 것임으로 이걸 쓰는 순간 root를 기준으로 진행
+        run: ./gradlew bootJar -x test --no-daemon
+      # ECR pull 권한이 없어 러너에서 직접 굽는다.
+      # 태그는 run-e2e.sh의 기본값과 같아야 한다
+      - name: Build E2E image
+        working-directory: running-service
+        run: docker build --tag runiverse-backend:e2e .
+      # compose 기동 -> 헬스체크 대기 -> 테스트 -> 정리까지 스크립트가 책임진다
+      - name: Run E2E tests
+        run: ./run-e2e.sh
+      # 실패 원인을 워크플로 로그 밖에서도 볼 수 있게 리포트를 남긴다
+      - name: Upload E2E test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-report
+          path: e2e_test/build/reports/tests/test
+
+  # ECR -> Private EC2 배포
+  runiverse-backend-deploy:
+    name: running-service 테스트 서버 배포
+    needs: runiverse-backend-e2e-test
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      # GitHub OIDC를 통해 CI/CD IAM Role 획득
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_TEST_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: runiverse-test-deploy
+
+      # SSM으로 Private EC2에 배포 명령 전달
+      - name: Deploy application through SSM
+        id: deploy
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          INSTANCE_ID: ${{ vars.TEST_EC2_INSTANCE_ID }}
+          ECR_REPOSITORY: ${{ vars.ECR_BACKEND_TEST_REPOSITORY }}
+          IMAGE_TAG: sha-${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity \
+            --query Account \
+            --output text)
+
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+
+          DEPLOY_SCRIPT=$(cat <<'REMOTE_SCRIPT'
+          set -Eeuo pipefail
+
+          AWS_REGION="__AWS_REGION__"
+          ECR_REGISTRY="__ECR_REGISTRY__"
+          IMAGE_URI="__IMAGE_URI__"
+
+          CONTAINER_NAME="runiverse-backend"
+          PARAMETER_PATH="/runiverse/test"
+          ENV_DIRECTORY="/opt/runiverse"
+          ENV_FILE="${ENV_DIRECTORY}/.env"
+
+          echo "===== Runiverse deployment started ====="
+          echo "Image: ${IMAGE_URI}"
+          echo "Host: $(hostname)"
+
+          mkdir -p "${ENV_DIRECTORY}"
+
+          # Parameter Store에서 환경변수 내려받기
+          echo "Loading environment variables from Parameter Store..."
+
+          TEMP_ENV=$(mktemp)
+
+          aws ssm get-parameters-by-path \
+            --region "${AWS_REGION}" \
+            --path "${PARAMETER_PATH}" \
+            --recursive \
+            --with-decryption \
+            --query 'Parameters[*].[Name,Value]' \
+            --output text |
+          while IFS=$'\t' read -r NAME VALUE; do
+            KEY="${NAME##*/}"
+
+            if [[ ! "${KEY}" =~ ^[A-Z_][A-Z0-9_]*$ ]]; then
+              echo "Invalid environment variable name: ${KEY}" >&2
+              rm -f "${TEMP_ENV}"
+              exit 1
+            fi
+
+            # Docker env-file은 한 줄에 KEY=VALUE 형식이어야 함
+            if [[ "${VALUE}" == *$'\n'* || "${VALUE}" == *$'\r'* ]]; then
+              echo "Multiline value is not supported: ${KEY}" >&2
+              rm -f "${TEMP_ENV}"
+              exit 1
+            fi
+
+            printf '%s=%s\n' "${KEY}" "${VALUE}"
+          done > "${TEMP_ENV}"
+
+          if [ ! -s "${TEMP_ENV}" ]; then
+            echo "No parameters found under ${PARAMETER_PATH}" >&2
+            rm -f "${TEMP_ENV}"
+            exit 1
+          fi
+
+          chown root:root "${TEMP_ENV}"
+          chmod 600 "${TEMP_ENV}"
+          mv "${TEMP_ENV}" "${ENV_FILE}"
+
+          echo "Environment file generated successfully."
+          echo "Loaded environment variable names:"
+          cut -d= -f1 "${ENV_FILE}"
+
+          # ECR 인증
+          echo "Logging in to Amazon ECR..."
+
+          aws ecr get-login-password \
+            --region "${AWS_REGION}" |
+            docker login \
+              --username AWS \
+              --password-stdin "${ECR_REGISTRY}"
+
+          # 이전 배포가 남긴 이미지 정리
+          # pull 전에 둔다 — 디스크를 비우고 받아야 쌓인 이미지 때문에 pull이 먼저 죽지 않는다.
+          # 배포가 실패하면 뒤쪽 단계에 닿지 못하는 것도 같은 이유로 앞이어야 하는 근거다.
+          # -a로 걷어도 롤백 대상은 안전하다 — 이전 컨테이너가 아직 떠 있어 그 이미지를 물고 있다.
+          # 이 줄을 아래 docker rm 뒤로 옮기면 롤백 이미지가 같이 지워진다
+          docker image prune -a -f || true
+
+          # 이미지 Pull
+          echo "Pulling Docker image..."
+          docker pull "${IMAGE_URI}"
+
+          # 기존 컨테이너 정보 보존
+          PREVIOUS_IMAGE=""
+
+          if docker inspect "${CONTAINER_NAME}" >/dev/null 2>&1; then
+            PREVIOUS_IMAGE=$(docker inspect \
+              --format='{{.Config.Image}}' \
+              "${CONTAINER_NAME}")
+          fi
+
+          # 기존 컨테이너 제거
+          echo "Removing existing container..."
+          docker rm -f "${CONTAINER_NAME}" || true
+
+          # 새 컨테이너 실행
+          echo "Starting new container..."
+
+          docker run -d \
+            --name "${CONTAINER_NAME}" \
+            --restart unless-stopped \
+            --network host \
+            --env-file "${ENV_FILE}" \
+            --label "runiverse.commit=__GITHUB_SHA__" \
+            "${IMAGE_URI}"
+
+          # Spring Boot 시작 대기
+          echo "Waiting for application startup..."
+
+          STARTED=false
+
+          for attempt in $(seq 1 30); do
+            if ! docker inspect "${CONTAINER_NAME}" >/dev/null 2>&1; then
+              echo "Container no longer exists." >&2
+              break
+            fi
+
+            RUNNING=$(docker inspect \
+              --format='{{.State.Running}}' \
+              "${CONTAINER_NAME}")
+
+            if [ "${RUNNING}" != "true" ]; then
+              echo "Container stopped during startup." >&2
+              break
+            fi
+
+            # Actuator가 활성화된 경우 실제 API 상태 확인
+            if curl \
+              --fail \
+              --silent \
+              --show-error \
+              http://127.0.0.1:8080/api/v1/actuator/health \
+              >/dev/null 2>&1; then
+              STARTED=true
+              break
+            fi
+
+            echo "Waiting for health check... (${attempt}/30)"
+            sleep 5
+          done
+
+          if [ "${STARTED}" != "true" ]; then
+            echo "Application health check failed." >&2
+
+            echo "===== Container logs ====="
+            docker logs --tail 200 "${CONTAINER_NAME}" || true
+
+            docker rm -f "${CONTAINER_NAME}" || true
+
+            # 직전 이미지가 있다면 자동 롤백
+            if [ -n "${PREVIOUS_IMAGE}" ]; then
+              echo "Rolling back to previous image: ${PREVIOUS_IMAGE}"
+
+              docker run -d \
+                --name "${CONTAINER_NAME}" \
+                --restart unless-stopped \
+                --network host \
+                --env-file "${ENV_FILE}" \
+                "${PREVIOUS_IMAGE}"
+            fi
+
+            exit 1
+          fi
+
+          echo "Application health check passed."
+          docker ps --filter "name=${CONTAINER_NAME}"
+
+          # 사용하지 않는 이미지 정리
+          docker image prune -f
+
+          echo "===== Runiverse deployment completed ====="
+          REMOTE_SCRIPT
+          )
+
+          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__AWS_REGION__/$AWS_REGION}"
+          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__ECR_REGISTRY__/$ECR_REGISTRY}"
+          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__IMAGE_URI__/$IMAGE_URI}"
+          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__GITHUB_SHA__/$GITHUB_SHA}"
+
+          DEPLOY_SCRIPT_BASE64=$(printf '%s' "$DEPLOY_SCRIPT" | base64 -w 0)
+
+          PARAMETERS=$(jq -n \
+          --arg script "$DEPLOY_SCRIPT_BASE64" \
+          '{
+            commands: [
+              "echo " + $script + " | base64 -d | bash"
+            ]
+          }')
+
+          COMMAND_ID=$(aws ssm send-command \
+            --region "$AWS_REGION" \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy runiverse backend ${GITHUB_SHA}" \
+            --parameters "$PARAMETERS" \
+            --timeout-seconds 900 \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM Command ID: $COMMAND_ID"
+          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
+
+      # 명령 실행 완료 대기
+      - name: Wait for deployment
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          INSTANCE_ID: ${{ vars.TEST_EC2_INSTANCE_ID }}
+          COMMAND_ID: ${{ steps.deploy.outputs.command_id }}
+        run: |
+          set -Eeuo pipefail
+
+          for attempt in $(seq 1 180); do
+            STATUS=$(aws ssm get-command-invocation \
+              --region "$AWS_REGION" \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query "Status" \
+              --output text 2>/dev/null || echo "Pending")
+
+            echo "Deployment status: $STATUS"
+
+            case "$STATUS" in
+              Success)
+                exit 0
+                ;;
+              Failed|Cancelled|TimedOut|Cancelling)
+                echo "Deployment failed with status: $STATUS" >&2
+                exit 1
+                ;;
+              Pending|InProgress|Delayed)
+                ;;
+              *)
+                echo "Unknown deployment status: $STATUS"
+                ;;
+            esac
+
+            sleep 5
+          done
+
+          echo "Deployment result wait timed out." >&2
+          exit 1
+
+      # 성공하거나 실패해도 실행 결과 출력
+      - name: Print deployment result
+        if: always()
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          INSTANCE_ID: ${{ vars.TEST_EC2_INSTANCE_ID }}
+          COMMAND_ID: ${{ steps.deploy.outputs.command_id }}
+        run: |
+          if [ -z "${COMMAND_ID:-}" ]; then
+            echo "SSM command was not created."
+            exit 0
+          fi
+
+          aws ssm get-command-invocation \
+            --region "$AWS_REGION" \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --query '{
+              Status: Status,
+              StandardOutput: StandardOutputContent,
+              StandardError: StandardErrorContent
+            }' \
+            --output yaml

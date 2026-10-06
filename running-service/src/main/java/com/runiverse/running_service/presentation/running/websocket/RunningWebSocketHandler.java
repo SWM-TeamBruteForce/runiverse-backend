@@ -1,0 +1,315 @@
+package com.runiverse.running_service.presentation.running.websocket;
+
+import com.runiverse.running_service.application.common.exception.BusinessException;
+import com.runiverse.running_service.application.common.exception.ErrorCode;
+import com.runiverse.running_service.application.running.command.combo.StartRunningComboCommand;
+import com.runiverse.running_service.application.running.command.finish.FinishRunningCommand;
+import com.runiverse.running_service.application.running.command.location.UpdateRunningLocationCommand;
+import com.runiverse.running_service.application.running.command.location.UpdateRunningLocationResult;
+import com.runiverse.running_service.application.running.command.session.RegisterRunningSessionCommand;
+import com.runiverse.running_service.application.running.command.session.RemoveRunningSessionCommand;
+import com.runiverse.running_service.application.running.command.start.StartRunningCommand;
+import com.runiverse.running_service.application.running.command.start.StartRunningResult;
+import com.runiverse.running_service.application.running.port.in.FinishRunningUsecase;
+import com.runiverse.running_service.application.running.port.in.GetRunningSnapshotUsecase;
+import com.runiverse.running_service.application.running.port.in.RegisterRunningSessionUsecase;
+import com.runiverse.running_service.application.running.port.in.RemoveRunningSessionUsecase;
+import com.runiverse.running_service.application.running.port.in.StartRunningComboUsecase;
+import com.runiverse.running_service.application.running.port.in.StartRunningUsecase;
+import com.runiverse.running_service.application.running.port.in.UpdateRunningLocationUsecase;
+import com.runiverse.running_service.application.running.port.out.TrackPoint;
+import com.runiverse.running_service.application.running.query.snapshot.GetRunningSnapshotQuery;
+import com.runiverse.running_service.application.running.query.snapshot.GetRunningSnapshotResult;
+import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.presentation.common.security.JwtHandshakeInterceptor;
+import com.runiverse.running_service.presentation.common.websocket.WebSocketEnvelope;
+import com.runiverse.running_service.presentation.running.websocket.message.ErrorPayload;
+import com.runiverse.running_service.presentation.running.websocket.message.RunningFinishRequest;
+import com.runiverse.running_service.presentation.running.websocket.message.RunningLocationUpdateRequest;
+import com.runiverse.running_service.presentation.running.websocket.message.RunningMessageType;
+import com.runiverse.running_service.presentation.running.websocket.message.RunningStartRequest;
+import com.runiverse.running_service.presentation.running.websocket.message.RunningStartedPayload;
+import com.runiverse.running_service.presentation.running.websocket.message.RunningWebSocketErrorCode;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
+import org.springframework.web.socket.handler.SessionLimitExceededException;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.io.IOException;
+import java.util.List;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class RunningWebSocketHandler extends TextWebSocketHandler {
+
+    private final JsonMapper jsonMapper;
+    private final StartRunningUsecase startRunningUsecase;
+    private final RegisterRunningSessionUsecase registerRunningSessionUsecase;
+    private final RemoveRunningSessionUsecase removeRunningSessionUsecase;
+    private final UpdateRunningLocationUsecase updateRunningLocationUsecase;
+    private final FinishRunningUsecase finishRunningUsecase;
+    private final GetRunningSnapshotUsecase getRunningSnapshotUsecase;
+    private final StartRunningComboUsecase startRunningComboUsecase;
+    private final RunningWebSocketProperties properties;
+    // attribute에 저장할 runningRoomId
+    public static final String RUNNING_ROOM_ID = "runningRoomId";
+    // 좌표 배치마다 방을 다시 읽지 않으려고 세션에 새겨 둔다 — 시작 뒤 바뀌지 않는 값이다
+    public static final String TARGET_DISTANCE_METERS = "targetDistanceMeters";
+    // 전송을 한 줄로 세우는 래퍼를 세션에 하나만 둔다
+    private static final String OUTBOUND = "outbound";
+
+    // 웹소켓 연결이 성공한 직후 한번 호출
+    @Override
+    public void afterConnectionEstablished(WebSocketSession session) {
+        // 연결만으로는 아무것도 등록하지 않는다 — 어느 방인지는 RUNNING_START가 정한다
+        log.info("러닝 WebSocket 연결 — userId={}, sessionId={}", userId(session), session.getId());
+    }
+
+    // event 메시지 보내서 실제 이벤트 핸들에 도착하기전 메시지
+    @Override
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException {
+        WebSocketEnvelope envelope;
+        try {
+            envelope = jsonMapper.readValue(message.getPayload(), WebSocketEnvelope.class);
+        } catch (JacksonException e) {
+            log.warn("러닝 WebSocket 봉투 파싱 실패 — userId={}", userId(session));
+            sendError(session, RunningWebSocketErrorCode.MALFORMED_MESSAGE, null);
+            return;
+        }
+        // 위치 좌표가 실려 오므로 payload는 개인정보다. INFO로 남기지 않는다.
+        log.debug("러닝 WebSocket 수신 — userId={}, payload={}", userId(session), message.getPayload());
+        // 본문이 JSON null이면 봉투 자체가 없다 — 알려진 형식 오류를 서버 오류로 오분류하지 않게 먼저 가른다
+        if (envelope == null) {
+            sendError(session, RunningWebSocketErrorCode.MISSING_MESSAGE_TYPE, null);
+            return;
+        }
+        String event = envelope.event();
+        // from()은 null에도 empty를 돌려줘 UNSUPPORTED와 구분이 안 된다 — 여기서 먼저 가른다
+        if (event == null || event.isBlank()) {
+            sendError(session, RunningWebSocketErrorCode.MISSING_MESSAGE_TYPE, null);
+            return;
+        }
+        RunningMessageType type = RunningMessageType.from(event).orElse(null);
+        if (type == null) {
+            sendError(session, RunningWebSocketErrorCode.UNSUPPORTED_MESSAGE_TYPE, envelope.event());
+            return;
+        }
+        try {
+            switch (type) {
+                case HEALTH_CHECK -> send(session, RunningMessageType.HEALTH_CHECKED.message());
+                case RUNNING_START -> handleRunningStart(session, envelope);
+                case RUNNING_LOCATION_UPDATE -> handleLocationUpdate(session, envelope);
+                case RUNNING_FINISH -> handleRunningFinish(session, envelope);
+                // HEALTH_CHECKED·RUNNING_STARTED·ERROR는 S→C 전용 — 클라가 보내면 처리 대상이 아니다.
+                default -> sendError(session, RunningWebSocketErrorCode.UNSUPPORTED_MESSAGE_TYPE, event);
+            }
+        } catch (RuntimeException e) {
+            // 마지막 그물 — 계약된 코드로 답한 예외는 여기 안 온다. 원인은 스택째 남기고
+            // 클라에는 고정 문구만 보낸다. 전송마저 실패하면 그대로 올려보내 컨테이너가 연결을 정리한다
+            log.error("러닝 WebSocket 처리 실패 — userId={}, event={}", userId(session), event, e);
+            sendError(session, RunningWebSocketErrorCode.INTERNAL_SERVER_ERROR, event);
+        }
+    }
+
+    // 채널 등록·재입장·방 시작·참가자 시작을 한 번에 처리한다
+    private void handleRunningStart(WebSocketSession session, WebSocketEnvelope envelope)
+            throws IOException {
+        RunningStartRequest request;
+        try {
+            request = jsonMapper.convertValue(envelope.data(), RunningStartRequest.class);
+        } catch (JacksonException | IllegalArgumentException e) {
+            sendError(session, RunningWebSocketErrorCode.INVALID_REQUEST, envelope.event());
+            return;
+        }
+        if (request == null || !request.isValid()) {
+            sendError(session, RunningWebSocketErrorCode.INVALID_REQUEST, envelope.event());
+            return;
+        }
+        UserId userId = userId(session);
+        StartRunningResult result;
+        GetRunningSnapshotResult snapshot;
+        try {
+            result = startRunningUsecase.handle(
+                    new StartRunningCommand(userId.value(), request.runningRoomId()));
+            registerRunningSessionUsecase.handle(new RegisterRunningSessionCommand(
+                    userId.value(), request.runningRoomId(),
+                    new WebSocketRunningConnection(outbound(session), jsonMapper)));
+            // 세션 등록 뒤에 세운다 — 먼저 세우면 자기가 만든 콤보의 브로드캐스트를 놓친다
+            startRunningComboUsecase.handle(new StartRunningComboCommand(
+                    request.runningRoomId(), userId.value()));
+            // 콤보를 세운 뒤에 읽는다 — 순서가 뒤집히면 방금 붙은 콤보가 ack에서 빠져
+            // 다음 좌표 배치까지 화면이 빈다
+            snapshot = getRunningSnapshotUsecase.handle(
+                    new GetRunningSnapshotQuery(userId.value(), request.runningRoomId()));
+        } catch (BusinessException e) {
+            sendError(session, e.getErrorCode(), envelope.event());
+            return;
+        }
+
+        session.getAttributes().put(RUNNING_ROOM_ID, request.runningRoomId());
+        // 세션 attribute는 ConcurrentHashMap이라 null을 못 담는다.
+        // 목표 없는 솔로 방은 키 자체를 비워 두면 읽는 쪽이 null로 받는다
+        Integer targetDistanceMeters = result.targetDistanceMeters();
+        if (targetDistanceMeters == null) {
+            session.getAttributes().remove(TARGET_DISTANCE_METERS);
+        } else {
+            session.getAttributes().put(TARGET_DISTANCE_METERS, targetDistanceMeters);
+        }
+        send(session, RunningMessageType.RUNNING_STARTED.message(
+                RunningStartedPayload.from(snapshot)));
+    }
+
+    // 위치 배치에는 ack가 없다 — 실패만 ERROR로 돌려준다.
+    // 다만 이 배치로 목표를 채워 러닝이 끝났으면 RUNNING_FINISHED를 보낸다
+    private void handleLocationUpdate(WebSocketSession session, WebSocketEnvelope envelope)
+            throws IOException {
+        RunningLocationUpdateRequest request;
+        try {
+            request = jsonMapper.convertValue(envelope.data(), RunningLocationUpdateRequest.class);
+        } catch (JacksonException | IllegalArgumentException e) {
+            sendError(session, RunningWebSocketErrorCode.INVALID_REQUEST, envelope.event());
+            return;
+        }
+        if (request == null || !request.isValid()) {
+            sendError(session, RunningWebSocketErrorCode.INVALID_REQUEST, envelope.event());
+            return;
+        }
+        Long startedRoomId = (Long) session.getAttributes().get(RUNNING_ROOM_ID);
+        // RUNNING_START 없이 온 좌표는 검증된 방이 없다 — START가 첫 메시지다
+        if (startedRoomId == null) {
+            sendError(session, RunningWebSocketErrorCode.RUNNING_NOT_STARTED, envelope.event());
+            return;
+        }
+        UpdateRunningLocationResult result;
+        try {
+            result = updateRunningLocationUsecase.handle(new UpdateRunningLocationCommand(
+                    userId(session).value(), startedRoomId,
+                    (Integer) session.getAttributes().get(TARGET_DISTANCE_METERS),
+                    toTrackPoints(request)));
+        } catch (BusinessException e) {
+            // 유스케이스가 튕겨낸 것만 코드로 내보낸다 — 자동 종료 실패도 여기로 온다
+            sendError(session, e.getErrorCode(), envelope.event());
+            return;
+        }
+        // RUNNING_FINISH의 ack와 같은 메시지다 — 클라는 요청 없이 받아도 똑같이 처리한다:
+        // 로컬 트랙을 지우고 결과 화면으로 간다. 세션의 방은 RUNNING_FINISH와 같은 이유로 지우지 않는다
+        if (result.finished()) {
+            send(session, RunningMessageType.RUNNING_FINISHED.message());
+        }
+    }
+
+    private List<TrackPoint> toTrackPoints(RunningLocationUpdateRequest request) {
+        return request.locations().stream()
+                .map(location -> new TrackPoint(
+                        location.sequence(),
+                        location.latitude(),
+                        location.longitude(),
+                        location.altitudeMeters(),          // ← 4번: 선택 그룹
+                        location.accuracyMeters(),          // ← 5번: 필수 그룹
+                        location.speedMetersPerSecond(),
+                        location.headingDegrees(),
+                        location.cadenceSpm(),
+                        location.currentPaceSecondsPerKm(),
+                        location.recordedAt()))
+                .toList();
+    }
+
+    // 상태가 걸린 요청이라 ack가 있다 — 클라는 이걸 받고 로컬 트랙을 지운 뒤 REST로 결과를 본다
+    private void handleRunningFinish(WebSocketSession session, WebSocketEnvelope envelope)
+            throws IOException {
+        RunningFinishRequest request;
+        try {
+            request = jsonMapper.convertValue(envelope.data(), RunningFinishRequest.class);
+        } catch (JacksonException | IllegalArgumentException e) {
+            sendError(session, RunningWebSocketErrorCode.INVALID_REQUEST, envelope.event());
+            return;
+        }
+        if (request == null || !request.isValid()) {
+            sendError(session, RunningWebSocketErrorCode.INVALID_REQUEST, envelope.event());
+            return;
+        }
+        Long startedRoomId = (Long) session.getAttributes().get(RUNNING_ROOM_ID);
+        // RUNNING_START 없이 온 종료는 검증된 방이 없다 — 좌표 배치와 같은 규칙이다
+        if (startedRoomId == null) {
+            sendError(session, RunningWebSocketErrorCode.RUNNING_NOT_STARTED, envelope.event());
+            return;
+        }
+        try {
+            finishRunningUsecase.handle(new FinishRunningCommand(
+                    startedRoomId, userId(session).value(), request.forced()));
+        } catch (BusinessException e) {
+            // 유스케이스가 튕겨낸 것만 코드로 내보낸다
+            sendError(session, e.getErrorCode(), envelope.event());
+            return;
+        }
+        // 세션의 방은 지우지 않는다 — 지우면 ack를 놓친 클라의 재전송이
+        // RUNNING_NOT_STARTED로 걸려 로컬 트랙을 영영 못 지운다. 멱등은 유스케이스가 책임진다
+        send(session, RunningMessageType.RUNNING_FINISHED.message());
+    }
+
+    private void sendError(
+            WebSocketSession session,
+            RunningWebSocketErrorCode errorCode,
+            String sourceType
+    ) throws IOException {
+        send(session, RunningMessageType.ERROR.message(ErrorPayload.of(errorCode, sourceType)));
+    }
+
+    private void sendError(
+            WebSocketSession session,
+            ErrorCode errorCode,
+            String sourceType
+    ) throws IOException {
+        send(session, RunningMessageType.ERROR.message(ErrorPayload.of(errorCode, sourceType)));
+    }
+
+    private void send(WebSocketSession session, WebSocketEnvelope envelope) throws IOException {
+        WebSocketSession outbound = outbound(session);
+        try {
+            outbound.sendMessage(new TextMessage(jsonMapper.writeValueAsString(envelope)));
+        } catch (SessionLimitExceededException e) {
+            // 한도를 넘기면 래퍼는 전송만 막고 소켓은 열어 둔다 — 닫아야 클라가 재연결로 복구한다
+            outbound.close(e.getStatus());
+        }
+    }
+
+    // 한 소켓에 쓰는 주체가 여럿이다 — ack·ERROR는 요청 스레드가, 진행·콤보 통지는 Redis 리스너 스레드가 보낸다.
+    // 동시에 쓰면 컨테이너가 예외를 던지고 통지가 조용히 사라지므로, 모든 전송을 이 래퍼 하나로 모은다.
+    // 명부가 연결을 값으로 비교해 지우므로 등록과 해제도 같은 인스턴스를 써야 한다
+    private WebSocketSession outbound(WebSocketSession session) {
+        return (WebSocketSession) session.getAttributes().computeIfAbsent(OUTBOUND,
+                key -> new ConcurrentWebSocketSessionDecorator(session,
+                        (int) properties.sendTimeLimit().toMillis(),
+                        (int) properties.sendBufferSizeLimit().toBytes()));
+    }
+
+    // 통신 과정에서 오류가 발생하면 처리
+    @Override
+    public void handleTransportError(WebSocketSession session, Throwable exception) {
+        log.warn("러닝 WebSocket 전송 오류 — userId={}", userId(session), exception);
+    }
+
+    // 연결이 끊겼을때 처리
+    @Override
+    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        UserId userId = userId(session);
+        // 연결 끊김 ≠ 방 나가기 — running_room_sessions.is_connected는 여기서 건드리지 않는다.
+        // 명부는 접속 여부라 여기서 지운다
+        removeRunningSessionUsecase.handle(
+                new RemoveRunningSessionCommand(
+                        userId.value(), new WebSocketRunningConnection(outbound(session), jsonMapper)));
+        log.info("러닝 WebSocket 종료 — userId={}, status={}", userId(session), status);
+    }
+
+    private UserId userId(WebSocketSession session) {
+        return (UserId) session.getAttributes().get(JwtHandshakeInterceptor.USER_ID);
+    }
+}

@@ -1,0 +1,2 @@
+org.springframework.context.ApplicationListener=\
+com.runiverse.running_service.infrastructure.config.DefaultTimeZoneInitializer

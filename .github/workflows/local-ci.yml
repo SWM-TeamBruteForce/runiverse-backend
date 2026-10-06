@@ -1,0 +1,50 @@
+name: Local CI
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - dev
+  pull_request:
+    branches-ignore:
+      - main
+      - dev
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 백엔드는 단위테스트 + 통합테스트 진행 후 -> docker build 확인
+  runiverse-backend-test:
+    name: running-service 테스트 진행
+    runs-on: ubuntu-24.04
+
+    # 기본 파일 위치
+    defaults:
+      run:
+        working-directory: running-service
+
+    steps:
+      # repo에 있는 정보를 사용할 수 있게 해준다.
+      - name: Checkout backend
+        uses: actions/checkout@v6
+
+      # java 21 설치
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            running-service/*.gradle*
+            running-service/gradle/wrapper/gradle-wrapper.properties
+
+      # gradlew 권한 부여
+      - name: Grant execute permission for Gradle
+        run: chmod +x gradlew
+
+      # 단위 테스트 진행
+      - name: Run unit tests
+        run: ./gradlew test --no-daemon

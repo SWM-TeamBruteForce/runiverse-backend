@@ -1,0 +1,69 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.java]
+indent_style = space
+indent_size = 4
+ij_continuation_indent_size = 8
+max_line_length = 120
+ij_java_wrap_long_lines = true
+ij_java_keep_line_breaks = true
+
+# 999 = 사실상 무제한, none.* = 예외 패키지 없음 → 와일드카드 import 금지
+ij_java_use_single_class_imports = true
+ij_java_class_count_to_use_import_on_demand = 999
+ij_java_names_count_to_use_import_on_demand = 999
+ij_java_packages_to_use_import_on_demand = none.*
+
+# 일반 import → 빈 줄 → javax·java → 빈 줄 → static import
+ij_java_imports_layout = *, |, javax.**, java.**, |, $*
+
+ij_java_class_brace_style = end_of_line
+ij_java_method_brace_style = end_of_line
+ij_java_block_brace_style = end_of_line
+ij_java_if_brace_force = always
+ij_java_for_brace_force = always
+ij_java_while_brace_force = always
+ij_java_do_while_brace_force = always
+
+ij_java_blank_lines_after_class_header = 1
+
+[*.gradle]
+indent_style = tab
+tab_width = 4
+
+[*.bat]
+# 전역 규칙 예외 — Windows 배치 파일은 CRLF 필수
+end_of_line = crlf
+
+[*.properties]
+max_line_length = off
+ij_properties_spaces_around_key_value_delimiter = false
+ij_properties_keep_blank_lines = true
+
+[*.{yml,yaml,json}]
+indent_style = space
+indent_size = 2
+ij_yaml_spaces_within_brackets = false
+
+[*.md]
+indent_style = space
+indent_size = 2
+max_line_length = off
+# 전역 규칙 예외 — 줄 끝 공백 2개가 마크다운 강제 개행
+trim_trailing_whitespace = false
+ij_markdown_wrap_text_if_long = false
+ij_markdown_format_tables = false
+
+[*.py]
+indent_style = space
+indent_size = 4
+
+[*.sh]
+indent_style = space
+indent_size = 2

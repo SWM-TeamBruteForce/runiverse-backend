@@ -1,0 +1,26 @@
+### macOS ###
+.DS_Store
+
+### IDE ###
+.idea
+
+### Claude Code ###
+.claude/settings.local.json
+.context/
+CLAUDE.local.md
+
+### Secrets ###
+.env
+.env.*
+!.env.example
+# cicd e2e테스트용 환경 변수 추가
+!e2e_test/.env.test
+*.pem
+*.key
+
+# filebeat
+infra/filebeat/.env
+infra/filebeat/http_ca.crt
+
+# log
+logs/

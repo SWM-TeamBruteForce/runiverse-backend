@@ -1,0 +1,212 @@
+name: Backend CD - Production
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: read
+# 프로덕션은 진행 중인 배포를 절대 중간에 끊지 않는다.
+# 컨테이너를 내린 상태에서 취소되면 서비스가 죽은 채로 남는다.
+concurrency:
+  group: production
+  cancel-in-progress: false
+jobs:
+  # 이미지 빌드 -> 프로덕션 ECR push
+  # 수정
+  runiverse-backend-prod-image:
+    name: running-service 프로덕션 이미지 빌드
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write # GitHub OIDC ID Token 발급 허용
+    defaults:
+      run:
+        working-directory: running-service
+    outputs:
+      image-uri: ${{ steps.image.outputs.uri }}
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v6
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            running-service/*.gradle*
+            running-service/gradle/wrapper/gradle-wrapper.properties
+      - name: Grant execute permission for Gradle
+        run: chmod +x gradlew
+      # 검증은 dev 파이프라인에서 끝났다는 전제라 여기서는 테스트를 돌리지 않는다
+      - name: Build bootJar
+        run: ./gradlew bootJar -x test --no-daemon
+      # 레이어 캐시 사용을 위해 필요
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_PROD_ECR_PUSH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: runiverse-prod-ecr-push
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push Docker image to ECR
+        uses: docker/build-push-action@v6
+        with:
+          context: running-service
+          file: running-service/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_BACKEND_PROD_REPOSITORY }}:latest
+            ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_BACKEND_PROD_REPOSITORY }}:sha-${{ github.sha }}
+          cache-from: type=gha,scope=runiverse-backend-prod
+          cache-to: type=gha,scope=runiverse-backend-prod,mode=max
+      # 배포 잡이 계정 ID를 다시 조회하지 않도록 여기서 확정해 넘긴다
+      - name: Export image URI
+        id: image
+        run: |
+          echo "uri=${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_BACKEND_PROD_REPOSITORY }}:sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+  # ECR -> Private EC2 배포
+  # Parameter Store 이미지 변경 -> Auto Scaling Instance Refresh
+  runiverse-backend-prod-deploy:
+    name: running-service 프로덕션 배포
+    needs: runiverse-backend-prod-image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_PROD_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: runiverse-prod-deploy
+
+      - name: Update deployment image parameter
+        id: parameter
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          IMAGE_URI: ${{ needs.runiverse-backend-prod-image.outputs.image-uri }}
+          IMAGE_PARAMETER: /runiverse/deploy/DEPLOY_IMAGE_URI
+        run: |
+          set -Eeuo pipefail
+
+          PREVIOUS_IMAGE_URI=$(aws ssm get-parameter \
+            --region "${AWS_REGION}" \
+            --name "${IMAGE_PARAMETER}" \
+            --query 'Parameter.Value' \
+            --output text)
+
+          echo "Previous image: ${PREVIOUS_IMAGE_URI}"
+          echo "New image: ${IMAGE_URI}"
+
+          aws ssm put-parameter \
+            --region "${AWS_REGION}" \
+            --name "${IMAGE_PARAMETER}" \
+            --type String \
+            --value "${IMAGE_URI}" \
+            --overwrite
+
+          echo "previous_image_uri=${PREVIOUS_IMAGE_URI}" >> "${GITHUB_OUTPUT}"
+
+      - name: Start Auto Scaling instance refresh
+        id: refresh
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          ASG_NAME: ${{ vars.PROD_ASG_NAME }}
+        run: |
+          set -Eeuo pipefail
+
+          REFRESH_ID=$(aws autoscaling start-instance-refresh \
+            --region "${AWS_REGION}" \
+            --auto-scaling-group-name "${ASG_NAME}" \
+            --strategy Rolling \
+            --preferences '{
+              "MinHealthyPercentage": 100,
+              "MaxHealthyPercentage": 200,
+              "InstanceWarmup": 600,
+              "SkipMatching": false
+            }' \
+            --query 'InstanceRefreshId' \
+            --output text)
+
+          echo "Instance Refresh ID: ${REFRESH_ID}"
+          echo "refresh_id=${REFRESH_ID}" >> "${GITHUB_OUTPUT}"
+
+      - name: Wait for instance refresh
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          ASG_NAME: ${{ vars.PROD_ASG_NAME }}
+          REFRESH_ID: ${{ steps.refresh.outputs.refresh_id }}
+        run: |
+          set -Eeuo pipefail
+
+          for attempt in $(seq 1 240); do
+            STATUS=$(aws autoscaling describe-instance-refreshes \
+              --region "${AWS_REGION}" \
+              --auto-scaling-group-name "${ASG_NAME}" \
+              --instance-refresh-ids "${REFRESH_ID}" \
+              --query 'InstanceRefreshes[0].Status' \
+              --output text)
+
+            PERCENTAGE=$(aws autoscaling describe-instance-refreshes \
+              --region "${AWS_REGION}" \
+              --auto-scaling-group-name "${ASG_NAME}" \
+              --instance-refresh-ids "${REFRESH_ID}" \
+              --query 'InstanceRefreshes[0].PercentageComplete' \
+              --output text)
+
+            echo "Instance Refresh: ${STATUS} (${PERCENTAGE}%)"
+
+            case "${STATUS}" in
+              Successful)
+                echo "Production deployment completed successfully."
+                exit 0
+                ;;
+
+              Failed|Cancelled|RollbackFailed)
+                echo "Instance Refresh failed: ${STATUS}" >&2
+                exit 1
+                ;;
+
+              Pending|InProgress|Baking|Cancelling|RollbackInProgress)
+                ;;
+
+              *)
+                echo "Unknown Instance Refresh status: ${STATUS}"
+                ;;
+            esac
+
+            sleep 10
+          done
+
+          echo "Instance Refresh timed out." >&2
+          exit 1
+
+      # 새 이미지 배포에 실패하면 Parameter Store를 직전 이미지로 복원
+      - name: Restore previous image parameter
+        if: failure() && steps.parameter.outputs.previous_image_uri != ''
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          IMAGE_PARAMETER: /runiverse/deploy/DEPLOY_IMAGE_URI
+          PREVIOUS_IMAGE_URI: ${{ steps.parameter.outputs.previous_image_uri }}
+        run: |
+          set -Eeuo pipefail
+
+          echo "Restoring previous image: ${PREVIOUS_IMAGE_URI}"
+
+          aws ssm put-parameter \
+            --region "${AWS_REGION}" \
+            --name "${IMAGE_PARAMETER}" \
+            --type String \
+            --value "${PREVIOUS_IMAGE_URI}" \
+            --overwrite

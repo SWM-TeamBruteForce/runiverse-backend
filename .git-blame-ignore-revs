@@ -1,0 +1,6 @@
+# 포맷만 바꾼 커밋 — git blame에서 무시한다
+# 로컬 적용: git config blame.ignoreRevsFile .git-blame-ignore-revs
+# GitHub은 이 파일을 자동으로 인식한다
+
+# 🎨 Style: editorconfig 규칙을 Java 전체에 적용 (240개 파일)
+dfbcf7c98d6d4c77d6acb76509a20c0d7fed85e6
