@@ -12,6 +12,7 @@ import com.runiverse.running_service.application.running.command.solo.OpenSoloRo
 import com.runiverse.running_service.application.running.command.solo.OpenSoloRoomHandler;
 import com.runiverse.running_service.application.running.command.start.StartRunningCommand;
 import com.runiverse.running_service.application.running.command.start.StartRunningHandler;
+import com.runiverse.running_service.application.running.common.LiveRunningStatusChanger;
 import com.runiverse.running_service.application.running.common.RunningFinishProperties;
 import com.runiverse.running_service.application.running.common.RunningFinisher;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
@@ -112,6 +113,8 @@ public class GetUserStatusIntegrationTest extends IntegrationTestSupport {
                 runningRecordStore, // ExistsRunningRecordPort
                 runningRecordStore, // LoadRecentRunningPacesPort
                 onboardingStore,    // UpdateUserAvgPacePort
+                new LiveRunningStatusChanger( // LiveRunningStatusChanger
+                        liveRunningStatusStore, runningDistanceStore, runningProgressPublisher),
                 event -> {          // ApplicationEventPublisher
                 },
                 FINISH_PROPERTIES
@@ -120,6 +123,8 @@ public class GetUserStatusIntegrationTest extends IntegrationTestSupport {
                 runningTrackStore,        // AppendRunningTrackPort
                 runningDistanceStore,     // LoadRunningDistancePort
                 runningDistanceStore,     // SaveRunningDistancePort
+                liveRunningStatusStore,   // ChangeLiveRunningStatusPort
+                liveRunningStatusStore,   // LoadLiveRunningStatusPort
                 runningProgressPublisher, // PublishRunningProgressPort
                 newUpdateRunningComboJudge(),
                 new UpdateRunningFinishJudge(runningFinisher)

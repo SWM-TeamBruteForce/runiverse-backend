@@ -1,5 +1,6 @@
 package com.runiverse.running_service.application.running.query.snapshot;
 
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
 import com.runiverse.running_service.application.running.port.out.RunningComboPeer;
 
 import java.time.LocalDateTime;
@@ -29,7 +30,7 @@ public record GetRunningSnapshotResult(
             String profileImageUrl,
             int distanceMeters,
             Integer currentPaceSecondsPerKm,
-            boolean paused
+            LiveRunningStatus status
     ) {
 
     }

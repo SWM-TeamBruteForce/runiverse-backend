@@ -1,5 +1,9 @@
 package com.runiverse.running_service.unit_test.running.application;
 
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionSynchronization;
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
+import com.runiverse.running_service.application.running.common.LiveRunningStatusChanger;
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.common.port.out.UpdateUserAvgPacePort;
 import com.runiverse.running_service.application.running.common.CalorieCalculator;
@@ -143,6 +147,10 @@ public class RunningFinisherTest {
     @Mock
     private UpdateUserAvgPacePort updateUserAvgPacePort;
 
+    // 판정·발행·실패 처리는 LiveRunningStatusChangerTest가 본다 — 여기서는 언제 부르는지만 본다
+    @Mock
+    private LiveRunningStatusChanger liveRunningStatusChanger;
+
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
@@ -162,7 +170,7 @@ public class RunningFinisherTest {
                 createRunningRecordPort, updateRunningPlayerPort, deleteRunningTrackPort,
                 existsRunningPlayerPort, updateRunningRoomPort, startMatchCooldownPort,
                 existsRunningRecordPort, loadRecentRunningPacesPort, updateUserAvgPacePort,
-                eventPublisher, PROPERTIES);
+                liveRunningStatusChanger, eventPublisher, PROPERTIES);
         // 이 클래스의 트랙은 대부분 유효 러닝을 통과해 기록이 남는다 —
         // 기록 없이 닫히는 경우만 개별 테스트가 뒤집는다
         lenient().when(existsRunningRecordPort.existsInRoom(new RunningRoomId(ROOM_ID)))
@@ -856,6 +864,123 @@ public class RunningFinisherTest {
 
             // then
             verifyNoInteractions(loadRecentRunningPacesPort, updateUserAvgPacePort);
+        }
+    }
+
+    @Nested
+    @DisplayName("화면 상태 테스트")
+    class LiveStatusTest {
+
+        @Test
+        @DisplayName("확정하면 방의 목표 거리와 함께 FINISHED로 바꾼다")
+        void marksFinished() {
+            // given
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(track(1_801, 2.8));
+
+            // when
+            finish();
+
+            // then -> 이후로는 끊김·늦은 좌표가 와도 상대 화면에 FINISHED 그대로다
+            verify(liveRunningStatusChanger).change(
+                    ROOM_ID, new UserId(USER_ID), TARGET, LiveRunningStatus.FINISHED);
+        }
+
+        @Test
+        @DisplayName("기록 없이 상태만 확정해도 FINISHED로 바꾼다")
+        void marksFinishedWithoutRecord() {
+            // given -> 좌표를 한 번도 못 받은 러닝. 기록은 없어도 러닝은 끝났다
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(new RunningTrack("[]", List.of()));
+            lenient().when(existsRunningRecordPort.existsInRoom(new RunningRoomId(ROOM_ID)))
+                    .thenReturn(false);
+
+            // when
+            finish();
+
+            // then
+            verify(liveRunningStatusChanger).change(
+                    ROOM_ID, new UserId(USER_ID), TARGET, LiveRunningStatus.FINISHED);
+        }
+
+        @Test
+        @DisplayName("목표 없는 솔로 방이면 목표 거리를 null로 넘긴다")
+        void passesNullTargetForSoloRoom() {
+            // given
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.SOLO, null));
+            givenTrack(track(1_801, 2.8));
+
+            // when
+            finish();
+
+            // then
+            verify(liveRunningStatusChanger).change(
+                    ROOM_ID, new UserId(USER_ID), null, LiveRunningStatus.FINISHED);
+        }
+
+        @Test
+        @DisplayName("이미 확정된 참가자의 재요청에는 다시 알리지 않는다")
+        void skipsAlreadyFinished() {
+            // given -> 첫 확정 때 이미 FINISHED를 썼다
+            givenPlayer(player(RunningPlayerStatus.COMPLETED, PAST.plusMinutes(20)));
+
+            // when
+            finish();
+
+            // then
+            verifyNoInteractions(liveRunningStatusChanger);
+        }
+
+        @Test
+        @DisplayName("트랜잭션 동기화가 활성이면 커밋 뒤에 알린다")
+        void marksFinishedOnlyAfterCommit() {
+            // given
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(track(1_801, 2.8));
+            TransactionSynchronizationManager.initSynchronization();
+            try {
+                // when
+                finish();
+
+                // then -> 롤백될 종료를 FINISHED로 알리면 되돌릴 길이 없다
+                verifyNoInteractions(liveRunningStatusChanger);
+
+                // when -> 커밋 성공을 흉내 낸다
+                TransactionSynchronizationManager.getSynchronizations()
+                        .forEach(TransactionSynchronization::afterCommit);
+
+                // then
+                verify(liveRunningStatusChanger).change(
+                        ROOM_ID, new UserId(USER_ID), TARGET, LiveRunningStatus.FINISHED);
+            } finally {
+                TransactionSynchronizationManager.clearSynchronization();
+            }
+        }
+
+        @Test
+        @DisplayName("롤백되면 FINISHED로 알리지 않는다")
+        void skipsOnRollback() {
+            // given
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(track(1_801, 2.8));
+            TransactionSynchronizationManager.initSynchronization();
+            try {
+                finish();
+
+                // when -> 커밋 실패를 흉내 낸다
+                TransactionSynchronizationManager.getSynchronizations().forEach(synchronization ->
+                        synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
+
+                // then -> 참가자는 여전히 RUNNING이다. 재시도가 다시 확정한다
+                verifyNoInteractions(liveRunningStatusChanger);
+            } finally {
+                TransactionSynchronizationManager.clearSynchronization();
+            }
         }
     }
 }

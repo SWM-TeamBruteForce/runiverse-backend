@@ -10,6 +10,7 @@ import com.runiverse.running_service.application.running.port.out.DeleteRunningT
 import com.runiverse.running_service.application.running.port.out.ExistsRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.ExistsRunningRecordPort;
 import com.runiverse.running_service.application.running.port.out.GpsTrackUpload;
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
 import com.runiverse.running_service.application.running.port.out.LoadRecentRunningPacesPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.LoadUserWeightPort;
@@ -69,6 +70,7 @@ public class RunningFinisher {
     private final ExistsRunningRecordPort existsRunningRecordPort;
     private final LoadRecentRunningPacesPort loadRecentRunningPacesPort;
     private final UpdateUserAvgPacePort updateUserAvgPacePort;
+    private final LiveRunningStatusChanger liveRunningStatusChanger;
     private final ApplicationEventPublisher eventPublisher;
     private final RunningFinishProperties properties;
     // 1인 방에서 혼자 뛰다 그만두는 것은 제재하지 않는다 — 곤란해지는 상대가 없다.
@@ -130,6 +132,9 @@ public class RunningFinisher {
         //    참가자 갱신을 먼저 반영해야 방금 끝낸 자신이 RUNNING으로 세어지지 않는다
         closeRoomIfLastPlayer(room);
         deleteTrackAfterCommit(runningRoomId, userId);
+        // 8. 상대 화면에 종료를 알린다 — 이후로는 끊김·늦은 좌표가 와도 FINISHED 그대로다
+        finishLiveStatusAfterCommit(runningRoomId, userId,
+                room.getTargetDistance().map(Distance::meters).orElse(null));
     }
 
     // 솔로 방은 목표 거리가 없다 — 상한을 넘겨 실측 트랙을 자르지 않고 그대로 분석한다
@@ -243,6 +248,25 @@ public class RunningFinisher {
             return;
         }
         deleteRunningTrackPort.delete(runningRoomId, userId);
+    }
+
+    // 롤백된 종료를 FINISHED로 알리면 되돌릴 길이 없다 — 커밋 뒤에 알린다.
+    // afterCommit은 finish()가 돌아가기 전에 끝나므로 ack(RUNNING_FINISHED)보다 먼저다 —
+    // ack를 받고 클라가 닫는 연결은 FINISHED를 덮지 못한다
+    private void finishLiveStatusAfterCommit(Long runningRoomId, UserId userId,
+                                             Integer targetDistanceMeters) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    liveRunningStatusChanger.change(runningRoomId, userId, targetDistanceMeters,
+                            LiveRunningStatus.FINISHED);
+                }
+            });
+            return;
+        }
+        liveRunningStatusChanger.change(runningRoomId, userId, targetDistanceMeters,
+                LiveRunningStatus.FINISHED);
     }
 
     // 최근 N건의 거리 합·시간 합으로 다시 낸다. 기록별 avg_pace의 산술 평균은

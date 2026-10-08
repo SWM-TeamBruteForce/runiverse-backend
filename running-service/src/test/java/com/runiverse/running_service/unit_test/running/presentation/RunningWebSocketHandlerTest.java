@@ -10,6 +10,8 @@ import com.runiverse.running_service.application.running.command.session.Registe
 import com.runiverse.running_service.application.running.command.session.RemoveRunningSessionHandler;
 import com.runiverse.running_service.application.running.command.start.StartRunningCommand;
 import com.runiverse.running_service.application.running.command.start.StartRunningResult;
+import com.runiverse.running_service.application.running.command.status.ChangeLiveRunningStatusCommand;
+import com.runiverse.running_service.application.running.common.LiveRunningStatusChanger;
 import com.runiverse.running_service.application.running.exception.NotRoomPlayerException;
 import com.runiverse.running_service.application.running.exception.RunningRoomNotFoundException;
 import com.runiverse.running_service.application.running.exception.RunningTrackUnavailableException;
@@ -20,6 +22,12 @@ import com.runiverse.running_service.application.running.port.in.StartRunningUse
 import com.runiverse.running_service.application.running.port.out.RunningComboPeer;
 import com.runiverse.running_service.application.running.query.snapshot.GetRunningSnapshotResult;
 import com.runiverse.running_service.application.running.port.out.AppendRunningTrackPort;
+import com.runiverse.running_service.application.running.port.in.ChangeLiveRunningStatusUsecase;
+import com.runiverse.running_service.application.running.port.out.ChangeLiveRunningStatusPort;
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatusChange;
+import com.runiverse.running_service.application.running.port.out.RunningProgress;
+import com.runiverse.running_service.application.running.port.out.LoadLiveRunningStatusPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningDistancePort;
 import com.runiverse.running_service.application.running.port.out.PublishRunningProgressPort;
 import com.runiverse.running_service.application.running.port.out.PublishSupersedePort;
@@ -43,6 +51,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -58,6 +67,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -75,6 +85,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -128,6 +139,13 @@ class RunningWebSocketHandlerTest {
     @Mock
     private PublishRunningProgressPort publishRunningProgressPort;
 
+    // 참가자 상태도 Redis에 있다. 적재 목이 0을 돌려줘 읽기만 하고, 빈 값이라 RUNNING으로 실린다
+    @Mock
+    private ChangeLiveRunningStatusPort changeLiveRunningStatusPort;
+
+    @Mock
+    private LoadLiveRunningStatusPort loadLiveRunningStatusPort;
+
     // 콤보 판정은 Redis를 여러 번 오가며 자기 안에서 실패를 삼킨다 — 이 테스트의 관심사가 아니다
     @Mock
     private UpdateRunningComboJudge updateRunningComboJudge;
@@ -148,6 +166,10 @@ class RunningWebSocketHandlerTest {
     @Mock
     private StartRunningComboUsecase startRunningComboUsecase;
 
+    // 상태 변경은 Redis 판정과 방 발행을 함께 한다 — 여기서는 무엇을 언제 넘기는지만 본다
+    @Mock
+    private ChangeLiveRunningStatusUsecase changeLiveRunningStatusUsecase;
+
     private RunningSessionPort sessionPort;
 
     private RunningWebSocketHandler handler;
@@ -161,18 +183,25 @@ class RunningWebSocketHandlerTest {
                 jsonMapper,
                 startRunningUsecase,
                 new RegisterRunningSessionHandler(sessionPort, runningRoomMembershipPort, publishSupersedePort),
-                new RemoveRunningSessionHandler(sessionPort, runningRoomMembershipPort),
+                new RemoveRunningSessionHandler(sessionPort, runningRoomMembershipPort,
+                        new LiveRunningStatusChanger(changeLiveRunningStatusPort,
+                                loadRunningDistancePort, publishRunningProgressPort)),
                 new UpdateRunningLocationHandler(appendRunningTrackPort, loadRunningDistancePort,
-                        saveRunningDistancePort, publishRunningProgressPort, updateRunningComboJudge,
+                        saveRunningDistancePort, changeLiveRunningStatusPort, loadLiveRunningStatusPort,
+                        publishRunningProgressPort, updateRunningComboJudge,
                         new UpdateRunningFinishJudge(runningFinisher)),
                 finishRunningUsecase,
                 getRunningSnapshotUsecase,
                 startRunningComboUsecase,
+                changeLiveRunningStatusUsecase,
                 new RunningWebSocketProperties(Duration.ofSeconds(10), DataSize.ofKilobytes(512)));
         // 좌표를 한 번도 못 받은 상태에서 시작한다 — 누적 거리는 이 테스트의 관심사가 아니다
         given(loadRunningDistancePort.loadDistance(anyLong(), any()))
                 .willReturn(RunningDistance.empty());
         given(getRunningSnapshotUsecase.handle(any())).willReturn(snapshot());
+        // 상태 판정은 어댑터·LiveRunningStatusChange가 본다 — 여기서는 RUNNING이던 참가자로 둔다
+        given(changeLiveRunningStatusPort.change(anyLong(), any(), any())).willAnswer(invocation ->
+                LiveRunningStatusChange.of(LiveRunningStatus.RUNNING, invocation.getArgument(2)));
         given(session.getId()).willReturn("session-1");
         given(session.getAttributes()).willReturn(authenticated());
         given(other.getId()).willReturn("session-2");
@@ -197,6 +226,12 @@ class RunningWebSocketHandlerTest {
     private static TextMessage locationUpdate(String data) {
         return new TextMessage("""
                 {"event":"RUNNING_LOCATION_UPDATE","data":%s}""".formatted(data));
+    }
+
+    // 일시정지·재개는 data를 보지 않는다 — 계약상 {}다
+    private static TextMessage liveStatus(String event) {
+        return new TextMessage("""
+                {"event":"%s","data":{}}""".formatted(event));
     }
 
     private static TextMessage runningFinish(String data) {
@@ -329,6 +364,9 @@ class RunningWebSocketHandlerTest {
         assertThat(player.get("userId")).isEqualTo(USER_ID.toString());
         assertThat(player.get("distanceMeters")).isEqualTo(1_520);
         assertThat(player.get("currentPaceSecondsPerKm")).isEqualTo(345);
+        // 상태는 RUNNING_PROGRESS_UPDATED와 같은 문자열 계약이다
+        assertThat(player.get("status")).isEqualTo("RUNNING");
+        assertThat(player.containsKey("paused")).isFalse();
         // 콤보는 RUNNING_COMBO_UPDATED의 peers와 같은 모양으로 나가야
         // 클라가 한 벌의 코드로 스냅샷과 갱신을 다 그린다
         List<?> comboPeers = (List<?>) data.get("comboPeers");
@@ -859,6 +897,24 @@ class RunningWebSocketHandlerTest {
     }
 
     @Test
+    @DisplayName("이미 끝난 참가자의 늦은 좌표 배치는 저장하지 않고 RUNNING_FINISHED를 다시 보낸다")
+    void resendsFinishedForLateBatchAfterFinish() throws Exception {
+        // given -> 종료가 확정돼 화면 상태가 FINISHED다
+        started();
+        given(loadLiveRunningStatusPort.load(eq(ROOM_ID), any()))
+                .willReturn(Optional.of(LiveRunningStatus.FINISHED));
+
+        // when -> ack 전에 이미 보낸 배치나 재연결 재전송이 늦게 도착한다
+        handler.handleMessage(session, locationUpdate("""
+                {"locations":[%s]}""".formatted(point(1))));
+
+        // then -> 클라는 ack와 똑같이 받아 전송을 멈추고 로컬 트랙을 지운다
+        verify(appendRunningTrackPort, never()).append(anyLong(), any(), anyList());
+        verify(runningFinisher, never()).finish(anyLong(), any());
+        assertThat(captureLastSent(session).event()).isEqualTo("RUNNING_FINISHED");
+    }
+
+    @Test
     @DisplayName("목표에 못 미친 좌표 배치는 끝내지 않고 아무것도 보내지 않는다")
     void doesNotFinishBelowTarget() throws Exception {
         // given
@@ -1017,6 +1073,51 @@ class RunningWebSocketHandlerTest {
         assertThat(sessionPort.find(new UserId(USER_ID))).isEmpty();
     }
 
+    @Test
+    @DisplayName("시작한 연결이 끊기면 세션의 방으로 DISCONNECTED를 알린다")
+    void publishesDisconnectedOnClose() throws Exception {
+        // given
+        started();
+
+        // when
+        handler.afterConnectionClosed(session, CloseStatus.NORMAL);
+
+        // then -> 상대 화면에서 멈춘 것과 끊긴 것을 가른다. 목표 거리도 세션에 새겨 둔 값이다
+        verify(changeLiveRunningStatusPort).change(
+                ROOM_ID, new UserId(USER_ID), LiveRunningStatus.DISCONNECTED);
+        ArgumentCaptor<RunningProgress> captor = ArgumentCaptor.forClass(RunningProgress.class);
+        verify(publishRunningProgressPort).publish(eq(ROOM_ID), captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(LiveRunningStatus.DISCONNECTED);
+        assertThat(captor.getValue().targetDistanceMeters()).isEqualTo(TARGET_DISTANCE_METERS);
+    }
+
+    @Test
+    @DisplayName("RUNNING_START 전에 끊긴 연결은 상태를 건드리지 않는다")
+    void closeBeforeStartKeepsStatus() throws Exception {
+        // given -> 명부에 오른 적이 없다
+        // when
+        handler.afterConnectionClosed(session, CloseStatus.NORMAL);
+
+        // then
+        verifyNoInteractions(changeLiveRunningStatusPort, publishRunningProgressPort);
+    }
+
+    @Test
+    @DisplayName("새 연결이 이어받은 뒤 옛 연결이 닫히면 끊김으로 알리지 않는다")
+    void supersededCloseKeepsStatus() throws Exception {
+        // given -> 같은 인스턴스에서 재연결했다. 새 연결의 START가 옛 연결을 밀어냈다
+        started();
+        handler.handleMessage(other, runningStart("""
+                {"runningRoomId":125}"""));
+
+        // when -> 밀려난 옛 연결의 닫힘이 뒤늦게 도착한다
+        handler.afterConnectionClosed(session, CloseStatus.NORMAL);
+
+        // then -> 명부의 자리는 새 연결 것이라 옛 연결의 닫힘은 아무것도 바꾸지 않는다
+        verify(changeLiveRunningStatusPort, never()).change(
+                anyLong(), any(), eq(LiveRunningStatus.DISCONNECTED));
+    }
+
     // 종료 케이스는 전부 "이미 시작한 러닝"에서 출발한다
     private void started() throws Exception {
         given(startRunningUsecase.handle(any())).willReturn(new StartRunningResult(ROOM_ID, TARGET_DISTANCE_METERS));
@@ -1035,7 +1136,8 @@ class RunningWebSocketHandlerTest {
                 LocalDateTime.of(2026, 7, 25, 19, 0),
                 TARGET_DISTANCE_METERS,
                 List.of(new GetRunningSnapshotResult.Player(
-                        USER_ID, "완두콩", "https://example.test/p.png", 1_520, 345, false)),
+                        USER_ID, "완두콩", "https://example.test/p.png", 1_520, 345,
+                        LiveRunningStatus.RUNNING)),
                 List.of(new RunningComboPeer(PEER_ID, -8, 12, 30)));
     }
 
@@ -1111,5 +1213,140 @@ class RunningWebSocketHandlerTest {
         Map<?, ?> data = (Map<?, ?>) sent.data();
         assertThat(data.get("code")).isEqualTo(code);
         assertThat(data.get("sourceType")).isEqualTo(sourceType);
+    }
+
+    // ── 참가자 상태(RUNNING_START·RUNNING_PAUSE·RUNNING_RESUME) ──
+
+    private void startRoom(Integer targetDistanceMeters) throws Exception {
+        given(startRunningUsecase.handle(any()))
+                .willReturn(new StartRunningResult(ROOM_ID, targetDistanceMeters));
+        handler.handleMessage(session, runningStart("""
+                {"runningRoomId":125}"""));
+    }
+
+    @Test
+    @DisplayName("RUNNING_START는 방의 목표 거리와 함께 RUNNING으로 바꾼다")
+    void startChangesStatusToRunning() throws Exception {
+        // when
+        startRoom(TARGET_DISTANCE_METERS);
+
+        // then -> 재연결이면 상대 화면의 DISCONNECTED·PAUSED가 여기서 풀린다
+        verify(changeLiveRunningStatusUsecase).handle(new ChangeLiveRunningStatusCommand(
+                USER_ID, ROOM_ID, TARGET_DISTANCE_METERS, LiveRunningStatus.RUNNING));
+    }
+
+    @Test
+    @DisplayName("RUNNING_START의 상태 변경은 콤보·스냅샷보다 먼저 한다")
+    void startChangesStatusBeforeSnapshot() throws Exception {
+        // when
+        startRoom(TARGET_DISTANCE_METERS);
+
+        // then -> 스냅샷이 먼저면 본인이 상태 없음(DISCONNECTED)으로 실린다
+        InOrder order = inOrder(changeLiveRunningStatusUsecase, startRunningComboUsecase,
+                getRunningSnapshotUsecase);
+        order.verify(changeLiveRunningStatusUsecase).handle(any());
+        order.verify(startRunningComboUsecase).handle(any());
+        order.verify(getRunningSnapshotUsecase).handle(any());
+    }
+
+    @Test
+    @DisplayName("RUNNING_START가 거절되면 상태를 바꾸지 않는다")
+    void rejectedStartKeepsStatus() throws Exception {
+        // given -> 끝난 참가자가 RUNNING으로 되살아나 보이면 안 된다
+        given(startRunningUsecase.handle(any())).willThrow(new NotRoomPlayerException());
+
+        // when
+        handler.handleMessage(session, runningStart("""
+                {"runningRoomId":125}"""));
+
+        // then
+        assertThatError(captureSent(), "NOT_ROOM_PLAYER", "RUNNING_START");
+        verifyNoInteractions(changeLiveRunningStatusUsecase);
+    }
+
+    @Test
+    @DisplayName("RUNNING_PAUSE는 세션의 방과 목표 거리로 PAUSED로 바꾼다")
+    void pauseChangesStatusToPaused() throws Exception {
+        // given
+        startRoom(TARGET_DISTANCE_METERS);
+
+        // when
+        handler.handleMessage(session, liveStatus("RUNNING_PAUSE"));
+
+        // then
+        verify(changeLiveRunningStatusUsecase).handle(new ChangeLiveRunningStatusCommand(
+                USER_ID, ROOM_ID, TARGET_DISTANCE_METERS, LiveRunningStatus.PAUSED));
+    }
+
+    @Test
+    @DisplayName("RUNNING_RESUME은 RUNNING으로 바꾼다")
+    void resumeChangesStatusToRunning() throws Exception {
+        // given
+        startRoom(TARGET_DISTANCE_METERS);
+        handler.handleMessage(session, liveStatus("RUNNING_PAUSE"));
+
+        // when
+        handler.handleMessage(session, liveStatus("RUNNING_RESUME"));
+
+        // then -> START에서 한 번, RESUME에서 한 번
+        verify(changeLiveRunningStatusUsecase, times(2)).handle(new ChangeLiveRunningStatusCommand(
+                USER_ID, ROOM_ID, TARGET_DISTANCE_METERS, LiveRunningStatus.RUNNING));
+    }
+
+    @Test
+    @DisplayName("일시정지·재개에는 ack가 없다")
+    void pauseAndResumeHaveNoAck() throws Exception {
+        // given
+        startRoom(TARGET_DISTANCE_METERS);
+
+        // when
+        handler.handleMessage(session, liveStatus("RUNNING_PAUSE"));
+        handler.handleMessage(session, liveStatus("RUNNING_RESUME"));
+
+        // then -> 마지막으로 나간 것은 RUNNING_STARTED 그대로다. 상대에게는 진행 통지로 알린다
+        assertThat(captureLastSent(session).event()).isEqualTo("RUNNING_STARTED");
+    }
+
+    @Test
+    @DisplayName("목표 없는 솔로 방이면 목표 거리를 null로 넘긴다")
+    void pauseInSoloRoomPassesNullTarget() throws Exception {
+        // given
+        startRoom(null);
+
+        // when
+        handler.handleMessage(session, liveStatus("RUNNING_PAUSE"));
+
+        // then
+        verify(changeLiveRunningStatusUsecase).handle(new ChangeLiveRunningStatusCommand(
+                USER_ID, ROOM_ID, null, LiveRunningStatus.PAUSED));
+    }
+
+    @Test
+    @DisplayName("data 없이 와도 일시정지를 처리한다")
+    void pauseIgnoresData() throws Exception {
+        // given
+        startRoom(TARGET_DISTANCE_METERS);
+
+        // when -> 계약은 {}지만 서버는 data를 보지 않는다
+        handler.handleMessage(session, text("""
+                {"event":"RUNNING_PAUSE"}"""));
+
+        // then
+        verify(changeLiveRunningStatusUsecase).handle(new ChangeLiveRunningStatusCommand(
+                USER_ID, ROOM_ID, TARGET_DISTANCE_METERS, LiveRunningStatus.PAUSED));
+    }
+
+    @Test
+    @DisplayName("RUNNING_START 없이 일시정지·재개를 보내면 RUNNING_NOT_STARTED로 응답한다")
+    void rejectsPauseBeforeStart() throws Exception {
+        // when
+        handler.handleMessage(session, liveStatus("RUNNING_PAUSE"));
+        WebSocketEnvelope pauseError = captureLastSent(session);
+        handler.handleMessage(session, liveStatus("RUNNING_RESUME"));
+
+        // then -> 좌표 배치와 같은 규칙이다. 세션에 방이 없으면 바꿀 대상을 모른다
+        assertThatError(pauseError, "RUNNING_NOT_STARTED", "RUNNING_PAUSE");
+        assertThatError(captureLastSent(session), "RUNNING_NOT_STARTED", "RUNNING_RESUME");
+        verifyNoInteractions(changeLiveRunningStatusUsecase);
     }
 }

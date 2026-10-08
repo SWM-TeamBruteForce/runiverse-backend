@@ -24,7 +24,8 @@ public record RunningStartedPayload(
             String profileImageUrl,
             int distanceMeters,
             Integer currentPaceSecondsPerKm,
-            boolean paused
+            // RUNNING | PAUSED | DISCONNECTED | FINISHED — RUNNING_PROGRESS_UPDATED와 같은 값이다
+            String status
     ) {
 
     }
@@ -41,7 +42,7 @@ public record RunningStartedPayload(
                                 player.profileImageUrl(),
                                 player.distanceMeters(),
                                 player.currentPaceSecondsPerKm(),
-                                player.paused()))
+                                player.status().name()))
                         .toList(),
                 // 갱신 통지가 쓰는 변환을 그대로 빌린다 — 두 벌로 나뉘면 모양이 갈라진다
                 RunningComboUpdatedPayload.from(snapshot.comboPeers()).peers());

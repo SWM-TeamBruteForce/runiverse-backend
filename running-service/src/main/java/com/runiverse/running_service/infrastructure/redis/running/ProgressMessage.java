@@ -1,5 +1,6 @@
 package com.runiverse.running_service.infrastructure.redis.running;
 
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
 import com.runiverse.running_service.application.running.port.out.RunningProgress;
 
 import java.util.UUID;
@@ -10,7 +11,7 @@ public record ProgressMessage(
         int distanceMeters,
         Integer targetDistanceMeters,
         Integer currentPaceSecondsPerKm,
-        boolean paused
+        LiveRunningStatus status
 ) {
 
     public static ProgressMessage of(Long runningRoomId, RunningProgress progress) {
@@ -20,11 +21,11 @@ public record ProgressMessage(
                 progress.distanceMeters(),
                 progress.targetDistanceMeters(),
                 progress.currentPaceSecondsPerKm(),
-                progress.paused());
+                progress.status());
     }
 
     public RunningProgress toProgress() {
         return new RunningProgress(
-                userId, distanceMeters, targetDistanceMeters, currentPaceSecondsPerKm, paused);
+                userId, distanceMeters, targetDistanceMeters, currentPaceSecondsPerKm, status);
     }
 }

@@ -12,6 +12,7 @@ import com.runiverse.running_service.application.running.command.solo.OpenSoloRo
 import com.runiverse.running_service.application.running.command.start.StartRunningCommand;
 import com.runiverse.running_service.application.running.command.start.StartRunningHandler;
 import com.runiverse.running_service.application.running.common.RunningFinishProperties;
+import com.runiverse.running_service.application.running.common.LiveRunningStatusChanger;
 import com.runiverse.running_service.application.running.common.RunningFinisher;
 import com.runiverse.running_service.application.running.exception.NotRoomPlayerException;
 import com.runiverse.running_service.application.running.exception.RunningResultNotFoundException;
@@ -112,6 +113,8 @@ public class GetRunningResultsIntegrationTest extends IntegrationTestSupport {
                 runningRecordStore, // ExistsRunningRecordPort
                 runningRecordStore, // LoadRecentRunningPacesPort
                 onboardingStore,    // UpdateUserAvgPacePort
+                new LiveRunningStatusChanger( // LiveRunningStatusChanger
+                        liveRunningStatusStore, runningDistanceStore, runningProgressPublisher),
                 event -> {          // ApplicationEventPublisher
                 },
                 PROPERTIES
@@ -120,6 +123,8 @@ public class GetRunningResultsIntegrationTest extends IntegrationTestSupport {
                 runningTrackStore,        // AppendRunningTrackPort
                 runningDistanceStore,     // LoadRunningDistancePort
                 runningDistanceStore,     // SaveRunningDistancePort
+                liveRunningStatusStore,   // ChangeLiveRunningStatusPort
+                liveRunningStatusStore,   // LoadLiveRunningStatusPort
                 runningProgressPublisher, // PublishRunningProgressPort
                 newUpdateRunningComboJudge(),
                 new UpdateRunningFinishJudge(runningFinisher)

@@ -9,7 +9,8 @@ public record RunningProgress(
         Integer targetDistanceMeters,
         // 마지막 좌표의 값을 그대로 옮긴다 — 단말이 못 재면 null
         Integer currentPaceSecondsPerKm,
-        boolean paused
+        // 멈춘 것·끊긴 것·끝난 것을 느려진 것과 구분한다
+        LiveRunningStatus status
 ) {
 
 }

@@ -5,6 +5,8 @@ import com.runiverse.running_service.application.common.port.out.PlayerProfile;
 import com.runiverse.running_service.application.running.command.combo.RunningComboReader;
 import com.runiverse.running_service.application.running.exception.RunningRoomNotFoundException;
 import com.runiverse.running_service.application.running.port.in.GetRunningSnapshotUsecase;
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
+import com.runiverse.running_service.application.running.port.out.LoadLiveRunningStatusPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningDistancePort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningRoomPort;
 import com.runiverse.running_service.application.running.port.out.RunningDistance;
@@ -33,6 +35,7 @@ public class GetRunningSnapshotHandler implements GetRunningSnapshotUsecase {
     private final LoadPlayerProfilesPort loadPlayerProfilesPort;
     private final GenerateViewUrlPort generateViewUrlPort;
     private final LoadRunningDistancePort loadRunningDistancePort;
+    private final LoadLiveRunningStatusPort loadLiveRunningStatusPort;
     private final RunningComboReader runningComboReader;
 
     @Override
@@ -74,7 +77,9 @@ public class GetRunningSnapshotHandler implements GetRunningSnapshotUsecase {
                 deleted ? null : profileImageUrl(profile),
                 distance.metersRounded(),
                 distance.lastPaceSecondsPerKm(),
-                false);   // TODO: 일시정지 고정값 — RUNNING_PAUSE/RESUME을 만들 때 실제 상태로 교체한다
+                // 상태가 없으면 한 번도 붙지 않은 참가자다 — 시작 시각에 앱을 안 켠 매칭 참가자
+                loadLiveRunningStatusPort.load(runningRoomId, userId)
+                        .orElse(LiveRunningStatus.DISCONNECTED));
     }
 
     // 사진이 없으면 URL도 없다

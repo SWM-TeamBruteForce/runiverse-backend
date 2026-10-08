@@ -11,6 +11,7 @@ import com.runiverse.running_service.integration_test.fake.FakeRunningComboPubli
 import com.runiverse.running_service.integration_test.fake.FakeRunningProgressPublisher;
 import com.runiverse.running_service.integration_test.fake.InMemoryRunningComboStore;
 import com.runiverse.running_service.integration_test.fake.InMemoryRunningDistanceStore;
+import com.runiverse.running_service.integration_test.fake.InMemoryLiveRunningStatusStore;
 import com.runiverse.running_service.integration_test.fake.FakeGpsTrackUploader;
 import com.runiverse.running_service.integration_test.fake.FakeWeatherProvider;
 import com.runiverse.running_service.integration_test.fake.FakeOauthClient;
@@ -48,6 +49,7 @@ public abstract class IntegrationTestSupport {
     protected InMemoryRunningStore runningStore;
     protected InMemoryRunningTrackStore runningTrackStore;
     protected InMemoryRunningDistanceStore runningDistanceStore;
+    protected InMemoryLiveRunningStatusStore liveRunningStatusStore;
     protected FakeRunningProgressPublisher runningProgressPublisher;
     protected InMemoryRunningComboStore runningComboStore;
     protected FakeRunningComboPublisher runningComboPublisher;
@@ -75,6 +77,7 @@ public abstract class IntegrationTestSupport {
         runningStore = new InMemoryRunningStore();
         runningTrackStore = new InMemoryRunningTrackStore();
         runningDistanceStore = new InMemoryRunningDistanceStore();
+        liveRunningStatusStore = new InMemoryLiveRunningStatusStore();
         runningProgressPublisher = new FakeRunningProgressPublisher();
         runningComboStore = new InMemoryRunningComboStore();
         runningComboPublisher = new FakeRunningComboPublisher();

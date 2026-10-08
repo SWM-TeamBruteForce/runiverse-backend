@@ -68,9 +68,9 @@
 |------|--------|------|------|
 | 카운트 다운 | `RUNNING_START` | C→S | 방 시작(`MATCHED`면 `STARTED`로)과 참가자 시작을 함께 처리 |
 | 러닝 중 | `RUNNING_LOCATION_UPDATE` | C→S | 고빈도 — ack 없음. 이 배치로 목표 거리를 채우면 서버가 종료하고 `RUNNING_FINISHED`를 보낸다 |
-| 러닝 중 | `RUNNING_PROGRESS_UPDATED` | S→C | `paused` 포함 — 멈춘 것과 느려진 것을 구분 |
+| 러닝 중 | `RUNNING_PROGRESS_UPDATED` | S→C | `status` 포함 — 멈춘 것·끊긴 것·끝난 것을 느려진 것과 구분. 상태가 바뀔 때도 나간다 |
 | 러닝 중 | `RUNNING_COMBO_UPDATED` | S→C | 나란히 달리는 상대와의 콤보 — 참가자 쌍마다 따로 센다 |
-| 러닝 중 | `RUNNING_PAUSE` / `RUNNING_RESUME` | C→S | 일시정지·재개 — 본인 기록만 멈춘다 |
+| 러닝 중 | `RUNNING_PAUSE` / `RUNNING_RESUME` | C→S | 일시정지·재개 — 상대 화면의 `status` 표시용. 기록 계산은 바꾸지 않는다 |
 | 러닝 중 | `RUNNING_FINISH` | C→S | `forced` 플래그로 조기 종료 의사 포함 — 서버가 상태·기록 확정 |
 | 공통 | `ERROR` | S→C | WS 요청 실패 통지 |
 
@@ -1301,10 +1301,13 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   | 3 | 방이 `MATCHED`면 `STARTED`로 올린다 | 통과 |
   | 4 | 참가자가 `JOINED`면 `RUNNING`으로 올린다 | 통과 |
   | 5 | WS 세션을 방에 등록하고 세션이 `runningRoomId`를 기억한다(브로드캐스트 대상·이후 메시지의 방) | 덮어쓴다 |
-  | 6 | ack 전송 | — |
+  | 6 | 참가자 화면 상태(`status`)를 `RUNNING`으로 바꾸고, 바뀌었으면 방에 `RUNNING_PROGRESS_UPDATED`를 보낸다 | 이미 `RUNNING`이면 보내지 않는다 |
+  | 7 | ack 전송 | — |
 
 - **3번에 `type` 분기가 없다.** 매칭은 `start_at`에 시작 스케줄러가 이미 `STARTED`로 올려놨으니 통과하고, 솔로는 `start_at`이 개시 시각(과거)이라 여기서 올라간다. 같은 코드가 두 종류를 다 덮는다
 - **전 단계가 멱등하다.** 중복 `RUNNING_START`는 아무 상태도 다시 바꾸지 않고 ack만 재전송한다
+  - 예외는 6번의 화면 상태다 — `PAUSED`·`DISCONNECTED`였으면 `RUNNING`으로 풀린다. 재연결이 상대 화면의 끊김 표시를 거두는 경로가 이것이다
+- **6번은 5번 뒤, ack 앞이다.** 세션 등록 전이면 자기 상태 통지를 본인이 놓치고, ack(스냅샷) 뒤면 본인이 상태 없음(`DISCONNECTED`)으로 실린다
 - **거부**: `start_at`이 아직 안 됐으면 `INVALID_ROOM_STATE`(매칭에서 미리 쏘는 것 차단). 방이 `FINISHED`·`CANCELLED`여도 같은 코드
 - **ack**: `RUNNING_STARTED` — 러닝 화면을 그리는 데 필요한 스냅샷을 싣는다
 
@@ -1320,7 +1323,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
       "profileImageUrl": "https://...",     // 사진이 없으면 null
       "distanceMeters": 1520,               // 서버가 좌표로 누적한 값
       "currentPaceSecondsPerKm": 345,       // nullable
-      "paused": false
+      "status": "RUNNING"                   // RUNNING | PAUSED | DISCONNECTED | FINISHED — RUNNING_PROGRESS_UPDATED와 같은 값
     }
   ],
   "comboPeers": [                           // RUNNING_COMBO_UPDATED의 peers와 같은 모양, 겹친 상대가 없으면 []
@@ -1336,11 +1339,15 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **`RoomInfo`를 재사용하지 않는다.** 그쪽은 매칭 대기방을 그리려고 만든 구조라 진행 상황이라는 개념이 없고, 러닝 중에는 `closeAt`·`teamAveragePace`가 의미를 잃는다. 대신 `players[]`가 **`RoomInfo`의 프로필 + `RUNNING_PROGRESS_UPDATED`의 진행**을 합친 모양이라, 클라는 **이 스냅샷으로 채우고 갱신분으로 덮는** 한 쌍으로 다룬다
 - **본인도 `players`에 담는다.** 본인 진행은 클라가 직접 계산하지만, 앱 재설치로 로컬 트랙이 사라지면 본인 누적 거리를 복구할 경로가 이것뿐이다. 다만 **클라는 화면 표시에 로컬 계산값을 우선**하고 이 값은 복구용으로만 쓴다
-- **이미 이탈·완주한 참가자는 담지 않는다.** 러닝 화면에는 그들을 그릴 자리가 없다
+- **이미 이탈·완주한 참가자는 담지 않는다.** 러닝 화면에는 그들을 그릴 자리가 없다. 연결만 끊긴 참가자는 그대로 담고 `status`가 `DISCONNECTED`로 실린다
+- **`players[].status`는 각 참가자의 현재 화면 상태다.** 상태가 기록된 적 없는 참가자(매칭 방에 배정됐지만 `RUNNING_START`를 보낸 적 없는 사람)는 `DISCONNECTED`로 싣는다. 요청한 본인은 서버 처리 6번에서 이미 `RUNNING`으로 바뀌었으므로 항상 `RUNNING`이다
+  - 이탈·완주자를 담지 않으므로 `FINISHED`는 종료 확정과 세션 정리 사이의 짧은 틈에만 나올 수 있다
+- **이 ack는 요청한 본인에게만 간다.** 다른 참가자는 서버 처리 6번에서 요청자의 상태가 바뀐 경우(첫 진입, 끊김에서 재연결, 멈춘 채 재연결)에만 `RUNNING_PROGRESS_UPDATED`(`status: RUNNING`)로 알게 된다
 - **`comboPeers`는 받는 사람이 낀 관계만, `players`에 있는 상대만 싣는다.** 이미 끝낸 상대와의 콤보는 판정에서 떨어져 나갈 때까지 잠시 남아 있으므로 여기서 거른다. `RUNNING_COMBO_UPDATED`의 `peers`와 같은 모양이라 클라는 한 벌의 코드로 스냅샷과 갱신을 다 그린다
 - **`startedAt`은 방의 `start_at`이다** — 참가자가 실제로 `RUNNING`이 된 시각을 쓰면 같은 방에서 사람마다 경과 시간이 달라진다
 - **최초 진입과 재연결에 똑같이 나간다.** 클라가 둘을 구분하지 않는 것이 `RUNNING_START`의 전제이므로 ack만 다르게 하지 않는다
 - 이 스냅샷이 있어야 `RUNNING_PROGRESS_UPDATED`·`RUNNING_COMBO_UPDATED`가 `userId`만 싣는 설계가 성립한다 — 표시 정보는 여기서 받아 둔다
+- **`RUNNING_START`는 일시정지를 푼다.** 일시정지 중에 재연결했다면 클라는 이 ack를 받고 로컬 트랙을 재전송한 **뒤** `RUNNING_PAUSE`를 다시 보낸다. 끊긴 사이 쌓인 처음 보는 좌표가 상태를 `RUNNING`으로 바꾸므로 순서를 지켜야 한다(`RUNNING_PAUSE` 절)
 
 ### 5-D. 러닝 중
 
@@ -1380,7 +1387,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **목표 거리를 채우면 서버가 러닝을 끝낸다.** 서버가 누적한 거리(`RUNNING_PROGRESS_UPDATED`의 `distanceMeters`와 같은 값)가 목표 이상이 되면, 그 배치를 저장하고 진행을 알린 뒤 `RUNNING_FINISH`(`forced=false`)와 같은 규칙으로 종료를 확정하고 `RUNNING_FINISHED`를 보낸다. 클라는 받으면 좌표 전송을 멈추고 로컬 트랙을 지운 뒤 결과 화면으로 간다
   - **목표가 없는 솔로 방은 해당 없다.** 사용자가 `RUNNING_FINISH`를 보내야 끝난다
   - **판정은 러닝 중 누적 거리로, 최종 상태는 확정 거리로 한다.** 둘은 계산 방식이 달라(확정은 저장된 트랙을 다시 분석한다) 드물게 목표 직전으로 확정될 수 있고, 그러면 `COMPLETED`가 아니라 거리 비율 판정을 따른다
-  - **누적이 목표 위에 있는 한 배치마다 다시 판정한다.** 종료가 실패하면 그 배치에 `ERROR`(`sourceType: RUNNING_LOCATION_UPDATE`)가 나가고 다음 배치가 다시 시도한다. 이미 끝난 뒤 늦게 도착한 배치는 기록을 덮어쓰지 않고 `RUNNING_FINISHED`만 다시 보내므로, 클라는 이 메시지를 **여러 번 받아도** 같은 처리를 해야 한다
+  - **누적이 목표 위에 있는 한 배치마다 다시 판정한다.** 종료가 실패하면 그 배치에 `ERROR`(`sourceType: RUNNING_LOCATION_UPDATE`)가 나가고 다음 배치가 다시 시도한다. 이미 끝난 뒤 늦게 도착한 배치는 **목표 유무와 관계없이** 저장·누적·진행 알림 없이 `RUNNING_FINISHED`만 다시 보내므로, 클라는 이 메시지를 **여러 번 받아도** 같은 처리를 해야 한다
 
 #### `RUNNING_PROGRESS_UPDATED` (S→C) — 참가자 진행 정보
 
@@ -1390,10 +1397,14 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   "distanceMeters": 1520,               // 현재까지 이동 거리(서버가 좌표로 누적)
   "targetDistanceMeters": 5000,         // 목표 거리(m). 목표 없는 솔로 방은 null
   "currentPaceSecondsPerKm": 345,       // 현재 페이스(초/km), nullable
-  "paused": false                       // 일시정지 중이면 true
+  "status": "RUNNING"                   // RUNNING | PAUSED | DISCONNECTED | FINISHED
 }
 ```
 
+- **두 경우에 나간다.**
+  - `RUNNING_LOCATION_UPDATE` 배치를 처리할 때마다 — 참가자당 약 10초 간격이다. 재전송분만 온 배치라 거리가 그대로여도 나간다
+  - 참가자 상태(`status`)가 바뀔 때 — 좌표 배치와 무관하게 즉시 나간다(아래 상태 표). 상태가 그대로면 나가지 않는다
+- **누적 거리 조회에 실패한 배치는 알림을 거른다.** 좌표는 저장되고 다음 배치가 최신 누적을 나른다. 이 배치로 바뀌었어야 할 상태(예: `PAUSED` → `RUNNING`)도 다음 배치에서 반영된다
 - **갱신된 참가자 한 명만 싣는다.** 좌표 배치를 받아 진행이 바뀐 사람만 알리면 되고, 전원 스냅샷을 매번 보내면 인원수만큼 payload가 커진다
   - 클라는 참가자별 최신값을 로컬에 들고 이 메시지로 덮는다
   - **최초 진입·재연결 시 전원의 현재 진행은 `RUNNING_STARTED` 스냅샷이 나른다**(5-C) — 이 메시지는 갱신분만 실으므로 그것만으로는 화면을 복구할 수 없다
@@ -1402,8 +1413,21 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **본인도 받는다.** 방 전체가 같은 서버 기준값을 받게 하려는 것이다. 다만 본인 표시 거리는 클라의 로컬 계산값이 정본이라 이 값으로 덮지 않는다
 - `distanceMeters`는 **서버가 수신한 좌표로 누적한 값**이다. 클라 표시용 거리(5-D)와 미세하게 다를 수 있으나 다른 참가자 화면에 쓰는 값이라 서버 기준으로 통일한다
 - `currentPaceSecondsPerKm`는 거리에 반영한 마지막 좌표의 값을 옮긴다. 재전송분만 온 배치면 직전 값을 유지한다 — 단말이 못 재면 `null`이다
-- `paused`가 없으면 상대가 멈춘 것과 느려진 것을 구분할 수 없다 — 화면에서 갑자기 뒤처진 것처럼 보인다
-  - **[미정]** `RUNNING_PAUSE`/`RUNNING_RESUME` 구현 전까지 항상 `false`로 나간다
+- **`status`는 멈춘 것·끊긴 것·끝난 것을 단순히 느려진 것과 구분한다.** 없으면 상대가 화면에서 갑자기 뒤처진 것처럼 보인다. **화면 표시용이며 기록(거리·시간)에는 영향을 주지 않는다** — 저장하지 않고 Redis에만 둔다
+
+  | `status` | 뜻 | 바뀌는 때 |
+  |---|---|---|
+  | `RUNNING` | 뛰는 중 | `RUNNING_START`, `RUNNING_RESUME`, 처음 보는 좌표가 담긴 `RUNNING_LOCATION_UPDATE` |
+  | `PAUSED` | 일시정지 | `RUNNING_PAUSE` |
+  | `DISCONNECTED` | 연결 끊김 | WS 연결 종료 감지 — 앱 종료는 즉시, 응답 없이 끊긴 연결은 유휴 타임아웃(운영값) 뒤 |
+  | `FINISHED` | 러닝 종료. **이후 바뀌지 않는다** | 종료 확정 — `RUNNING_FINISH`, 목표 도달 자동 종료, 강제 종료 |
+
+  - **`FINISHED`에서는 어디로도 가지 않는다.** 종료 ack를 받은 클라가 연결을 닫아도 `DISCONNECTED`로 퍼지지 않고, 종료 뒤 늦게 도착한 배치는 받지 않고(저장·누적·진행 알림 없음) `RUNNING_FINISHED`만 다시 보낸다
+  - **`DISCONNECTED`는 `RUNNING`·`PAUSED`에서만 된다.** 한 번도 붙지 않은 참가자에게 쓰지 않는다
+  - **좌표·`RUNNING_PAUSE`·`RUNNING_RESUME`이 오면 `DISCONNECTED`도 풀린다.** 메시지가 왔다는 것 자체가 연결돼 있다는 뜻이다 — 재연결한 뒤 옛 연결의 끊김이 늦게 반영돼도 다음 메시지가 바로잡는다
+  - **재전송분만 온 배치는 상태를 바꾸지 않는다.** 멈춘 채 재연결해 로컬 트랙을 다시 보내도 `PAUSED`가 유지된다. 상태가 기록된 적 없는 참가자의 배치는 `RUNNING`으로 싣는다
+  - 상태 변경으로 나간 통지의 `distanceMeters`·`currentPaceSecondsPerKm`은 마지막으로 저장된 누적값이다
+- **상태 변경 알림은 재전송하지 않는다.** 전송에 실패하면 다음 좌표 배치나 상태 변경 때 최신 상태가 다시 실리고, 재연결하면 `RUNNING_STARTED` 스냅샷으로 복구한다
 
 #### `RUNNING_COMBO_UPDATED` (S→C) — 콤보 갱신
 
@@ -1442,10 +1466,18 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 {}
 ```
 
-- **일시정지 동안 경과 시간과 거리 계산이 멈춘다.** 클라는 좌표 전송도 중단한다 — 멈춰 있는 동안의 좌표는 트랙에 남길 이유가 없고, GPS 흔들림이 거리로 잡히면 기록이 부풀려진다
-- **다른 참가자는 계속 진행한다.** 일시정지는 본인 기록에만 영향을 주며 다른 참가자를 멈추지 않는다
-- 서버는 상태를 다른 참가자에게 `RUNNING_PROGRESS_UPDATED`의 `paused` 필드로 알린다
-- **ack 없음** — 실패는 `ERROR`로 통지
+- **상대 화면에 멈춤을 알리는 신호다.** 서버는 참가자 상태를 `PAUSED`/`RUNNING`으로 바꾸고, 바뀌었으면 방에 `RUNNING_PROGRESS_UPDATED`(`status`)를 보낸다. 멈춘 동안에는 좌표 배치가 오지 않아 알림을 따로 내야 한다
+- **서버는 이 신호로 기록 계산을 바꾸지 않는다.** 기록은 수신한 좌표로만 계산한다 — 신호가 유실되거나 조작돼도 기록이 흔들리지 않아야 한다. 클라는 일시정지 동안 좌표 수집·전송을 멈추고 본인 화면의 경과 시간도 멈춘다
+  - **[미정]** 멈춘 구간(제자리 흔들림·긴 공백)을 서버가 좌표만으로 판정해 기록에서 빼는 처리는 별도 작업이다. 그전까지는 공백 구간의 시간과 직선 거리가 기록에 들어간다
+- **다른 참가자는 계속 진행한다.** 일시정지는 본인에게만 적용된다
+- **멈춤은 셋 중 무엇으로든 풀린다** — `RUNNING_RESUME`, `RUNNING_START`, 처음 보는 좌표가 담긴 `RUNNING_LOCATION_UPDATE`. `RUNNING_RESUME`은 다음 배치(최대 10초)를 기다리지 않고 상대 화면을 즉시 바꾸려는 것이고, 좌표는 `RUNNING_RESUME`이 유실됐을 때의 안전망이다
+- **멱등이다.** 같은 상태로 바꾸는 요청은 아무것도 보내지 않는다. 이미 끝난 참가자(`FINISHED`)에게는 아무 효과가 없다
+- **data는 보지 않는다.** 계약상 `{}`로 보낸다
+- **클라가 지킬 순서**
+  - **`RUNNING_PAUSE` 전에 남은 좌표를 먼저 보낸다.** 한 연결 안에서는 메시지가 순서대로 처리된다. 멈추기 전 좌표가 `RUNNING_PAUSE` 뒤에 도착하면 처음 보는 좌표라 멈춤이 바로 풀린다
+  - **재연결 시 멈춤 중이었으면** `RUNNING_START` → 로컬 트랙 재전송 → `RUNNING_PAUSE` 순으로 보낸다(5-C)
+  - **멈춘 동안에도 `HEALTH_CHECK`를 보낸다.** 좌표가 끊겨 유휴 타임아웃(운영값)을 넘기면 서버가 연결을 닫고 `DISCONNECTED`로 알린다
+- **ack 없음.** `RUNNING_START` 전에 보내면 `RUNNING_NOT_STARTED`로 거부한다. 그 밖의 실패(상태 저장소 장애)는 화면 표시용이라 `ERROR`로 알리지 않고 서버 로그만 남긴다 — 다음 상태 변경이나 재연결 스냅샷이 바로잡는다
 
 #### `RUNNING_FINISH` (C→S) — 러닝 종료 (정상/강제 통합)
 

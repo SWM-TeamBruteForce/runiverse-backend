@@ -4,6 +4,8 @@ import com.runiverse.running_service.application.running.port.out.RunningConnect
 
 import java.util.UUID;
 
-public record RemoveRunningSessionCommand(UUID userId, RunningConnection connection) {
+// runningRoomId·targetDistanceMeters는 RUNNING_START 전에 끊긴 연결이면 null이다
+public record RemoveRunningSessionCommand(UUID userId, RunningConnection connection,
+                                          Long runningRoomId, Integer targetDistanceMeters) {
 
 }

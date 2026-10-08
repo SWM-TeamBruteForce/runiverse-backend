@@ -13,8 +13,10 @@ import com.runiverse.running_service.application.running.command.solo.OpenSoloRo
 import com.runiverse.running_service.application.running.command.start.StartRunningCommand;
 import com.runiverse.running_service.application.running.command.start.StartRunningHandler;
 import com.runiverse.running_service.application.running.common.RunningFinishProperties;
+import com.runiverse.running_service.application.running.common.LiveRunningStatusChanger;
 import com.runiverse.running_service.application.running.common.RunningFinisher;
 import com.runiverse.running_service.application.running.exception.NotRoomPlayerException;
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingCommand;
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingHandler;
@@ -109,6 +111,8 @@ public class FinishRunningIntegrationTest extends IntegrationTestSupport {
                 runningRecordStore, // ExistsRunningRecordPort
                 runningRecordStore, // LoadRecentRunningPacesPort
                 onboardingStore,    // UpdateUserAvgPacePort
+                new LiveRunningStatusChanger( // LiveRunningStatusChanger
+                        liveRunningStatusStore, runningDistanceStore, runningProgressPublisher),
                 event -> {          // ApplicationEventPublisher
                 },
                 PROPERTIES
@@ -117,6 +121,8 @@ public class FinishRunningIntegrationTest extends IntegrationTestSupport {
                 runningTrackStore,     // AppendRunningTrackPort
                 runningDistanceStore,  // LoadRunningDistancePort
                 runningDistanceStore,  // SaveRunningDistancePort
+                liveRunningStatusStore,   // ChangeLiveRunningStatusPort
+                liveRunningStatusStore,   // LoadLiveRunningStatusPort
                 runningProgressPublisher, // PublishRunningProgressPort
                 newUpdateRunningComboJudge(),
                 new UpdateRunningFinishJudge(runningFinisher)
@@ -197,6 +203,72 @@ public class FinishRunningIntegrationTest extends IntegrationTestSupport {
         // 혼자 뛰었어도 CANCELLED가 아니라 FINISHED다
         assertThat(storedRoom(runningRoomId).getStatus()).isEqualTo(RunningRoomStatus.FINISHED);
         assertThat(runningRecordStore.size()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("러닝을 끝내면 화면 상태가 FINISHED로 바뀌고 방에 알린다")
+    void marksLiveStatusFinished() {
+        // given -> 좌표 배치가 상태를 RUNNING으로 세워 둔다
+        UUID userId = onboardedUser(EMAIL, NICKNAME);
+        Long runningRoomId = runningRoom(userId);
+        runFor(userId, runningRoomId, 400);
+        assertThat(liveRunningStatusStore.load(runningRoomId, new UserId(userId)))
+                .contains(LiveRunningStatus.RUNNING);
+
+        // when
+        finish(userId, runningRoomId);
+
+        // then -> 마지막 진행 통지가 FINISHED를 싣는다
+        assertThat(liveRunningStatusStore.load(runningRoomId, new UserId(userId)))
+                .contains(LiveRunningStatus.FINISHED);
+        assertThat(runningProgressPublisher.publishedIn(runningRoomId).getLast().status())
+                .isEqualTo(LiveRunningStatus.FINISHED);
+    }
+
+    @Test
+    @DisplayName("끝난 뒤 연결이 끊겨도 FINISHED 그대로다")
+    void keepsFinishedAfterDisconnect() {
+        // given
+        UUID userId = onboardedUser(EMAIL, NICKNAME);
+        Long runningRoomId = runningRoom(userId);
+        runFor(userId, runningRoomId, 400);
+        finish(userId, runningRoomId);
+        int publishedBefore = runningProgressPublisher.publishedIn(runningRoomId).size();
+
+        // when -> 종료 ack를 받은 클라가 연결을 닫는다
+        new LiveRunningStatusChanger(liveRunningStatusStore, runningDistanceStore, runningProgressPublisher)
+                .change(runningRoomId, new UserId(userId), null, LiveRunningStatus.DISCONNECTED);
+
+        // then -> 상대 화면에 '끊김'으로 퍼지지 않는다
+        assertThat(liveRunningStatusStore.load(runningRoomId, new UserId(userId)))
+                .contains(LiveRunningStatus.FINISHED);
+        assertThat(runningProgressPublisher.publishedIn(runningRoomId)).hasSize(publishedBefore);
+    }
+
+    @Test
+    @DisplayName("끝난 뒤 늦게 온 좌표는 버퍼에 다시 쌓지 않고 거리도 늘리지 않는다")
+    void ignoresLateBatchAfterFinish() {
+        // given
+        UUID userId = onboardedUser(EMAIL, NICKNAME);
+        Long runningRoomId = runningRoom(userId);
+        runFor(userId, runningRoomId, 400);
+        finish(userId, runningRoomId);
+        double metersBefore = runningDistanceStore.loadDistance(runningRoomId, new UserId(userId)).meters();
+        int publishedBefore = runningProgressPublisher.publishedIn(runningRoomId).size();
+
+        // when -> 종료 ack 전에 이미 보낸 배치가 늦게 도착한다
+        List<TrackPoint> late = List.of(
+                sensorPoint(400, 168, null, TRACK_START.plusSeconds(400)),
+                sensorPoint(401, 168, null, TRACK_START.plusSeconds(401)));
+        UpdateRunningLocationResult result = updateRunningLocationHandler.handle(
+                new UpdateRunningLocationCommand(userId, runningRoomId, null, late));
+
+        // then -> 끝났다고 답해 클라가 로컬 트랙을 지우게 하고, 아무것도 남기지 않는다
+        assertThat(result.finished()).isTrue();
+        assertThat(runningTrackStore.isEmpty(runningRoomId, new UserId(userId))).isTrue();
+        assertThat(runningDistanceStore.loadDistance(runningRoomId, new UserId(userId)).meters())
+                .isEqualTo(metersBefore);
+        assertThat(runningProgressPublisher.publishedIn(runningRoomId)).hasSize(publishedBefore);
     }
 
     @Test

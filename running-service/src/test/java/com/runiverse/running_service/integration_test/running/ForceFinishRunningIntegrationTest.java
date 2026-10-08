@@ -12,6 +12,7 @@ import com.runiverse.running_service.application.running.command.location.Update
 import com.runiverse.running_service.application.running.command.location.UpdateRunningLocationCommand;
 import com.runiverse.running_service.application.running.command.location.UpdateRunningLocationHandler;
 import com.runiverse.running_service.application.running.common.RunningFinishProperties;
+import com.runiverse.running_service.application.running.common.LiveRunningStatusChanger;
 import com.runiverse.running_service.application.running.common.RunningFinisher;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
 import com.runiverse.running_service.application.scheduling.command.run.RunScheduledJobCommand;
@@ -119,6 +120,8 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
                 runningRecordStore, // ExistsRunningRecordPort
                 runningRecordStore, // LoadRecentRunningPacesPort
                 onboardingStore,    // UpdateUserAvgPacePort
+                new LiveRunningStatusChanger( // LiveRunningStatusChanger
+                        liveRunningStatusStore, runningDistanceStore, runningProgressPublisher),
                 event -> {          // ApplicationEventPublisher — 커밋 뒤 전달은 테스트가 직접 한다
                     if (event instanceof RunningForceFinishRequestedEvent request) {
                         forceFinishRequests.add(request);
@@ -130,6 +133,8 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
                 runningTrackStore,       // AppendRunningTrackPort
                 runningDistanceStore,    // LoadRunningDistancePort
                 runningDistanceStore,    // SaveRunningDistancePort
+                liveRunningStatusStore,   // ChangeLiveRunningStatusPort
+                liveRunningStatusStore,   // LoadLiveRunningStatusPort
                 runningProgressPublisher, // PublishRunningProgressPort
                 newUpdateRunningComboJudge(),
                 new UpdateRunningFinishJudge(runningFinisher)

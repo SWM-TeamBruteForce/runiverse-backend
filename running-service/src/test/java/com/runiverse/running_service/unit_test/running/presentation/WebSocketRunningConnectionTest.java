@@ -1,6 +1,7 @@
 package com.runiverse.running_service.unit_test.running.presentation;
 
 import com.runiverse.running_service.application.running.port.out.RunningComboPeer;
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
 import com.runiverse.running_service.application.running.port.out.RunningProgress;
 import com.runiverse.running_service.presentation.running.websocket.WebSocketRunningConnection;
 import org.junit.jupiter.api.DisplayName;
@@ -45,7 +46,7 @@ class WebSocketRunningConnectionTest {
         WebSocketRunningConnection connection = new WebSocketRunningConnection(session, jsonMapper);
 
         // when
-        connection.sendProgress(new RunningProgress(userId, 3_433, 5_000, 345, false));
+        connection.sendProgress(new RunningProgress(userId, 3_433, 5_000, 345, LiveRunningStatus.RUNNING));
 
         // then
         JsonNode sent = jsonMapper.readTree(captureSent().getPayload());
@@ -56,7 +57,9 @@ class WebSocketRunningConnectionTest {
         assertThat(data.get("distanceMeters").asInt()).isEqualTo(3_433);
         assertThat(data.get("targetDistanceMeters").asInt()).isEqualTo(5_000);
         assertThat(data.get("currentPaceSecondsPerKm").asInt()).isEqualTo(345);
-        assertThat(data.get("paused").asBoolean()).isFalse();
+        // 계약은 문자열이다 — enum 이름이 그대로 나간다
+        assertThat(data.get("status").asString()).isEqualTo("RUNNING");
+        assertThat(data.has("paused")).isFalse();
     }
 
     @Test
@@ -66,13 +69,13 @@ class WebSocketRunningConnectionTest {
         WebSocketRunningConnection connection = new WebSocketRunningConnection(session, jsonMapper);
 
         // when
-        connection.sendProgress(new RunningProgress(UUID.randomUUID(), 1_200, null, null, true));
+        connection.sendProgress(new RunningProgress(UUID.randomUUID(), 1_200, null, null, LiveRunningStatus.PAUSED));
 
         // then
         JsonNode data = jsonMapper.readTree(captureSent().getPayload()).get("data");
         assertThat(data.get("targetDistanceMeters").isNull()).isTrue();
         assertThat(data.get("currentPaceSecondsPerKm").isNull()).isTrue();
-        assertThat(data.get("paused").asBoolean()).isTrue();
+        assertThat(data.get("status").asString()).isEqualTo("PAUSED");
     }
 
     @Test
@@ -136,7 +139,7 @@ class WebSocketRunningConnectionTest {
 
         // when & then
         assertThatCode(() -> connection.sendProgress(
-                new RunningProgress(UUID.randomUUID(), 100, 5_000, 300, false)))
+                new RunningProgress(UUID.randomUUID(), 100, 5_000, 300, LiveRunningStatus.RUNNING)))
                 .doesNotThrowAnyException();
     }
 
