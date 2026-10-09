@@ -18,13 +18,15 @@ public final class TrackAnalyzer {
     private TrackAnalyzer() {
     }
 
-    public static Optional<TrackAnalysis> analyze(List<TrackPoint> points, int targetDistanceMeters,
+    // 실측 트랙 하나를 기록에 넣을 값들로 바꾼다 — 오염 좌표는 이미 걸러져 들어온다
+    public static Optional<TrackAnalysis> analyze(FilteredTrack track, int targetDistanceMeters,
                                                   BigDecimal weightKg,
                                                   RunningFinishProperties properties) {
         int interval = properties.splitDistanceMeters();
-        double[] cumulative = TrackDistance.cumulativeMeters(points);
+        List<TrackPoint> points = track.points();
+        double[] cumulative = track.cumulativeMeters();
         List<BoundaryPoint> boundaries = TrackResampler.resample(
-                points, cumulative, targetDistanceMeters, interval);
+                track, targetDistanceMeters, interval);
         if (boundaries.size() < 2) {
             return Optional.empty();
         }

@@ -1,8 +1,8 @@
 package com.runiverse.running_service.unit_test.running.application;
 
 import com.runiverse.running_service.application.running.common.BoundaryPoint;
+import com.runiverse.running_service.application.running.common.FilteredTrack;
 import com.runiverse.running_service.application.running.common.SplitAssembler;
-import com.runiverse.running_service.application.running.common.TrackDistance;
 import com.runiverse.running_service.application.running.common.TrackResampler;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
 import com.runiverse.running_service.domain.running.record.RunningRecord;
@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static com.runiverse.running_service.support.TrackFilterFixtures.unfiltered;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
@@ -50,7 +51,7 @@ public class SplitAssemblerTest {
 
     private static List<SplitDraft> assemble(List<TrackPoint> points) {
         List<BoundaryPoint> boundaries = TrackResampler.resample(
-                points, TrackDistance.cumulativeMeters(points), TARGET, INTERVAL);
+                unfiltered(points), TARGET, INTERVAL);
         return SplitAssembler.assemble(boundaries, points, INTERVAL, WEIGHT, ELEVATION_NOISE);
     }
 
@@ -215,5 +216,32 @@ public class SplitAssemblerTest {
         // when & then -> 기록 없이 상태만 확정하는 경로
         assertThat(SplitAssembler.assemble(List.of(), List.of(), INTERVAL, WEIGHT,
                 ELEVATION_NOISE)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("구간 시각은 실제 시각, duration은 움직인 시간이다")
+    void splitTimesAreRealAndDurationIsMoving() {
+        // given -> Z→A를 달리고 A~D에서 12초 멈췄다가 E·F로 달린다. 필터가 A~D 칸을 0으로 한 결과다
+        double[] north = {0, 12, 14, 11, 13, 25, 37};
+        List<TrackPoint> points = new ArrayList<>();
+        for (int i = 0; i < north.length; i++) {
+            points.add(point(i, 37.5 + north[i] / METERS_PER_DEGREE, null, null,
+                    START.plusSeconds(i * 4L)));
+        }
+        FilteredTrack track = new FilteredTrack(points,
+                new double[]{0, 12, 12, 12, 12, 24, 36},
+                new double[]{0, 4, 4, 4, 4, 8, 12},
+                null);
+        List<BoundaryPoint> boundaries = TrackResampler.resample(track, TARGET, INTERVAL);
+
+        // when
+        List<SplitDraft> drafts = SplitAssembler.assemble(boundaries, points, INTERVAL, WEIGHT,
+                ELEVATION_NOISE);
+
+        // then -> 멈춘 자리를 걸친 2구간은 시각이 3~19초로 남고 duration은 4초다
+        assertThat(drafts).extracting(SplitDraft::duration).containsExactly(3, 4, 3);
+        assertThat(drafts.get(1).startAt()).isEqualTo(START.plusSeconds(3));
+        assertThat(drafts.get(1).endAt()).isEqualTo(START.plusSeconds(19));
+        assertThat(drafts.get(2).endAt()).isEqualTo(START.plusSeconds(22));
     }
 }

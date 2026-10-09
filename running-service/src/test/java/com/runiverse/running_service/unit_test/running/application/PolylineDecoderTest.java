@@ -84,6 +84,6 @@ public class PolylineDecoderTest {
 
     // 인코더는 위경도만 쓴다 — 나머지 값은 왕복에 영향을 주지 않는다
     private BoundaryPoint point(int distanceMeters, double latitude, double longitude) {
-        return new BoundaryPoint(distanceMeters, latitude, longitude, AT, 0);
+        return new BoundaryPoint(distanceMeters, latitude, longitude, AT, 0, 0);
     }
 }

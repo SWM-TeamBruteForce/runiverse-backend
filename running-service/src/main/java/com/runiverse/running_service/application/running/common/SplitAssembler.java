@@ -11,6 +11,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.ToDoubleFunction;
 
 // 경계점과 실측점으로 구간 기록을 조립한다.
 // 위치·시각은 경계점이, 센서값(케이던스·고도)은 그 구간에 속한 실측점이 낸다.
@@ -29,10 +30,16 @@ public final class SplitAssembler {
             return List.of();
         }
         LocalDateTime origin = boundaries.get(0).recordedAt();
-        long[] elapsed = elapsedSeconds(boundaries, origin);
-        // 시계가 튄 트랙은 구간을 만들지 않는다 — 단조화된 마지막 경과가 곧 조립에 쓰는 값이라
-        // 중간만 튀었다 돌아온 트랙도 여기서 걸린다. 빈 결과는 "산출 불가 → 기록 없이 상태만 확정"의 기존 경로다
-        if (!ElapsedTime.isValid(elapsed[elapsed.length - 1])) {
+        // 시각은 실제 시각, 시간은 움직인 시간이다 — 멈춘 시간을 빼야 구간 페이스가 실제로 뛴 속도가 되고,
+        // 시각까지 움직인 시간으로 세면 쉰 만큼 뒤 구간이 전부 앞당겨진 시각으로 저장된다
+        long[] real = monotonicSeconds(boundaries,
+                boundary -> Duration.between(origin, boundary.recordedAt()).toMillis()
+                        / MILLIS_PER_SECOND);
+        long[] moving = monotonicSeconds(boundaries, BoundaryPoint::movingSeconds);
+        // 시계가 통째로 밀린 트랙은 구간을 만들지 않는다 — 단조화된 마지막 경과가 곧 조립에 쓰는 값이라
+        // 중간부터 밀린 트랙도 여기서 걸린다. 빈 결과는 "산출 불가 → 기록 없이 상태만 확정"의 기존 경로다
+        if (!ElapsedTime.isValid(real[real.length - 1])
+                || !ElapsedTime.isValid(moving[moving.length - 1])) {
             return List.of();
         }
 
@@ -40,7 +47,7 @@ public final class SplitAssembler {
         for (int number = 1; number < boundaries.size(); number++) {
             BoundaryPoint from = boundaries.get(number - 1);
             BoundaryPoint to = boundaries.get(number);
-            int duration = (int) (elapsed[number] - elapsed[number - 1]);
+            int duration = (int) (moving[number] - moving[number - 1]);
             int avgPace = Math.max(1, duration * METERS_PER_KM / intervalMeters);
 
             drafts.add(SplitDraft.create(
@@ -50,8 +57,8 @@ public final class SplitAssembler {
                     duration,
                     number - 1,     // 폴리라인이 곧 경계점 목록이라 인덱스가 구간 번호를 그대로 따른다
                     number,
-                    origin.plusSeconds(elapsed[number - 1]),
-                    origin.plusSeconds(elapsed[number]),
+                    origin.plusSeconds(real[number - 1]),
+                    origin.plusSeconds(real[number]),
                     CalorieCalculator.kcal(avgPace, duration, weightKg),
                     averageCadence(points, from.sourceIndex(), to.sourceIndex()),
                     elevationChange(points, from.sourceIndex(), to.sourceIndex(),
@@ -60,20 +67,23 @@ public final class SplitAssembler {
         return drafts;
     }
 
+
     // 시작점부터의 경과 초를 미리 확정한다. 구간마다 따로 반올림하면 500개에서 오차가 쌓여
     // 구간 시간의 합이 총 시간과 어긋난다 — total_duration은 구간 duration의 합이다.
     // 최소 1초씩 벌리는 이유는 좌표 시각이 초 단위라 경계 둘이 같은 초에 걸릴 수 있어서다 —
     // 그대로 두면 ElapsedTime(MIN 1)과 RunningPeriod(끝 > 시작)가 둘 다 터진다.
-    private static long[] elapsedSeconds(List<BoundaryPoint> boundaries, LocalDateTime origin) {
+    // 실제 시각과 움직인 시간에 같은 규칙을 쓰므로 기준값만 받는다
+    private static long[] monotonicSeconds(List<BoundaryPoint> boundaries,
+                                           ToDoubleFunction<BoundaryPoint> secondsOf) {
+        double start = secondsOf.applyAsDouble(boundaries.get(0));
         long[] elapsed = new long[boundaries.size()];
         for (int i = 1; i < boundaries.size(); i++) {
-            long rounded = Math.round(
-                    Duration.between(origin, boundaries.get(i).recordedAt()).toMillis()
-                            / MILLIS_PER_SECOND);
+            long rounded = Math.round(secondsOf.applyAsDouble(boundaries.get(i)) - start);
             elapsed[i] = Math.max(rounded, elapsed[i - 1] + 1);
         }
         return elapsed;
     }
+
 
     // 보간점에는 센서값이 없다 — 경계 사이의 실측점만 본다
     private static Integer averageCadence(List<TrackPoint> points, int fromExclusive,

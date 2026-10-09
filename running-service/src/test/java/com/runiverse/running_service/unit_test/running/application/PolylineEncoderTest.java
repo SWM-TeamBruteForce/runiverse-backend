@@ -21,7 +21,7 @@ public class PolylineEncoderTest {
     // 폴리라인은 경계점 목록에서 나온다 — sequence 자리에 경계 거리가 들어간다
     private static BoundaryPoint point(int distanceMeters, double latitude, double longitude) {
         return new BoundaryPoint(distanceMeters, latitude, longitude,
-                AT.plusSeconds(distanceMeters), 0);
+                AT.plusSeconds(distanceMeters), distanceMeters, 0);
     }
 
     // 인코더와 반대 방향으로 독립 구현해 왕복을 검증한다 — 같은 코드를 두 번 쓰면 검증이 아니다

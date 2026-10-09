@@ -173,12 +173,12 @@
 | user_id | UUID | → users, NOT NULL | |
 | avg_pace | int | NOT NULL | 초/km |
 | total_distance | int | NOT NULL | 미터. **목표 거리에서 끊는다** — 목표를 넘겨 뛰어도 `running_rooms.target_distance` 지점을 보간해 그 값으로 확정하고 `end_at`·`total_duration`도 같은 지점 기준으로 맞춘다(거리만 자르면 페이스가 틀어진다). 참가자 전원이 같은 구간 경계를 갖게 하려는 것이다 — 6-2 응답은 구간 경계를 참가자별이 아니라 구간 레벨에 둔다. 목표에 못 미치면 마지막 10m 경계까지로 확정한다 — 10m 미만 꼬리는 버려 구간 합과 어긋나지 않게 한다. **S3 원본 트랙에는 목표 이후 좌표도 전부 남긴다**(재계산용) |
-| total_duration | int | NOT NULL | 초. 구간(`running_splits.duration`)의 합. 지금은 `end_at - start_at`과 같다 — 서버는 일시정지를 모른다(반영 방식 미정) |
+| total_duration | int | NOT NULL | 초. 구간(`running_splits.duration`)의 합. **움직인 시간**이다 — 트랙 필터가 정지·관측하지 못한 구간을 빼므로 `end_at - start_at`보다 짧을 수 있다. 멈춘 시간까지 포함한 전체 경과는 `end_at - start_at`으로 구한다(feature-spec 트랙 필터) |
 | avg_cadence | int | nullable | spm (선택). 러닝 전체 평균 — 점별 순간 케이던스(`cadenceSpm`)는 DB에 저장하지 않는다(S3 원본 트랙에는 남는다) |
 | total_elevation_gain | int | nullable | 누적 상승 고도(미터). 기기 GPS 고도를 운영 임계값으로 필터링해 계산하며 유효 표본이 부족하면 null. 구간(`running_splits.elevation_change`)의 합과는 다르다 |
 | total_calories | int | NOT NULL | 종료 시 서버가 확정 거리·시간과 사용자 체중으로 계산한 kcal |
 | gps_track_key | varchar(255) | NOT NULL | S3 key — 받은 좌표를 그대로(위치·시각·고도·정확도·속도·방위·케이던스·순간 페이스) 담은 **원본 트랙**. 재계산·분석용이라 **API 응답에는 쓰지 않는다** |
-| route_polyline | text | NOT NULL | 10m 경계점 경로(encoded polyline, precision 5) — 원본 트랙을 0m부터 10m마다 보간한 경계점만 담는다(구간 수 + 1개). **API가 내려주는 유일한 경로 데이터**. 대시보드·기록 상세(6-1·6-2)·기록 목록(7-1)·피드 카드가 전부 이 값을 쓴다. `running_splits`의 `route_start_index`·`route_end_index`가 이 배열의 위치를 가리킨다 |
+| route_polyline | text | NOT NULL | 10m 경계점 경로(encoded polyline, precision 5) — 원본 트랙을 0m부터 10m마다 보간한 경계점만 담는다(구간 수 + 1개). **API가 내려주는 유일한 경로 데이터**. 대시보드·기록 상세(6-1·6-2)·기록 목록(7-1)·피드 카드가 전부 이 값을 쓴다. `running_splits`의 `route_start_index`·`route_end_index`가 이 배열의 위치를 가리킨다. 트랙 필터가 0으로 한 칸 위에는 경계점이 없어, **이웃한 두 점이 30m 넘게 떨어져 있으면 관측하지 못한 구간**이다 — 클라는 그 사이를 잇지 않는다(feature-spec 트랙 필터) |
 | weather_code | int | NOT NULL | WMO 4677 코드(0~99) — 날씨 API 원본값 그대로. 조회에 실패하거나 값이 없으면 폴백(`0` 맑음, 기온 `15.0`)이 들어간다. 악조건 여부는 저장하지 않고 판정 시 계산한다 |
 | temperature | numeric(3,1) | NOT NULL | 섭씨. 영하 포함 |
 | start_at / end_at | timestamp | NOT NULL | |
@@ -205,13 +205,13 @@
 | split_number | int | NOT NULL | 구간 번호(1부터). API `splitNumber` |
 | avg_pace | int | NOT NULL | 초/km |
 | distance | int | NOT NULL | 구간 거리(미터) — **10m 고정**. 경계는 0-10, 10-20…으로 끊고, 정확히 10m가 되도록 경계 지점을 보간해 만든다. 목표 5,000m면 구간이 500개다. 목표 미달로 끝난 참가자는 도달한 구간까지만 행이 생긴다 |
-| duration | int | NOT NULL | 구간 소요 시간(초) |
+| duration | int | NOT NULL | 구간 소요 시간(초) — **움직인 시간**이다. 트랙 필터가 뺀 정지·관측하지 못한 시간은 들어가지 않아, 실제 시각인 `start_at`·`end_at`의 차와 다를 수 있다 |
 | avg_cadence | int | nullable | spm (선택). 구간 평균 |
 | elevation_change | int | nullable | 필터링한 기기 GPS 고도의 **순고도차**(미터) — 끝 고도 − 시작 고도라 음수가 될 수 있다. 유효 표본이 부족하면 null이며 `total_elevation_gain`과는 다른 값이다. **10m 구간에서는 대체로 null이다** — 구간에 실측점이 3~4개뿐인데 GPS 수직 오차가 수 m라 노이즈 임계값을 넘는 표본이 거의 없다 |
 | calories | int | NOT NULL | 종료 시 서버가 계산한 구간 kcal |
 | route_start_index | int | NOT NULL | `running_records.route_polyline`에서 이 구간이 시작하는 점 번호(0부터). 구간 경로를 텍스트로 중복 저장하지 않고 위치만 가리킨다 |
 | route_end_index | int | NOT NULL | 끝나는 점 번호(포함). 구간 N의 끝점은 구간 N+1의 시작점과 같아 값이 하나 겹친다 — 한 행만 읽어도 구간을 자를 수 있게 둘 다 저장한다 |
-| start_at / end_at | timestamp | NOT NULL | |
+| start_at / end_at | timestamp | NOT NULL | 실제 시각(경계점 보간값). `duration`과 달리 멈춘 시간을 빼지 않는다 |
 | created_at | timestamp | NOT NULL | |
 
 > UNIQUE (running_record_id, split_number) — 기록당 구간 번호 중복 방지.

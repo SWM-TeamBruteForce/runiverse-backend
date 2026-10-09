@@ -103,6 +103,9 @@ public class UpdateRunningLocationHandlerTest {
         // 적재 실패 테스트는 여기까지 오지도 않으므로 lenient로 둔다
         lenient().when(loadRunningDistancePort.loadDistance(anyLong(), any()))
                 .thenReturn(RunningDistance.empty());
+        // 판정기 mock의 기본값은 null이다 — 목표와 무관한 테스트는 "아직 뛰는 중"으로 둔다
+        lenient().when(updateRunningFinishJudge.judge(anyLong(), any(), any(), anyDouble()))
+                .thenReturn(UpdateRunningLocationResult.ofRunning());
     }
 
     private static TrackPoint trackPoint(long sequence) {
@@ -548,7 +551,8 @@ public class UpdateRunningLocationHandlerTest {
     @DisplayName("판정기가 러닝을 끝내면 끝났다고 돌려준다")
     void returnsFinishedWhenJudgeFinishes() {
         // given
-        given(updateRunningFinishJudge.judge(anyLong(), any(), any(), anyDouble())).willReturn(true);
+        given(updateRunningFinishJudge.judge(anyLong(), any(), any(), anyDouble()))
+                .willReturn(UpdateRunningLocationResult.ofFinished());
 
         // when
         UpdateRunningLocationResult result =
@@ -562,7 +566,8 @@ public class UpdateRunningLocationHandlerTest {
     @DisplayName("판정기가 끝내지 않으면 끝나지 않았다고 돌려준다")
     void returnsNotFinishedWhenJudgeDoesNotFinish() {
         // given
-        given(updateRunningFinishJudge.judge(anyLong(), any(), any(), anyDouble())).willReturn(false);
+        given(updateRunningFinishJudge.judge(anyLong(), any(), any(), anyDouble()))
+                .willReturn(UpdateRunningLocationResult.ofRunning());
 
         // when
         UpdateRunningLocationResult result =

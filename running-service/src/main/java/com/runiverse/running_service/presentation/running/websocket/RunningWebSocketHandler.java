@@ -11,6 +11,7 @@ import com.runiverse.running_service.application.running.command.session.RemoveR
 import com.runiverse.running_service.application.running.command.start.StartRunningCommand;
 import com.runiverse.running_service.application.running.command.start.StartRunningResult;
 import com.runiverse.running_service.application.running.command.status.ChangeLiveRunningStatusCommand;
+import com.runiverse.running_service.application.running.common.GoalCheck;
 import com.runiverse.running_service.application.running.port.in.ChangeLiveRunningStatusUsecase;
 import com.runiverse.running_service.application.running.port.in.FinishRunningUsecase;
 import com.runiverse.running_service.application.running.port.in.GetRunningSnapshotUsecase;
@@ -28,6 +29,7 @@ import com.runiverse.running_service.presentation.common.security.JwtHandshakeIn
 import com.runiverse.running_service.presentation.common.websocket.WebSocketEnvelope;
 import com.runiverse.running_service.presentation.running.websocket.message.ErrorPayload;
 import com.runiverse.running_service.presentation.running.websocket.message.RunningFinishRequest;
+import com.runiverse.running_service.presentation.running.websocket.message.RunningGoalPendingPayload;
 import com.runiverse.running_service.presentation.running.websocket.message.RunningLocationUpdateRequest;
 import com.runiverse.running_service.presentation.running.websocket.message.RunningMessageType;
 import com.runiverse.running_service.presentation.running.websocket.message.RunningStartRequest;
@@ -216,6 +218,7 @@ public class RunningWebSocketHandler extends TextWebSocketHandler {
         if (result.finished()) {
             send(session, RunningMessageType.RUNNING_FINISHED.message());
         }
+
     }
 
     private List<TrackPoint> toTrackPoints(RunningLocationUpdateRequest request) {
@@ -254,12 +257,20 @@ public class RunningWebSocketHandler extends TextWebSocketHandler {
             sendError(session, RunningWebSocketErrorCode.RUNNING_NOT_STARTED, envelope.event());
             return;
         }
+        GoalCheck result;
         try {
-            finishRunningUsecase.handle(new FinishRunningCommand(
+            result = finishRunningUsecase.handle(new FinishRunningCommand(
                     startedRoomId, userId(session).value(), request.forced()));
         } catch (BusinessException e) {
             // 유스케이스가 튕겨낸 것만 코드로 내보낸다
             sendError(session, e.getErrorCode(), envelope.event());
+            return;
+        }
+        // 다 뛰었다고 보고 눌렀는데 서버가 인정하지 않았다 — 확정하지 않았으니 ack 대신 남은 거리를 알린다.
+        // 클라는 로컬 트랙을 지우지 않고 계속 뛰거나, 그래도 끝내려면 forced=true로 다시 보낸다
+        if (!result.finished()) {
+            send(session, RunningMessageType.RUNNING_GOAL_PENDING.message(
+                    new RunningGoalPendingPayload(result.remainingMeters())));
             return;
         }
         // 세션의 방은 지우지 않는다 — 지우면 ack를 놓친 클라의 재전송이

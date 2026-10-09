@@ -332,6 +332,6 @@ public class GetRunningSplitResultsHandlerTest {
     }
 
     private static BoundaryPoint boundary(int distanceMeters, double latitude) {
-        return new BoundaryPoint(distanceMeters, latitude, 127.0, STARTED_AT, 0);
+        return new BoundaryPoint(distanceMeters, latitude, 127.0, STARTED_AT, 0, 0);
     }
 }

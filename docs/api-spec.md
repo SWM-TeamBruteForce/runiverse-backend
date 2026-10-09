@@ -62,13 +62,14 @@
 | `MATCH_ROOM_UPDATED` | 방 상태 갱신 (`RoomInfo`) — 인원 변동 |
 | `RUNNING_READY` | 곧 시작 통지 — `start_at` 직전(리드타임은 운영값)에 서버가 한 번 보낸다. 클라의 `RUNNING_START` 발사 타이머 기준 (5-C) |
 
-**러닝 WebSocket** — `/api/v1/ws/running`, 메시지 8종. 매칭 러닝과 솔로 러닝이 같은 채널을 쓴다. 이 외에 **ack 2종**(`RUNNING_STARTED`·`RUNNING_FINISHED`)과 **헬스 체크 2종**(`HEALTH_CHECK`·`HEALTH_CHECKED`)이 있다.
+**러닝 WebSocket** — `/api/v1/ws/running`, 메시지 9종. 매칭 러닝과 솔로 러닝이 같은 채널을 쓴다. 이 외에 **ack 2종**(`RUNNING_STARTED`·`RUNNING_FINISHED`)과 **헬스 체크 2종**(`HEALTH_CHECK`·`HEALTH_CHECKED`)이 있다.
 
 | 그룹 | 메시지 | 방향 | 비고 |
 |------|--------|------|------|
 | 카운트 다운 | `RUNNING_START` | C→S | 방 시작(`MATCHED`면 `STARTED`로)과 참가자 시작을 함께 처리 |
-| 러닝 중 | `RUNNING_LOCATION_UPDATE` | C→S | 고빈도 — ack 없음. 이 배치로 목표 거리를 채우면 서버가 종료하고 `RUNNING_FINISHED`를 보낸다 |
+| 러닝 중 | `RUNNING_LOCATION_UPDATE` | C→S | 고빈도 — ack 없음. 이 배치로 확정 거리가 목표를 채우면 서버가 종료하고 `RUNNING_FINISHED`를 보낸다 |
 | 러닝 중 | `RUNNING_PROGRESS_UPDATED` | S→C | `status` 포함 — 멈춘 것·끊긴 것·끝난 것을 느려진 것과 구분. 상태가 바뀔 때도 나간다 |
+| 러닝 중 | `RUNNING_GOAL_PENDING` | S→C | `RUNNING_FINISH`(`forced=false`)의 확정 거리가 목표에 못 미침 — 종료를 확정하지 않고 본인에게 남은 거리를 알린다 |
 | 러닝 중 | `RUNNING_COMBO_UPDATED` | S→C | 나란히 달리는 상대와의 콤보 — 참가자 쌍마다 따로 센다 |
 | 러닝 중 | `RUNNING_PAUSE` / `RUNNING_RESUME` | C→S | 일시정지·재개 — 상대 화면의 `status` 표시용. 기록 계산은 바꾸지 않는다 |
 | 러닝 중 | `RUNNING_FINISH` | C→S | `forced` 플래그로 조기 종료 의사 포함 — 서버가 상태·기록 확정 |
@@ -150,7 +151,7 @@
 | 56 | PATCH | `/api/v1/users/me/settings` | 설정 변경 |
 | 57 | DELETE | `/api/v1/users/me` | 회원탈퇴 (스냅샷→하드delete, 테이블별 정책) |
 
-**합계: REST 56개 + SSE 스트림 1개(이벤트 3종) + WebSocket 채널 1개(메시지 8종 + ack 2종 + 헬스 체크 2종)**
+**합계: REST 56개 + SSE 스트림 1개(이벤트 3종) + WebSocket 채널 1개(메시지 9종 + ack 2종 + 헬스 체크 2종)**
 
 > 번호는 표의 순서를 그대로 따른다 — 결번을 두지 않는다. 중간에 API가 생기면 이후 번호를 밀고, 번호로 상호 참조하는 노션 명세도 함께 갱신한다.
 
@@ -162,6 +163,7 @@
 
 - **refreshToken**: 바디로 전달하고 클라이언트 Keychain/Keystore에 보관한다.
 - **경로**: 저장 원본은 Google Encoded Polyline, precision 5(소수점 5자리, 약 1m)다. **기록 하나를 크게 그리는 화면(6-1·6-2)은 서버가 풀어 좌표 배열 `routes`로 내리고**(6-2만 전체가 아니라 구간별로 잘라 `splits[].routes`에 싣는다), 목록·카드처럼 한 응답에 여러 건이 실리는 곳(7-1·8-1)은 `routePolyline` 문자열 그대로 내린다. 어느 쪽이든 정밀도는 precision 5를 넘지 않는다. **`route`라는 단수 필드는 어디에도 두지 않는다** — 좌표 배열은 `routes`, 문자열은 `routePolyline` 두 이름뿐이다.
+  - **이웃한 두 점이 30m 넘게 떨어져 있으면 그 사이를 선으로 잇지 않는다.** 경로의 점은 인정한 거리 10m마다 찍힌 경계점이라 정상이면 이웃 간격이 10m 이하이고, 정지 구간을 건너뛰어도 그보다 조금 넓을 뿐이다. 30m를 넘으면 서버가 관측하지 못해 기록에서 뺀 구간(수집이 멈춘 동안의 이동·GPS 튐)이다 — `routes`·`splits[].routes`·`routePolyline` 모두 같다([feature-spec.md](feature-spec.md) 트랙 필터)
 - **좌표 배열 형식**: `[[위도, 경도], [위도, 경도], …]`. 안쪽 배열은 항상 **위도가 먼저**다 — GeoJSON은 경도가 먼저라 반대이므로 그 관례를 따르지 않는다. 단일 지점도 같은 `[위도, 경도]` 두 칸 배열이다. 키 이름을 반복하지 않아 점 수백 개를 실어도 응답이 작다.
 - **친구 관계**: 토글이 아니며 요청·수락·삭제를 10-4~10-6으로 나눈다.
 - **이미지 업로드 공통(Presigned)**: ① 업로드 URL 발급 API → ② 클라가 S3에 직접 업로드 → ③ 반환받은 `key`(또는 완료 API)를 본 API에 전달
@@ -1247,7 +1249,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **ack 규칙**: 상태가 걸린 요청에만 — `RUNNING_START`→`RUNNING_STARTED`, `RUNNING_FINISH`→`RUNNING_FINISHED`
   - **`RUNNING_LOCATION_UPDATE`는 ack 없음**
-  - **`RUNNING_FINISHED`는 요청 없이도 온다.** 목표가 있는 방에서 좌표 배치로 목표 거리를 채우면 서버가 그 자리에서 종료를 확정하고 보낸다(5-D). 클라는 `RUNNING_FINISH`의 ack와 똑같이 처리한다
+  - **`RUNNING_FINISHED`는 요청 없이도 온다.** 목표가 있는 방에서 좌표 배치로 확정 거리가 목표를 채우면 서버가 그 자리에서 종료를 확정하고 보낸다(5-D). 클라는 `RUNNING_FINISH`의 ack와 똑같이 처리한다
   - ack의 `data`는 비운다. 예외는 `RUNNING_STARTED` 하나로, 진입·재연결 화면 복구용 스냅샷을 싣는다(5-C)
 - **`ERROR` (S→C)** — WS 요청 실패 통지. REST 에러 포맷과 동일 계열
 
@@ -1384,9 +1386,9 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   - 저장소 장애로 배치를 담지 못하면 `RUNNING_TRACK_UNAVAILABLE`을 보내되 **연결은 끊지 않고 러닝도 계속한다.** 원본이 로컬 트랙에 남아 있어 재연결로 복구되기 때문이다
   - 장애가 이어지면 배치마다 `ERROR`가 나간다. 클라는 건별 알림 대신 "저장 실패 중" 상태 표시 하나로 다룬다
 - 재연결하면 클라이언트는 로컬 트랙 전체를 처음 `sequence`부터 다시 보내고, 서버는 `(runningRoomId, userId, sequence)`가 같은 좌표를 무시한다(`runningRoomId`는 재연결 뒤 `RUNNING_START`가 다시 정한다). ack가 없으므로 성공 경계를 추정하지 않으며 로컬 트랙은 `RUNNING_FINISHED`를 받은 뒤 삭제한다 — `RUNNING_FINISH`의 ack든 아래 자동 종료든 같다
-- **목표 거리를 채우면 서버가 러닝을 끝낸다.** 서버가 누적한 거리(`RUNNING_PROGRESS_UPDATED`의 `distanceMeters`와 같은 값)가 목표 이상이 되면, 그 배치를 저장하고 진행을 알린 뒤 `RUNNING_FINISH`(`forced=false`)와 같은 규칙으로 종료를 확정하고 `RUNNING_FINISHED`를 보낸다. 클라는 받으면 좌표 전송을 멈추고 로컬 트랙을 지운 뒤 결과 화면으로 간다
+- **목표 거리를 채우면 서버가 러닝을 끝낸다.** 서버가 누적한 거리(`RUNNING_PROGRESS_UPDATED`의 `distanceMeters`와 같은 값)가 목표 이상이 되면, 그 배치를 저장하고 진행을 알린 뒤 저장된 트랙을 트랙 필터로 분석해 **확정 거리**를 낸다. 확정 거리도 목표 이상이면 `RUNNING_FINISH`(`forced=false`)와 같은 규칙으로 종료를 확정하고 `RUNNING_FINISHED`를 보낸다. 클라는 받으면 좌표 전송을 멈추고 로컬 트랙을 지운 뒤 결과 화면으로 간다
   - **목표가 없는 솔로 방은 해당 없다.** 사용자가 `RUNNING_FINISH`를 보내야 끝난다
-  - **판정은 러닝 중 누적 거리로, 최종 상태는 확정 거리로 한다.** 둘은 계산 방식이 달라(확정은 저장된 트랙을 다시 분석한다) 드물게 목표 직전으로 확정될 수 있고, 그러면 `COMPLETED`가 아니라 거리 비율 판정을 따른다
+  - **확정 거리가 목표 미만이면 끝내지 않고 아무것도 보내지 않는다.** 러닝 중 누적과 확정 거리는 어긋날 수 있다 — 누적만 보고 끝내면 확정 거리가 목표 직전으로 나와 서버가 끊은 러닝이 조기 종료로 남는다. 러닝은 그대로 계속되고 다음 배치가 다시 확인한다
   - **누적이 목표 위에 있는 한 배치마다 다시 판정한다.** 종료가 실패하면 그 배치에 `ERROR`(`sourceType: RUNNING_LOCATION_UPDATE`)가 나가고 다음 배치가 다시 시도한다. 이미 끝난 뒤 늦게 도착한 배치는 **목표 유무와 관계없이** 저장·누적·진행 알림 없이 `RUNNING_FINISHED`만 다시 보내므로, 클라는 이 메시지를 **여러 번 받아도** 같은 처리를 해야 한다
 
 #### `RUNNING_PROGRESS_UPDATED` (S→C) — 참가자 진행 정보
@@ -1460,6 +1462,23 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **기록에 남지 않는다.** 러닝이 끝나면 사라지며 결과 응답에 콤보 필드가 없다
 - 판정 규칙(붙는 거리·봐주는 횟수·신선도·보정)은 [feature-spec.md](feature-spec.md)의 러닝 콤보 절이 정본이다
 
+#### `RUNNING_GOAL_PENDING` (S→C) — 남은 거리 알림
+
+```json
+{
+  "remainingMeters": 40              // 목표 − 확정 거리. 항상 1 이상
+}
+```
+
+- **`RUNNING_FINISH`(`forced=false`)의 확정 거리가 목표에 못 미칠 때 그 응답으로 나간다.** 클라 화면으로는 목표를 다 뛰어 정상 종료를 눌렀는데, 서버가 오염 좌표(멈춘 동안의 흔들림·GPS 튐 등)를 빼고 낸 확정 거리가 모자란 경우다. 서버는 **종료를 확정하지 않고** 남은 거리를 알린다 — 그대로 확정하면 다 뛰었다고 믿는 사용자의 러닝이 조기 종료로 남는다
+- **이 경우에만 나간다.** 자동 종료(위치 배치)는 확정 거리가 모자라면 아무것도 보내지 않고 다음 배치가 다시 확인한다 — 사용자가 아무것도 하지 않았으니 알릴 것이 없다. `forced=true`와 강제 종료 시각은 그 시점 거리로 바로 확정한다
+- **ACK이 아니며 상태를 바꾸지 않는다.** 러닝은 그대로 진행 중이고 기록도 저장되지 않았다. 클라는 **로컬 트랙을 지우지 않고** 좌표 수집·전송을 계속한다
+- **클라는 "N m 더"를 보여주고 계속 뛰게 한다.** 남은 거리를 채우면 자동 종료가 `RUNNING_FINISHED`를 보낸다
+- **그래도 끝내려면 `RUNNING_FINISH`(`forced=true`)를 보낸다.** 클라는 "N m 남았어요. 지금 끝내면 완주로 기록되지 않아요"를 한 번 확인받고 보낸다. 서버는 그 시점 확정 거리로 바로 판정한다
+- **`remainingMeters`는 10m 경계로 자르기 전의 확정 거리로 낸다** — 자른 값으로 내면 남은 거리가 최대 10m 부풀려진다. 0.3m만 모자라도 1이다
+- **본인에게만 보낸다**
+- `runningRoomId`를 싣지 않는다 — 클라는 `RUNNING_START`로 정한 방 하나에만 있다
+
 #### `RUNNING_PAUSE` / `RUNNING_RESUME` (C→S) — 일시정지·재개
 
 ```json
@@ -1468,7 +1487,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **상대 화면에 멈춤을 알리는 신호다.** 서버는 참가자 상태를 `PAUSED`/`RUNNING`으로 바꾸고, 바뀌었으면 방에 `RUNNING_PROGRESS_UPDATED`(`status`)를 보낸다. 멈춘 동안에는 좌표 배치가 오지 않아 알림을 따로 내야 한다
 - **서버는 이 신호로 기록 계산을 바꾸지 않는다.** 기록은 수신한 좌표로만 계산한다 — 신호가 유실되거나 조작돼도 기록이 흔들리지 않아야 한다. 클라는 일시정지 동안 좌표 수집·전송을 멈추고 본인 화면의 경과 시간도 멈춘다
-  - **[미정]** 멈춘 구간(제자리 흔들림·긴 공백)을 서버가 좌표만으로 판정해 기록에서 빼는 처리는 별도 작업이다. 그전까지는 공백 구간의 시간과 직선 거리가 기록에 들어간다
+  - 멈춘 구간(제자리 흔들림·긴 공백)은 서버가 좌표만으로 판정해 거리·시간에서 뺀다 — [feature-spec.md](feature-spec.md)의 트랙 필터 절
 - **다른 참가자는 계속 진행한다.** 일시정지는 본인에게만 적용된다
 - **멈춤은 셋 중 무엇으로든 풀린다** — `RUNNING_RESUME`, `RUNNING_START`, 처음 보는 좌표가 담긴 `RUNNING_LOCATION_UPDATE`. `RUNNING_RESUME`은 다음 배치(최대 10초)를 기다리지 않고 상대 화면을 즉시 바꾸려는 것이고, 좌표는 `RUNNING_RESUME`이 유실됐을 때의 안전망이다
 - **멱등이다.** 같은 상태로 바꾸는 요청은 아무것도 보내지 않는다. 이미 끝난 참가자(`FINISHED`)에게는 아무 효과가 없다
@@ -1488,9 +1507,14 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 ```
 
 - `forced`는 필수다 — 비우면 `INVALID_REQUEST`로 거부한다
+- **클라는 보내기 전에 남은 좌표를 먼저 보낸다.** 한 연결 안에서는 메시지가 순서대로 처리된다. 종료는 마지막 수신 좌표까지로 계산하므로, 다음 배치를 기다리던 좌표(최대 10초 분량)를 보내지 않으면 그만큼 기록에서 빠진다 — 4,980m에서 배치를 보내고 5,010m에서 종료를 누르면 4,980m로 확정돼 조기 종료가 된다
+  - 남은 좌표로 확정 거리가 목표를 채우면 그 배치에서 자동 종료가 먼저 확정되고, 뒤이은 `RUNNING_FINISH`는 아래 멱등 규칙대로 `RUNNING_FINISHED`만 다시 받는다
+- **이 메시지는 사용자가 종료를 길게 눌렀을 때만 보낸다.** 화면 거리가 목표 이상이면 `forced=false`(다 뛰었다), 미만이면 `forced=true`(조기 종료를 선택했다)다
+- **`forced=false`인데 확정 거리가 목표에 못 미치면 확정하지 않는다.** `RUNNING_FINISHED` 대신 `RUNNING_GOAL_PENDING`(남은 거리)을 보내고 러닝은 계속된다 — 화면으로는 다 뛰었는데 서버가 오염 좌표를 빼 인정하지 않은 경우라, 그대로 확정하면 억울한 조기 종료가 된다. 사용자가 그래도 끝내려면 `forced=true`로 다시 보낸다
+  - 확정하지 않으므로 상태·기록·트랙 버퍼 모두 그대로이고, 이 요청의 ack(`RUNNING_FINISHED`)도 나가지 않는다
 - `forced`는 사용자가 조기 종료를 선택했는지 나타낼 뿐 최종 상태를 결정하지 않는다. 서버가 확정한 거리가 목표 이상이면 `COMPLETED`, 미달이면 `totalDistanceMeters / targetDistanceMeters`를 운영 설정 비율과 비교해 이상은 `RUNNING_LEFT_NO_PENALTY`, 미만은 `RUNNING_LEFT_PENALTY`로 전환한다. 다만 미만이어도 방 인원(확정 인원에서 취소·탈퇴한 미출석자를 뺀 수)이 1이면 `_NO_PENALTY`다. 목표가 없는 솔로 방은 끝낸 것이 곧 완주라 `COMPLETED`다
 - 종료 시각을 `deleted_at`에 기록한다 — `COMPLETED`·`RUNNING_LEFT_*` 공통이다. 비우면 활성 신청으로 남아 다음 매칭을 신청할 수 없다
-- 종료 신호나 강제 종료에 마지막 수신 데이터로 거리·페이스·구간·칼로리·고도 지표를 계산한다. 칼로리는 확정 거리·시간과 사용자 체중으로, 고도는 노이즈를 필터링한 기기 GPS 고도로 계산한다
+- 종료 신호나 강제 종료에 마지막 수신 데이터로 거리·페이스·구간·칼로리·고도 지표를 계산한다. 계산 전에 트랙 필터가 정지·GPS 튐·관측 안 된 칸을 거리·시간에서 뺀다([feature-spec.md](feature-spec.md) 트랙 필터) — 그래서 `totalDurationSeconds`는 움직인 시간이다. 칼로리는 확정 거리·시간과 사용자 체중으로, 고도는 노이즈를 필터링한 기기 GPS 고도로 계산한다
 - 유효 러닝 판정(거리·시간·경로 산출 가능 + 평균 페이스 허용 범위 + 최소 거리·최소 시간, 운영값)을 통과한 트랙이면 `running_records`와 splits를 저장하고 GPS 트랙을 S3에 올려 `route_polyline`을 만든다. 통과하지 못하면 실제 거리를 0으로 판정하고 기록 없이 상태만 확정한다
 - **목표 거리를 넘겨 뛰면 목표 지점에서 끊어 기록한다.** 목표를 사이에 둔 두 좌표에서 비율로 위치·시각을 보간해 그 지점을 기록의 끝으로 삼고, `totalDistanceMeters`·`endAt`·`totalDurationSeconds`를 모두 그 기준으로 확정한다 — 거리만 자르면 페이스가 실제보다 빨라진다. 목표 이후 좌표는 기록 계산에서만 빠지고 **S3 원본 트랙에는 그대로 남는다**. 목표 미달로 끝났으면 마지막 10m 경계까지로 확정한다(10m 미만 꼬리는 버린다)
 - **구간은 목표 거리를 10m로 나눈 고정 경계다**(0-10, 10-20…). 참가자별 실제 거리로 나누지 않으므로 같은 방 참가자의 `splitNumber` N은 언제나 같은 거리 구간을 가리킨다. 경계가 정확히 10m가 되도록 그 지점도 보간해 만든다
@@ -1578,7 +1602,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | `isDeleted` | Boolean | O | 탈퇴한 사용자 여부 |
 | `isMe` | Boolean | O | 현재 사용자 여부 |
 | `totalDistanceMeters` | Integer | X | 총 이동 거리(m). 기록이 없으면 null |
-| `totalDurationSeconds` | Integer | X | 총 러닝 시간(초). 기록이 없으면 null |
+| `totalDurationSeconds` | Integer | X | 총 러닝 시간(초) — **움직인 시간**이다. 트랙 필터가 정지·관측하지 못한 구간을 빼므로 `finishedAt − startedAt`보다 짧을 수 있다. 기록이 없으면 null |
 | `totalCaloriesKcal` | Integer | X | 총 소모 칼로리(kcal). 기록이 없으면 null |
 | `averagePaceSecondsPerKm` | Integer | X | 평균 페이스(초/km). 기록이 없으면 null |
 | `averageCadenceSpm` | Integer | X | 평균 케이던스(spm). 기록이 없거나 유효 표본이 부족하면 null |

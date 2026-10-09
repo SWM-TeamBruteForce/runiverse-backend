@@ -37,7 +37,7 @@ public class UpdateRunningLocationHandler implements UpdateRunningLocationUsecas
         //    끝난 사람의 거리가 늘어나 상대 화면과 콤보 판정에 섞인다.
         //    끝났다고 답해 RUNNING_FINISHED를 다시 받은 클라가 로컬 트랙을 지우게 한다
         if (isFinished(command.runningRoomId(), userId)) {
-            return new UpdateRunningLocationResult(true);
+            return UpdateRunningLocationResult.ofFinished();
         }
         // 1. 좌표를 저장한다 — 가장 먼저다. 여기서 던지면 진행 통지도 건너뛰고 클라가 ERROR를 받는다.
         //    처음 보는 좌표 수를 받아 둔다 — 재전송분만 온 배치인지 가르는 근거다
@@ -52,8 +52,9 @@ public class UpdateRunningLocationHandler implements UpdateRunningLocationUsecas
             log.error("[러닝] 누적 거리 조회 실패: 처리하지 못한 예외 - roomId={}, userId={}",
                     command.runningRoomId(), userId.value(), e);
             // 누적을 모르면 목표 도달도 판정할 수 없다 — 다음 배치가 다시 판정한다
-            return new UpdateRunningLocationResult(false);
+            return UpdateRunningLocationResult.ofRunning();
         }
+
         RunningDistance updated = RunningDistanceAccumulator.accumulate(stored, command.points());
         saveRunningDistancePort.saveDistance(command.runningRoomId(), userId, updated);
         // 3. 방 참가자에게 진행 상황을 알린다
@@ -69,10 +70,10 @@ public class UpdateRunningLocationHandler implements UpdateRunningLocationUsecas
         updateRunningComboJudge.judge(command.runningRoomId(), userId, updated.meters());
         // 5. 목표 도달을 판정한다 — 맨 마지막이다. 목표를 넘은 이 배치까지 트랙에 저장되고
         //    진행 통지도 나간 뒤여야 한다
-        boolean finished = updateRunningFinishJudge.judge(
+        return updateRunningFinishJudge.judge(
                 command.runningRoomId(), userId, command.targetDistanceMeters(), updated.meters());
-        return new UpdateRunningLocationResult(finished);
     }
+
 
     // 처음 보는 좌표가 왔으면 지금 뛰고 있다 — RESUME이 유실됐거나 옛 연결의 끊김이 늦게 반영된 것도
     // 여기서 풀린다. 재전송분만 온 배치는 상태를 건드리지 않는다.

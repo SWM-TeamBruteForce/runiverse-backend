@@ -290,8 +290,8 @@ public class GetRunningResultHandlerTest {
 
     private String polyline() {
         return PolylineEncoder.encode(List.of(
-                new BoundaryPoint(0, 35.1795543, 129.0756416, STARTED_AT, 0),
-                new BoundaryPoint(10, 35.1796012, 129.0757104, STARTED_AT, 1)));
+                new BoundaryPoint(0, 35.1795543, 129.0756416, STARTED_AT, 0, 0),
+                new BoundaryPoint(10, 35.1796012, 129.0757104, STARTED_AT, 0, 1)));
     }
 
     private GetRunningResultsResult.Player playerOf(GetRunningResultsResult result, UUID userId) {

@@ -1,16 +1,19 @@
 package com.runiverse.running_service.unit_test.running.application;
 
 import com.runiverse.running_service.application.running.common.BoundaryPoint;
+import com.runiverse.running_service.application.running.common.FilteredTrack;
 import com.runiverse.running_service.application.running.common.TrackDistance;
 import com.runiverse.running_service.application.running.common.TrackResampler;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.runiverse.running_service.support.TrackFilterFixtures.unfiltered;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
@@ -39,8 +42,7 @@ public class TrackResamplerTest {
     }
 
     private static List<BoundaryPoint> resample(List<TrackPoint> points, int target) {
-        return TrackResampler.resample(points, TrackDistance.cumulativeMeters(points),
-                target, INTERVAL);
+        return TrackResampler.resample(unfiltered(points), target, INTERVAL);
     }
 
     private static TrackPoint asPoint(BoundaryPoint boundary) {
@@ -195,5 +197,46 @@ public class TrackResamplerTest {
         // when & then
         assertThat(resample(List.of(), TARGET)).isEmpty();
         assertThat(resample(List.of(point(1, 37.5, 127.0, START)), TARGET)).isEmpty();
+    }
+
+    // Z→A를 달리고 A~D에서 12초 멈췄다가 E·F로 달린다. 필터가 A~D 칸을 0으로 한 결과를 그대로 넣는다
+    private static FilteredTrack stoppedTrack() {
+        double[] north = {0, 12, 14, 11, 13, 25, 37};
+        List<TrackPoint> points = new ArrayList<>();
+        for (int i = 0; i < north.length; i++) {
+            points.add(point(i, 37.5 + north[i] / METERS_PER_DEGREE, 127.0,
+                    START.plusSeconds(i * 4L)));
+        }
+        return new FilteredTrack(points,
+                new double[]{0, 12, 12, 12, 12, 24, 36},
+                new double[]{0, 4, 4, 4, 4, 8, 12},
+                null);
+    }
+
+    @Test
+    @DisplayName("필터가 0으로 한 칸에는 경계점이 찍히지 않는다")
+    void noBoundaryOnRemovedEdges() {
+        // when
+        List<BoundaryPoint> boundaries = TrackResampler.resample(stoppedTrack(), TARGET, INTERVAL);
+
+        // then -> 10m는 Z→A, 20m는 정지를 건너뛴 D→E, 30m는 E→F 위다
+        assertThat(boundaries).extracting(BoundaryPoint::sourceIndex).containsExactly(0, 0, 4, 5);
+        assertThat(boundaries.get(2).latitude())
+                .isCloseTo(37.5 + 21 / METERS_PER_DEGREE, within(1e-9));
+    }
+
+    @Test
+    @DisplayName("움직인 시간은 거리와 같은 비율로 보간되고 실제 시각은 따로 남는다")
+    void movingSecondsInterpolateWithDistance() {
+        // when
+        List<BoundaryPoint> boundaries = TrackResampler.resample(stoppedTrack(), TARGET, INTERVAL);
+
+        // then -> 10~20m 구간은 실제로 15.3초지만 움직인 시간은 3.3초다 — 멈춘 12초가 빠진다
+        double[] expected = {0.0, 10.0 / 3, 20.0 / 3, 10.0};
+        for (int i = 0; i < expected.length; i++) {
+            assertThat(boundaries.get(i).movingSeconds()).isCloseTo(expected[i], within(1e-9));
+        }
+        assertThat(boundaries).extracting(b -> Duration.between(START, b.recordedAt()).toMillis())
+                .containsExactly(0L, 3_333L, 18_666L, 22_000L);
     }
 }

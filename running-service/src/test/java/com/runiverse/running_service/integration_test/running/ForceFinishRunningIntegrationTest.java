@@ -32,8 +32,10 @@ import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
 import com.runiverse.running_service.domain.scheduling.ScheduledJob;
 import com.runiverse.running_service.domain.scheduling.vo.ScheduledJobId;
 import com.runiverse.running_service.domain.scheduling.vo.ScheduledJobType;
+import com.runiverse.running_service.infrastructure.metrics.RunningMetricAdapter;
 import com.runiverse.running_service.integration_test.IntegrationTestSupport;
 import com.runiverse.running_service.integration_test.fake.InMemoryScheduledJobStore;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -48,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.runiverse.running_service.support.TrackFilterFixtures.DEFAULT_PROPERTIES;
 import static org.assertj.core.api.Assertions.assertThat;
 
 // 예약 발화 → 남은 참가자 확정 → 방 종료까지를 실제 클래스로 잇는다.
@@ -127,7 +130,9 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
                         forceFinishRequests.add(request);
                     }
                 },
-                FINISH_PROPERTIES
+                FINISH_PROPERTIES,  // RunningFinishProperties
+                DEFAULT_PROPERTIES, // TrackFilterProperties
+                new RunningMetricAdapter(new SimpleMeterRegistry()) // RecordRunningMetricPort
         );
         updateRunningLocationHandler = new UpdateRunningLocationHandler(
                 runningTrackStore,       // AppendRunningTrackPort
