@@ -24,6 +24,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -179,6 +180,39 @@ class RunningDistanceRedisAdapterTest {
         verify(valueOperations).set(anyString(), captor.capture(), eq(TTL));
         given(valueOperations.get(anyString())).willReturn(captor.getValue());
         assertThat(adapter.loadDistance(ROOM_ID, userId)).isEqualTo(saved);
+    }
+
+    @Test
+    @DisplayName("마지막 좌표 시각까지 저장하고 그대로 다시 읽어 낸다")
+    void savesAndLoadsBackRecordedAt() {
+        // given -> 저장은 초 단위다
+        RunningDistance saved = new RunningDistance(3000.25, 180L, 35.17955, 129.07564, 345,
+                35.17950, 129.07560, LocalDateTime.of(2026, 10, 15, 7, 30, 12));
+
+        // when
+        adapter.saveDistance(ROOM_ID, userId, saved);
+
+        // then
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(valueOperations).set(anyString(), captor.capture(), eq(TTL));
+        given(valueOperations.get(anyString())).willReturn(captor.getValue());
+        assertThat(adapter.loadDistance(ROOM_ID, userId)).isEqualTo(saved);
+    }
+
+    @Test
+    @DisplayName("시각이 없는 옛 7필드 값은 나머지를 그대로 읽고 시각만 비운다")
+    void loadsLegacyValueWithoutRecordedAt() {
+        // given -> 배포 순간 뛰고 있던 러닝의 값이 TTL 안에 남아 있다
+        given(valueOperations.get(anyString()))
+                .willReturn("3000.25|180|35.17955|129.07564|345|35.17950|129.07560");
+
+        // when
+        RunningDistance distance = adapter.loadDistance(ROOM_ID, userId);
+
+        // then -> 다음 배치 사이 칸 하나만 일시정지 판정 없이 센다
+        assertThat(distance.meters()).isEqualTo(3000.25);
+        assertThat(distance.anchorLatitude()).isEqualTo(35.17950);
+        assertThat(distance.lastRecordedAt()).isNull();
     }
 
     @Test

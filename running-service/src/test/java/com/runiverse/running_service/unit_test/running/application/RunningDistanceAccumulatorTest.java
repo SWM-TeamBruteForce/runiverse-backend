@@ -81,6 +81,72 @@ class RunningDistanceAccumulatorTest {
     }
 
     @Test
+    @DisplayName("멈추기 전 좌표가 늦게 와 공백이 배치 안에 있어도 범위 안이면 뺀다")
+    void skipsPausedGapInsideBatch() {
+        // when -> 표시는 0인데 1·2가 PAUSE보다 늦게 왔다. 공백은 2→3이다
+        RunningDistanceAccumulation result = accumulate(anchoredAtOrigin(), List.of(0L),
+                pointAt(1, 3, 1), pointAt(2, 6, 2), pointAt(3, 206, 62));
+
+        // then
+        assertThat(result.distance().meters()).isCloseTo(6, org.assertj.core.data.Offset.offset(0.1));
+    }
+
+    @Test
+    @DisplayName("표시 뒤 범위를 넘어서 시작한 공백은 그대로 더한다")
+    void countsGapOutsideWindow() {
+        // given -> 표시 0, 공백은 순번 11에서 시작한다(범위 10)
+        RunningDistance stored = new RunningDistance(0, 11, pointAt(11, 0, 11).latitude(), BASE_LONGITUDE,
+                357, null, null, RECORDED_AT.plusSeconds(11));
+
+        // when
+        RunningDistanceAccumulation result = accumulate(stored, List.of(0L), pointAt(12, 200, 71));
+
+        // then -> 일시정지와 무관한 공백이다. 터널 인정 여부는 종료 때 트랙 필터가 가린다
+        assertThat(result.distance().meters()).isCloseTo(200, org.assertj.core.data.Offset.offset(0.5));
+    }
+
+    @Test
+    @DisplayName("10초 이하로 멈췄다 재개한 칸은 표시가 있어도 더한다")
+    void countsShortPauseEdge() {
+        // when -> 순번 0에서 멈추고 8초 뒤 20m 앞에서 재개했다
+        RunningDistanceAccumulation result = accumulate(anchoredAtOrigin(), List.of(0L), pointAt(1, 20, 8));
+
+        // then
+        assertThat(result.distance().meters()).isCloseTo(20, org.assertj.core.data.Offset.offset(0.1));
+    }
+
+    @Test
+    @DisplayName("재연결로 처음부터 다시 보내도 이미 뺀 공백을 다시 더하지 않는다")
+    void resendAfterResumeDoesNotRecountGap() {
+        // given -> 순번 0에서 멈췄다가 순번 1(60초 뒤, 200m 앞)에서 재개해 이미 반영했다
+        TrackPoint resumed = pointAt(1, 200, 60);
+        RunningDistance afterResume = accumulate(anchoredAtOrigin(), List.of(0L), resumed).distance();
+
+        // when -> 재연결한 클라가 0부터 다시 보낸다. 2만 처음 보는 순번이다
+        RunningDistanceAccumulation result = accumulate(afterResume, List.of(0L),
+                pointAt(0, 0, 0), resumed, pointAt(2, 203, 61));
+
+        // then
+        assertThat(result.distance().meters()).isCloseTo(3, org.assertj.core.data.Offset.offset(0.1));
+    }
+
+    @Test
+    @DisplayName("시각이 없는 옛 누적이면 배치 사이 칸은 판정하지 않고 더한다")
+    void legacyDistanceWithoutRecordedAtCountsGap() {
+        // given -> 시각을 싣기 전 포맷에서 읽은 누적
+        TrackPoint previous = point(0, 0);
+        RunningDistance legacy = new RunningDistance(0, 0, previous.latitude(), previous.longitude(),
+                357, previous.latitude(), previous.longitude(), null);
+
+        // when
+        RunningDistanceAccumulation result = accumulate(legacy, List.of(0L), pointAt(1, 200, 60));
+
+        // then -> 배포 순간 멈춰 있던 사람만 지금처럼 튄다. 이번 배치가 시각을 남긴다
+        assertThat(result.distance().meters()).isGreaterThan(190);
+        assertThat(result.distance().lastRecordedAt()).isEqualTo(RECORDED_AT.plusSeconds(60));
+    }
+
+    @Test
     @DisplayName("첫 관측 좌표가 첫 의심점이 되고, 옮겨진 것으로 보지 않는다")
     void firstObservedPointBecomesAnchorWithoutMoving() {
         // when

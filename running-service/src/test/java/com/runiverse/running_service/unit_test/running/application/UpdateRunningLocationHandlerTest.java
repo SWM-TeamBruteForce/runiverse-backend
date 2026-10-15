@@ -662,4 +662,61 @@ public class UpdateRunningLocationHandlerTest {
         assertThat(captor.getValue().observed()).isFalse();
         assertThat(captor.getValue().moved()).isFalse();
     }
+
+    // ── 일시정지 공백 ──
+
+    // 순번 2에서 멈췄다가 60초 뒤 순번 3으로 재개한 배치 — 직전 누적은 순번 2까지다
+    private void givenStoredUpToSequenceTwo() {
+        TrackPoint previous = trackPoint(2L);
+        given(loadRunningDistancePort.loadDistance(anyLong(), any())).willReturn(
+                new RunningDistance(100.0, 2L, previous.latitude(), previous.longitude(),
+                        STORED_PACE, null, null, previous.recordedAt()));
+    }
+
+    private static TrackPoint resumedAfterPause() {
+        TrackPoint point = trackPoint(3L);
+        return new TrackPoint(point.sequence(), point.latitude(), point.longitude(), point.altitudeMeters(),
+                point.accuracyMeters(), point.speedMetersPerSecond(), point.headingDegrees(),
+                point.cadenceSpm(), point.currentPaceSecondsPerKm(), point.recordedAt().plusSeconds(60));
+    }
+
+    @Test
+    @DisplayName("일시정지 표시를 읽어 재개한 칸을 누적 거리에 더하지 않는다")
+    void skipsPausedGapWithStoredMarks() {
+        // given
+        givenStoredUpToSequenceTwo();
+        given(loadRunningTrackPausesPort.loadPausedSequences(ROOM_ID, new UserId(USER_ID)))
+                .willReturn(List.of(2L));
+
+        // when
+        updateRunningLocationHandler.handle(command(List.of(resumedAfterPause())));
+
+        // then -> 상대 화면 거리가 튀지 않는다
+        assertThat(captureSaved().meters()).isEqualTo(100.0);
+        assertThat(capturePublished().distanceMeters()).isEqualTo(100);
+    }
+
+    @Test
+    @DisplayName("일시정지 표시를 못 읽어도 진행을 알리고 이번 배치는 표시 없이 센다")
+    void countsWithoutMarksWhenLoadFails() {
+        // given
+        givenStoredUpToSequenceTwo();
+        given(loadRunningTrackPausesPort.loadPausedSequences(ROOM_ID, new UserId(USER_ID)))
+                .willThrow(new RuntimeException("redis down"));
+        LogCapture log = LogCapture.of(UpdateRunningLocationHandler.class);
+
+        try {
+            // when
+            updateRunningLocationHandler.handle(command(List.of(resumedAfterPause())));
+
+            // then
+            assertThat(captureSaved().meters()).isGreaterThan(100.0);
+            verify(publishRunningProgressPort).publish(anyLong(), any());
+            assertThat(log.messages(Level.ERROR)).containsExactly(
+                    "[러닝] 트랙 일시정지 표시 조회 실패: 처리하지 못한 예외 - roomId=" + ROOM_ID
+                            + ", userId=" + USER_ID);
+        } finally {
+            log.stop();
+        }
+    }
 }
