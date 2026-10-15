@@ -72,7 +72,7 @@
 | 러닝 중 | `RUNNING_PROGRESS_UPDATED` | S→C | `status` 포함 — 멈춘 것·끊긴 것·끝난 것을 느려진 것과 구분. 상태가 바뀔 때도 나간다 |
 | 러닝 중 | `RUNNING_GOAL_PENDING` | S→C | `RUNNING_FINISH`(`forced=false`)의 확정 거리가 목표에 못 미침 — 종료를 확정하지 않고 본인에게 남은 거리를 알린다 |
 | 러닝 중 | `RUNNING_COMBO_UPDATED` | S→C | 나란히 달리는 상대와의 콤보 — 참가자 쌍마다 따로 센다 |
-| 러닝 중 | `RUNNING_PAUSE` / `RUNNING_RESUME` | C→S | 일시정지·재개 — 상대 화면의 `status` 표시용. 기록 계산은 바꾸지 않는다 |
+| 러닝 중 | `RUNNING_PAUSE` / `RUNNING_RESUME` | C→S | 일시정지·재개 — 상대 화면의 `status` 표시. `RUNNING_PAUSE`는 그 뒤 공백을 기록에서 빼는 데도 쓴다 |
 | 러닝 중 | `RUNNING_FINISH` | C→S | `forced` 플래그로 조기 종료 의사 포함 — 서버가 상태·기록 확정. `forced=false`인데 확정 거리가 목표에 못 미치면 확정하지 않고 `RUNNING_GOAL_PENDING`으로 답한다 |
 | 공통 | `ERROR` | S→C | WS 요청 실패 통지 |
 
@@ -1557,8 +1557,8 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 ```
 
 - **상대 화면에 멈춤을 알리는 신호다.** 서버는 참가자 상태를 `PAUSED`/`RUNNING`으로 바꾸고, 바뀌었으면 방에 `RUNNING_PROGRESS_UPDATED`(`status`)를 보낸다. 멈춘 동안에는 좌표 배치가 오지 않아 알림을 따로 내야 한다
-- **서버는 이 신호로 기록 계산을 바꾸지 않는다.** 기록은 수신한 좌표로만 계산한다 — 신호가 유실되거나 조작돼도 기록이 흔들리지 않아야 한다. 클라는 일시정지 동안 좌표 수집·전송을 멈추고 본인 화면의 경과 시간도 멈춘다
-  - 멈춘 구간(제자리 흔들림·긴 공백)은 서버가 좌표만으로 판정해 거리·시간에서 뺀다 — [feature-spec.md](feature-spec.md)의 트랙 필터 절
+- **`RUNNING_PAUSE`는 기록에서 빼는 쪽으로만 쓴다.** 서버는 받은 시점의 마지막 순번을 남기고, 그 뒤 공백을 기록과 러닝 중 누적 거리에서 뺀다. 조작해 봐야 자기 거리만 줄어든다. 클라는 일시정지 동안 좌표 수집·전송을 멈추고 본인 화면의 경과 시간도 멈춘다
+  - 판정 규칙은 [feature-spec.md](feature-spec.md)의 트랙 필터 절
 - **다른 참가자는 계속 진행한다.** 일시정지는 본인에게만 적용된다
 - **멈춤은 셋 중 무엇으로든 풀린다** — `RUNNING_RESUME`, `RUNNING_START`, 처음 보는 좌표가 담긴 `RUNNING_LOCATION_UPDATE`. `RUNNING_RESUME`은 다음 배치(최대 10초)를 기다리지 않고 상대 화면을 즉시 바꾸려는 것이고, 좌표는 `RUNNING_RESUME`이 유실됐을 때의 안전망이다
 - **멱등이다.** 같은 상태로 바꾸는 요청은 아무것도 보내지 않는다. 이미 끝난 참가자(`FINISHED`)에게는 아무 효과가 없다

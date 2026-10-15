@@ -63,7 +63,7 @@ runiverse.<도메인>.<기능 폴더>.<동작>
 | `result=success\|failure` | 이메일, 좌표, 예외 메시지 |
 | `reason=<아래 목록>` | 요청 경로 원문 — 템플릿(`/users/{userId}/profile`)만 |
 | `decision=<메트릭별 목록>` — 성공·실패가 아닌 업무 판정의 갈래 | |
-| `filter=accuracy\|spike\|gap\|stop` — 트랙 필터 단계 | |
+| `filter=accuracy\|spike\|gap\|paused\|stop` — 트랙 필터 단계 | |
 | `store=redis\|db` — 러닝 상태를 둔 저장소 | |
 | `target=<메트릭별 목록>` — 접근한 상태의 종류 | |
 | `phase=running\|finish` — 러닝 중 배치마다 도는 접근인지, 종료 때 한 번 도는 접근인지 | |
@@ -145,7 +145,7 @@ runiverse.<도메인>.<기능 폴더>.<동작>
 | `runiverse.auth.oauthlogin` | Counter | `OauthLoginHandler` → `AuthMetricAdapter` | 사용 중 — `provider=google\|kakao\|apple\|unknown`, `result`, `reason` |
 | `runiverse.websocket.messages` | Counter | 러닝 WebSocket 핸들러 | 예정 |
 | `runiverse.sse.events` | Counter | 매칭 스트림 연결 | 예정 |
-| `runiverse.running.finish.filtered` | DistributionSummary (baseUnit `meters`) | `RunningFinisher` → `RunningMetricAdapter` | 사용 중 — `filter=accuracy\|spike\|gap\|stop`. 기록 확정 1건당 트랙 필터 단계별로 뺀 거리(feature-spec 트랙 필터). 0도 기록한다. 히스토그램을 켠다(1~10,000m). 판정값 조정용 |
+| `runiverse.running.finish.filtered` | DistributionSummary (baseUnit `meters`) | `RunningFinisher` → `RunningMetricAdapter` | 사용 중 — `filter=accuracy\|spike\|gap\|paused\|stop`. 기록 확정 1건당 트랙 필터 단계별로 뺀 거리(feature-spec 트랙 필터). 0도 기록한다. 히스토그램을 켠다(1~10,000m). 판정값 조정용 |
 | `runiverse.running.finish.gaps` | Counter | `RunningFinisher` → `RunningMetricAdapter` | 사용 중 — `decision=accepted\|rejected`. 관측 안 된 칸의 인정·거부 수 |
 | `runiverse.running.location.goal` | Counter | `RunningFinisher`(자동 종료) → `RunningMetricAdapter` | 사용 중 — `decision=finished\|pending`. 러닝 중 누적이 목표를 넘은 배치에서 확정 거리로 끝냈는지, 미달이라 미뤘는지 |
 | `runiverse.running.finish.goalpending` | DistributionSummary (baseUnit `meters`) | `RunningFinisher`(`forced=false` 종료) → `RunningMetricAdapter` | 사용 중 — `forced=false` 종료를 미뤘을 때의 남은 거리(`RUNNING_GOAL_PENDING`의 `remainingMeters`). 화면 거리와 서버 확정 거리가 얼마나 어긋나는지 본다. 히스토그램을 켠다(1~10,000m) |
