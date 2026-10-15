@@ -177,7 +177,7 @@
 | avg_cadence | int | nullable | spm (선택). 러닝 전체 평균 — 점별 순간 케이던스(`cadenceSpm`)는 DB에 저장하지 않는다(S3 원본 트랙에는 남는다) |
 | total_elevation_gain | int | nullable | 누적 상승 고도(미터). 기기 GPS 고도를 운영 임계값으로 필터링해 계산하며 유효 표본이 부족하면 null. 구간(`running_splits.elevation_change`)의 합과는 다르다 |
 | total_calories | int | NOT NULL | 종료 시 서버가 확정 거리·시간과 사용자 체중으로 계산한 kcal |
-| gps_track_key | varchar(255) | NOT NULL | S3 key — 받은 좌표를 그대로(위치·시각·고도·정확도·속도·방위·케이던스·순간 페이스)와 일시정지 표시를 담은 **원본 트랙**. 재계산·분석용이라 **API 응답에는 쓰지 않는다** |
+| gps_track_key | varchar(255) | NOT NULL | S3 key — 받은 좌표 그대로(위치·시각·고도·정확도·속도·방위·케이던스·순간 페이스)와 일시정지 표시를 담은 **원본 트랙**. 재계산·분석용이라 **API 응답에는 쓰지 않는다** |
 | route_polyline | text | NOT NULL | 10m 경계점 경로(encoded polyline, precision 5) — 원본 트랙을 0m부터 10m마다 보간한 경계점만 담는다(구간 수 + 1개). **API가 내려주는 유일한 경로 데이터**. 대시보드·기록 상세(6-1·6-2)·기록 목록(7-1)·피드 카드가 전부 이 값을 쓴다. `running_splits`의 `route_start_index`·`route_end_index`가 이 배열의 위치를 가리킨다. 트랙 필터가 0으로 한 칸 위에는 경계점이 없어, **이웃한 두 점이 30m 넘게 떨어져 있으면 관측하지 못한 구간**이다 — 클라는 그 사이를 잇지 않는다(feature-spec 트랙 필터) |
 | weather_code | int | NOT NULL | WMO 4677 코드(0~99) — 날씨 API 원본값 그대로. 조회에 실패하거나 값이 없으면 폴백(`0` 맑음, 기온 `15.0`)이 들어간다. 악조건 여부는 저장하지 않고 판정 시 계산한다 |
 | temperature | numeric(3,1) | NOT NULL | 섭씨. 영하 포함 |
