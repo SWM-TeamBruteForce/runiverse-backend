@@ -4,6 +4,7 @@ import com.runiverse.running_service.application.running.exception.RunningTrackU
 import com.runiverse.running_service.application.running.port.out.AppendRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.DeleteRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPort;
+import com.runiverse.running_service.application.running.port.out.MarkRunningTrackPausedPort;
 import com.runiverse.running_service.application.running.port.out.RunningTrack;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
 import com.runiverse.running_service.domain.common.vo.UserId;
@@ -36,7 +37,8 @@ import static com.runiverse.running_service.infrastructure.metrics.running.Runni
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRunningTrackPort, DeleteRunningTrackPort {
+public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRunningTrackPort, DeleteRunningTrackPort,
+        MarkRunningTrackPausedPort {
 
     // 순번마다 비트 한 칸으로 중복을 판정한다 - 커서와 달리 뒤늦게 온 좌표도 자기 자리에 들어간다.
     // SETBIT은 이전 비트를 돌려주므로 0이면 처음 보는 순번이다
@@ -190,6 +192,17 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
         return fragments;
     }
 
+    // 집합이라 재연결 뒤 같은 순번으로 다시 온 PAUSE는 하나로 남는다.
+    // 잡지 않고 던진다 — 부르는 쪽이 로그를 남긴다
+    @Override
+    public void markPaused(Long runningRoomId, UserId userId, long lastSequence) {
+        String key = pausedKey(runningRoomId, userId);
+        stateMeter.write(REDIS, TRACK, RUNNING, runningRoomId, () -> {
+            redisTemplate.opsForSet().add(key, String.valueOf(lastSequence));
+            redisTemplate.expire(key, properties.ttl());
+        });
+    }
+
     // 종료 확정 뒤 버퍼를 비운다. TTL이 있어 남겨도 새지는 않는다.
     // 중복 판정 비트맵도 지우므로 늦게 온 재전송은 다시 쌓이지만, 기록은 이미 DB에 있어 쓰이지 않고 TTL이 지운다.
     // 실패해도 종료를 되돌리지 않는다 — 이미 기록은 DB에 있고 TTL이 결국 지운다
@@ -197,7 +210,8 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
     public void delete(Long runningRoomId, UserId userId) {
         try {
             stateMeter.write(REDIS, TRACK, FINISH, runningRoomId, () -> redisTemplate.delete(List.of(
-                    trackKey(runningRoomId, userId), seenKey(runningRoomId, userId))));
+                    trackKey(runningRoomId, userId), seenKey(runningRoomId, userId),
+                    pausedKey(runningRoomId, userId))));
         } catch (RuntimeException e) {
             log.error("[러닝] 트랙 삭제 실패: Redis 오류 - roomId={}, userId={}", runningRoomId, userId.value(), e);
         }
@@ -221,5 +235,11 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
     private String seenKey(Long runningRoomId, UserId userId) {
         return RedisKey.RUNNING_TRACK.of(
                 String.valueOf(runningRoomId), userId.value().toString(), "seen");
+    }
+
+    // 일시정지 표시 — PAUSE를 받은 시점의 마지막 순번들
+    private String pausedKey(Long runningRoomId, UserId userId) {
+        return RedisKey.RUNNING_TRACK.of(
+                String.valueOf(runningRoomId), userId.value().toString(), "paused");
     }
 }
