@@ -58,7 +58,7 @@ public final class RunningDistanceAccumulator {
             // 최신값으로 삼으면 화면이 지나간 구간의 속도로 되돌아간다
             lastPace = point.currentPaceSecondsPerKm();
             // 정확도가 나쁜 좌표는 관측이 아니다 — 터널에서 튄 좌표로 의심점이 옮겨지면
-            // 서 있는 사람이 달리는 것으로 보인다. 거리에는 지금처럼 반영한다
+            // 서 있는 사람이 달리는 것으로 보인다. 거리에는 반영한다
             if (point.accuracyMeters() > filter.maxAccuracyMeters()) {
                 continue;
             }

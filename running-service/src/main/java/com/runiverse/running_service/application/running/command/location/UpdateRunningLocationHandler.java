@@ -117,7 +117,7 @@ public class UpdateRunningLocationHandler implements UpdateRunningLocationUsecas
         }
     }
 
-    // 상태를 못 읽으면 끝나지 않은 것으로 본다 — 표시용 값이 흔들려도 좌표 수용은 지금처럼 이어진다.
+    // 상태를 못 읽으면 끝나지 않은 것으로 본다 — 표시용 값이 흔들려도 좌표는 계속 받는다.
     // 끝난 참가자를 놓치면 버퍼만 TTL까지 남고, 끝나지 않은 참가자를 막으면 좌표가 사라진다
     private boolean isFinished(Long runningRoomId, UserId userId) {
         try {
