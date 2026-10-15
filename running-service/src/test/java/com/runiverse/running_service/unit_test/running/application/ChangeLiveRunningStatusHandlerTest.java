@@ -133,4 +133,90 @@ class ChangeLiveRunningStatusHandlerTest {
                 "[러닝] 콤보 일시정지 표시 실패: 처리하지 못한 예외 - roomId=" + ROOM_ID + ", userId=" + USER_ID);
         assertThat(log.events(Level.ERROR).getFirst().getThrowableProxy()).isNotNull();
     }
+
+    // ── 트랙 일시정지 표시 ──
+
+    private static RunningDistance distanceUpTo(long lastSequence) {
+        return new RunningDistance(1_980.4, lastSequence, 35.17955, 129.07564, 352, null, null);
+    }
+
+    @Test
+    @DisplayName("일시정지면 멈추기 전 마지막 순번을 트랙 표시로 남긴다")
+    void marksTrackPausedWithLastSequence() {
+        // given
+        given(loadRunningDistancePort.loadDistance(ROOM_ID, new UserId(USER_ID)))
+                .willReturn(distanceUpTo(41L));
+
+        // when
+        handler.handle(new ChangeLiveRunningStatusCommand(
+                USER_ID, ROOM_ID, 5_000, LiveRunningStatus.PAUSED));
+
+        // then -> 트랙 필터가 이 순번 뒤의 공백을 뺀다
+        verify(markRunningTrackPausedPort).markPaused(ROOM_ID, new UserId(USER_ID), 41L);
+    }
+
+    @Test
+    @DisplayName("좌표를 받기 전의 일시정지는 트랙 표시를 남기지 않는다")
+    void skipsTrackMarkBeforeFirstPoint() {
+        // given
+        given(loadRunningDistancePort.loadDistance(ROOM_ID, new UserId(USER_ID)))
+                .willReturn(RunningDistance.empty());
+
+        // when
+        handler.handle(new ChangeLiveRunningStatusCommand(
+                USER_ID, ROOM_ID, 5_000, LiveRunningStatus.PAUSED));
+
+        // then -> 마지막 순번이 -1이면 뺄 공백이 없다
+        verify(markRunningTrackPausedPort, never()).markPaused(anyLong(), any(), anyLong());
+    }
+
+    @Test
+    @DisplayName("다시 달리기(RESUME)는 트랙 표시를 남기지 않는다")
+    void doesNotMarkTrackOnResume() {
+        // when
+        handler.handle(new ChangeLiveRunningStatusCommand(
+                USER_ID, ROOM_ID, 5_000, LiveRunningStatus.RUNNING));
+
+        // then -> 신호는 빼는 쪽으로만 쓴다
+        verify(loadRunningDistancePort, never()).loadDistance(anyLong(), any());
+        verify(markRunningTrackPausedPort, never()).markPaused(anyLong(), any(), anyLong());
+    }
+
+    @Test
+    @DisplayName("트랙 표시를 못 남겨도 던지지 않고 ERROR로 남긴다")
+    void swallowsTrackMarkFailure() {
+        // given
+        given(loadRunningDistancePort.loadDistance(ROOM_ID, new UserId(USER_ID)))
+                .willReturn(distanceUpTo(41L));
+        willThrow(new IllegalStateException("redis down"))
+                .given(markRunningTrackPausedPort).markPaused(ROOM_ID, new UserId(USER_ID), 41L);
+
+        // when -> 표시가 없으면 이번 공백은 지금처럼 관측 안 된 칸으로 판정된다
+        assertThatCode(() -> handler.handle(new ChangeLiveRunningStatusCommand(
+                USER_ID, ROOM_ID, 5_000, LiveRunningStatus.PAUSED)))
+                .doesNotThrowAnyException();
+
+        // then
+        assertThat(log.messages(Level.ERROR)).containsExactly(
+                "[러닝] 트랙 일시정지 표시 실패: 처리하지 못한 예외 - roomId=" + ROOM_ID + ", userId=" + USER_ID);
+        assertThat(log.events(Level.ERROR).getFirst().getThrowableProxy()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("누적 거리를 못 읽어도 던지지 않고 ERROR로 남긴다")
+    void swallowsDistanceLoadFailure() {
+        // given
+        willThrow(new IllegalStateException("redis down"))
+                .given(loadRunningDistancePort).loadDistance(ROOM_ID, new UserId(USER_ID));
+
+        // when
+        assertThatCode(() -> handler.handle(new ChangeLiveRunningStatusCommand(
+                USER_ID, ROOM_ID, 5_000, LiveRunningStatus.PAUSED)))
+                .doesNotThrowAnyException();
+
+        // then
+        verify(markRunningTrackPausedPort, never()).markPaused(anyLong(), any(), anyLong());
+        assertThat(log.messages(Level.ERROR)).containsExactly(
+                "[러닝] 트랙 일시정지 표시 실패: 처리하지 못한 예외 - roomId=" + ROOM_ID + ", userId=" + USER_ID);
+    }
 }

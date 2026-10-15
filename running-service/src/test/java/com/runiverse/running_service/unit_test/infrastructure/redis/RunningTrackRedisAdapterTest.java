@@ -23,6 +23,7 @@ import org.mockito.invocation.Invocation;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.connection.stream.MapRecord;
+import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
@@ -43,6 +44,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockingDetails;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("러닝 트랙 Redis 어댑터 단위 테스트")
@@ -433,5 +435,47 @@ class RunningTrackRedisAdapterTest {
 
         // then
         assertThat(access("finish", "write", "success").count()).isEqualTo(1);
+    }
+
+    // ── 일시정지 표시 ──
+
+    @Test
+    @DisplayName("일시정지 표시는 마지막 순번을 집합에 넣고 TTL을 다시 건다")
+    void marksPausedSequenceInSet() {
+        // given
+        SetOperations<String, String> setOperations = mock(SetOperations.class);
+        given(redisTemplate.opsForSet()).willReturn(setOperations);
+        String key = "running:track:" + ROOM_ID + ":" + userId.value() + ":paused";
+
+        // when
+        adapter.markPaused(ROOM_ID, userId, 41L);
+
+        // then -> SADD는 TTL을 건드리지 않는다. 다시 걸지 않으면 첫 표시 시각 기준으로 사라진다
+        verify(setOperations).add(key, "41");
+        verify(redisTemplate).expire(key, TTL);
+        assertThat(access("running", "write", "success").count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("일시정지 표시 중 Redis가 닿지 않으면 잡지 않고 던진다")
+    void throwsOnMarkPausedFailure() {
+        // given
+        given(redisTemplate.opsForSet()).willThrow(new RedisConnectionFailureException("redis down"));
+
+        // when & then -> 부르는 쪽이 로그를 남긴다
+        assertThatThrownBy(() -> adapter.markPaused(ROOM_ID, userId, 41L))
+                .isInstanceOf(RedisConnectionFailureException.class);
+        assertThat(log.events(Level.ERROR)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("트랙을 지울 때 일시정지 표시도 함께 지운다")
+    void deletesPausedKeyWithTrack() {
+        // when
+        adapter.delete(ROOM_ID, userId);
+
+        // then -> 남기면 같은 방·참가자로 다시 쌓일 일은 없지만 TTL까지 자리를 차지한다
+        String prefix = "running:track:" + ROOM_ID + ":" + userId.value();
+        verify(redisTemplate).delete(List.of(prefix, prefix + ":seen", prefix + ":paused"));
     }
 }
