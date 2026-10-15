@@ -143,8 +143,8 @@ public class RunningFinisher {
         // 3. 마지막 수신 좌표까지로 지표를 낸다. 멈춘 동안의 흔들림·GPS 튐·관측 못 한 이동은 먼저 걸러낸다.
         //    산출할 수 없는 트랙이면 실제 거리를 0으로 보고 상태만 확정한다
         RunningTrack track = loadRunningTrackPort.load(runningRoomId, userId);
-        FilteredTrack filtered = TrackFilter.apply(track.points(),
-                pausedSequences(runningRoomId, userId), trackFilterProperties);
+        List<Long> pausedSequences = pausedSequences(runningRoomId, userId);
+        FilteredTrack filtered = TrackFilter.apply(track.points(), pausedSequences, trackFilterProperties);
         // 유저 종료면 마지막 좌표가 얼마나 묵었는지 본다 — 길면 클라가 남은 좌표를 먼저 보내지 않은 것이다
         Long lastPointLagSec = onGoal ? null : lastPointLagSeconds(track);
         if (deferIfShort) {
@@ -170,7 +170,7 @@ public class RunningFinisher {
         // 4. 기록은 만들 수 있을 때만 남긴다 — 상태 확정과 기록 생성은 별개다.
         //    기록이 없으면 표본이 그대로라 평균 페이스도 다시 낼 것이 없다
         analysis.ifPresent(result -> {
-            createRecord(runningRoomId, userIdValue, track, result, weightKg);
+            createRecord(runningRoomId, userIdValue, track, pausedSequences, result, weightKg);
             updateAvgPace(userId);
         });
 
@@ -200,13 +200,13 @@ public class RunningFinisher {
         return room.getTargetDistance().orElseGet(Distance::unlimited).meters();
     }
 
-    private void createRecord(Long runningRoomId, UUID userId, RunningTrack track,
+    private void createRecord(Long runningRoomId, UUID userId, RunningTrack track, List<Long> pausedSequences,
                               TrackAnalysis analysis, BigDecimal weightKg) {
         // 원본 트랙은 목표 이후 좌표까지 그대로 올린다 — 끊는 것은 기록뿐이다.
         // 키가 러닝 시작 시각으로 정해져 재시도해도 같은 객체를 덮어쓴다
         String gpsTrackKey = saveGpsTrackPort.save(new GpsTrackUpload(
                 runningRoomId, userId,
-                analysis.startAt(), analysis.endAt(), track.raw()));
+                analysis.startAt(), analysis.endAt(), track.raw(), pausedSequences));
         // 날씨는 출발 지점·출발 시각 기준이다 — 조회에 실패해도 어댑터가 기본값을 준다
         TrackPoint origin = track.points().get(0);
         Weather weather = loadWeatherPort.load(

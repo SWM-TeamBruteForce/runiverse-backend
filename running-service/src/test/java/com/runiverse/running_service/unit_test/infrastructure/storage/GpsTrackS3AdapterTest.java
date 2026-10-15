@@ -63,7 +63,7 @@ public class GpsTrackS3AdapterTest {
     }
 
     private static GpsTrackUpload upload(LocalDateTime startAt, LocalDateTime endAt) {
-        return new GpsTrackUpload(ROOM_ID, USER_ID, startAt, endAt, RAW);
+        return new GpsTrackUpload(ROOM_ID, USER_ID, startAt, endAt, RAW, List.of());
     }
 
     // 어댑터가 넘긴 람다를 실제 빌더에 적용해 무엇을 설정했는지 꺼낸다
@@ -188,5 +188,28 @@ public class GpsTrackS3AdapterTest {
         JsonNode points = JSON.readTree(body).get("points");
         assertThat(points.size()).isEqualTo(1);
         assertThat(points.get(0).get(1).asDouble()).isEqualTo(37.51234);
+    }
+
+    @Test
+    @DisplayName("일시정지 표시를 함께 실어 원본만으로 기록을 다시 계산할 수 있다")
+    void envelopeCarriesPausedSequences() throws Exception {
+        // when
+        adapter.save(new GpsTrackUpload(ROOM_ID, USER_ID, START_AT, END_AT, RAW, List.of(60L, 91L)));
+
+        // then -> 빠지면 원본으로 다시 계산할 때 일시정지 공백이 터널로 인정된다
+        List<Long> paused = JSON.readTree(capturedBody()).get("pausedSequences").valueStream()
+                .map(JsonNode::asLong)
+                .toList();
+        assertThat(paused).containsExactly(60L, 91L);
+    }
+
+    @Test
+    @DisplayName("일시정지하지 않은 러닝은 빈 배열을 싣는다")
+    void envelopeCarriesEmptyPausedSequences() throws Exception {
+        // when
+        adapter.save(upload(START_AT, END_AT));
+
+        // then
+        assertThat(JSON.readTree(capturedBody()).get("pausedSequences").isEmpty()).isTrue();
     }
 }

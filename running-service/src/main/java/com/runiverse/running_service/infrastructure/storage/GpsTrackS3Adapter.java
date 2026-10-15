@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Component
@@ -48,7 +49,7 @@ public class GpsTrackS3Adapter implements SaveGpsTrackPort {
         // 보간값은 Long·UUID·ISO 시각과 컴파일 상수뿐이라 이스케이프가 필요 없다
         return """
                 {"schemaVersion":%d,"fields":[%s],"runningRoomId":%d,"userId":"%s",\
-                "startAt":"%s","endAt":"%s","points":%s}"""
+                "startAt":"%s","endAt":"%s","pausedSequences":[%s],"points":%s}"""
                 .formatted(
                         TrackPoint.SCHEMA_VERSION,
                         quotedFields(),
@@ -56,7 +57,14 @@ public class GpsTrackS3Adapter implements SaveGpsTrackPort {
                         upload.userId(),
                         withOffset(upload.startAt()),
                         withOffset(upload.endAt()),
+                        joined(upload.pausedSequences()),
                         upload.raw());
+    }
+
+    private static String joined(List<Long> sequences) {
+        return sequences.stream()
+                .map(String::valueOf)
+                .collect(Collectors.joining(","));
     }
 
     private static String quotedFields() {

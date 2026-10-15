@@ -1166,6 +1166,21 @@ public class RunningFinisherTest {
         }
 
         @Test
+        @DisplayName("판정에 쓴 표시를 S3 원본과 함께 올린다")
+        void uploadsMarksWithRawTrack() {
+            // given
+            given(loadRunningTrackPausesPort.loadPausedSequences(ROOM_ID, new UserId(USER_ID)))
+                    .willReturn(List.of(300L));
+
+            // when
+            finishSolo();
+
+            // then -> 원본만으로 같은 기록을 다시 계산할 수 있어야 한다
+            verify(saveGpsTrackPort).save(uploadCaptor.capture());
+            assertThat(uploadCaptor.getValue().pausedSequences()).containsExactly(300L);
+        }
+
+        @Test
         @DisplayName("표시를 못 읽으면 ERROR만 남기고 표시 없이 확정한다")
         void finishesWithoutMarksWhenLoadFails() {
             // given
