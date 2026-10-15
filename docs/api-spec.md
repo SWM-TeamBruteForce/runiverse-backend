@@ -72,7 +72,7 @@
 | 러닝 중 | `RUNNING_PROGRESS_UPDATED` | S→C | `status` 포함 — 멈춘 것·끊긴 것·끝난 것을 느려진 것과 구분. 상태가 바뀔 때도 나간다 |
 | 러닝 중 | `RUNNING_GOAL_PENDING` | S→C | `RUNNING_FINISH`(`forced=false`)의 확정 거리가 목표에 못 미침 — 종료를 확정하지 않고 본인에게 남은 거리를 알린다 |
 | 러닝 중 | `RUNNING_COMBO_UPDATED` | S→C | 나란히 달리는 상대와의 콤보 — 참가자 쌍마다 따로 센다 |
-| 러닝 중 | `RUNNING_PAUSE` / `RUNNING_RESUME` | C→S | 일시정지·재개 — 상대 화면의 `status` 표시. `RUNNING_PAUSE`는 그 뒤 공백을 기록에서 빼는 데도 쓴다 |
+| 러닝 중 | `RUNNING_PAUSE` / `RUNNING_RESUME` | C→S | 일시정지·재개 — 상대 화면의 `status` 표시. `RUNNING_PAUSE`는 그 뒤 공백을 기록과 러닝 중 누적 거리에서 빼는 데도 쓴다 |
 | 러닝 중 | `RUNNING_FINISH` | C→S | `forced` 플래그로 조기 종료 의사 포함 — 서버가 상태·기록 확정. `forced=false`인데 확정 거리가 목표에 못 미치면 확정하지 않고 `RUNNING_GOAL_PENDING`으로 답한다 |
 | 공통 | `ERROR` | S→C | WS 요청 실패 통지 |
 
@@ -1567,7 +1567,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   - **`RUNNING_PAUSE` 전에 남은 좌표를 먼저 보낸다.** 한 연결 안에서는 메시지가 순서대로 처리된다. 멈추기 전 좌표가 `RUNNING_PAUSE` 뒤에 도착하면 처음 보는 좌표라 멈춤이 바로 풀린다
   - **재연결 시 멈춤 중이었으면** `RUNNING_START` → 로컬 트랙 재전송 → `RUNNING_PAUSE` 순으로 보낸다(5-C)
   - **멈춘 동안에도 `HEALTH_CHECK`를 보낸다.** 좌표가 끊겨 유휴 타임아웃(운영값)을 넘기면 서버가 연결을 닫고 `DISCONNECTED`로 알린다
-- **ack 없음.** `RUNNING_START` 전에 보내면 `RUNNING_NOT_STARTED`로 거부한다. 그 밖의 실패(상태 저장소 장애)는 화면 표시용이라 `ERROR`로 알리지 않고 서버 로그만 남긴다 — 다음 상태 변경이나 재연결 스냅샷이 바로잡는다
+- **ack 없음.** `RUNNING_START` 전에 보내면 `RUNNING_NOT_STARTED`로 거부한다. 그 밖의 실패(상태 저장소 장애)는 `ERROR`로 알리지 않고 서버 로그만 남긴다 — 화면 상태는 다음 상태 변경이나 재연결 스냅샷이 바로잡고, 일시정지 표시를 못 남긴 공백은 관측 안 된 칸으로 판정된다
 
 #### `RUNNING_FINISH` (C→S) — 러닝 종료 (정상/강제 통합)
 
