@@ -87,7 +87,7 @@ class LiveRunningStatusChangerTest {
         // given
         givenChange(RUNNING, PAUSED);
         given(loadRunningDistancePort.loadDistance(ROOM_ID, USER))
-                .willReturn(new RunningDistance(1_980.4, 120L, 35.17955, 129.07564, 352, null, null));
+                .willReturn(new RunningDistance(1_980.4, 120L, 35.17955, 129.07564, 352, null, null, null));
 
         // when
         changer.change(ROOM_ID, USER, TARGET_DISTANCE_METERS, PAUSED);

@@ -394,7 +394,7 @@ class GetRunningSnapshotHandlerTest {
 
     private void givenDistance(UUID userId, int meters, Integer pace) {
         given(loadRunningDistancePort.loadDistance(eq(ROOM_ID), eq(new UserId(userId))))
-                .willReturn(new RunningDistance(meters, 180L, 35.17955, 129.07564, pace, null, null));
+                .willReturn(new RunningDistance(meters, 180L, 35.17955, 129.07564, pace, null, null, null));
     }
 
     private static GetRunningSnapshotResult.Player playerOf(

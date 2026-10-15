@@ -42,7 +42,7 @@ class RunningDistanceAccumulatorTest {
     private static RunningDistance anchoredAtOrigin() {
         TrackPoint origin = point(0, 0);
         return new RunningDistance(0, 0, origin.latitude(), origin.longitude(), 357,
-                origin.latitude(), origin.longitude());
+                origin.latitude(), origin.longitude(), origin.recordedAt());
     }
 
     private static RunningDistanceAccumulation accumulate(RunningDistance from, TrackPoint... points) {
@@ -165,7 +165,7 @@ class RunningDistanceAccumulatorTest {
         // given -> 의심점을 싣기 전 포맷에서 읽은 누적
         TrackPoint previous = point(0, 0);
         RunningDistance legacy = new RunningDistance(500, 0, previous.latitude(), previous.longitude(),
-                357, null, null);
+                357, null, null, null);
 
         // when
         TrackPoint next = point(1, 11);

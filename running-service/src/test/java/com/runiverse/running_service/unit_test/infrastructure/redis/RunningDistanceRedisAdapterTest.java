@@ -168,7 +168,8 @@ class RunningDistanceRedisAdapterTest {
     @DisplayName("저장한 값을 그대로 다시 읽어 낸다")
     void savesAndLoadsBack() {
         // given
-        RunningDistance saved = new RunningDistance(3000.25, 180L, 35.17955, 129.07564, 345, 35.17950, 129.07560);
+        RunningDistance saved = new RunningDistance(
+                3000.25, 180L, 35.17955, 129.07564, 345, 35.17950, 129.07560, null);
 
         // when -> 쓰기 포맷과 읽기 파서가 어긋나면 러닝 중에만 드러난다
         adapter.saveDistance(ROOM_ID, userId, saved);

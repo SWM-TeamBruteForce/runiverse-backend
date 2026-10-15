@@ -1014,7 +1014,7 @@ class RunningWebSocketHandlerTest {
     // 누적이 주어진 값 그대로 판정에 쓰인다
     private void givenStoredDistance(double meters) {
         given(loadRunningDistancePort.loadDistance(anyLong(), any()))
-                .willReturn(new RunningDistance(meters, 0L, 35.1795543, 129.0756416, 345, null, null));
+                .willReturn(new RunningDistance(meters, 0L, 35.1795543, 129.0756416, 345, null, null, null));
     }
 
     // 새 메시지 타입이 생겨도 연결이 끊기지 않는지 전수로 확인한다

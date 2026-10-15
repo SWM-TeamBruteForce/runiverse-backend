@@ -137,7 +137,7 @@ class ChangeLiveRunningStatusHandlerTest {
     // ── 트랙 일시정지 표시 ──
 
     private static RunningDistance distanceUpTo(long lastSequence) {
-        return new RunningDistance(1_980.4, lastSequence, 35.17955, 129.07564, 352, null, null);
+        return new RunningDistance(1_980.4, lastSequence, 35.17955, 129.07564, 352, null, null, null);
     }
 
     @Test

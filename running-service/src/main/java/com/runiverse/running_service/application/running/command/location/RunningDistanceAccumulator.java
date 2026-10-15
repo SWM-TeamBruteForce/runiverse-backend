@@ -5,6 +5,7 @@ import com.runiverse.running_service.application.running.common.TrackFilterPrope
 import com.runiverse.running_service.application.running.port.out.RunningDistance;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
 
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 
@@ -25,6 +26,7 @@ public final class RunningDistanceAccumulator {
         Integer lastPace = from.lastPaceSecondsPerKm();
         Double anchorLatitude = from.anchorLatitude();
         Double anchorLongitude = from.anchorLongitude();
+        LocalDateTime lastRecordedAt = from.lastRecordedAt();
         boolean observed = false;
         boolean moved = false;
         // 배치 안이 뒤섞여 와도 이어붙인 거리가 맞으려면 순번 순서로 훑어야 한다
@@ -44,6 +46,7 @@ public final class RunningDistanceAccumulator {
             lastSequence = point.sequence();
             lastLatitude = point.latitude();
             lastLongitude = point.longitude();
+            lastRecordedAt = point.recordedAt();
             // 거리에 반영한 좌표의 페이스만 남긴다 — 건너뛴 재전송분의 페이스를
             // 최신값으로 삼으면 화면이 지나간 구간의 속도로 되돌아간다
             lastPace = point.currentPaceSecondsPerKm();
@@ -68,7 +71,7 @@ public final class RunningDistanceAccumulator {
         }
         return new RunningDistanceAccumulation(
                 new RunningDistance(meters, lastSequence, lastLatitude, lastLongitude, lastPace,
-                        anchorLatitude, anchorLongitude),
+                        anchorLatitude, anchorLongitude, lastRecordedAt),
                 observed,
                 moved);
     }

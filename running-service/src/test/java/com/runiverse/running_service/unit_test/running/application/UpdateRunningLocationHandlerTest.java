@@ -207,7 +207,7 @@ public class UpdateRunningLocationHandlerTest {
         TrackPoint previous = trackPoint(2L);
         given(loadRunningDistancePort.loadDistance(anyLong(), any())).willReturn(
                 new RunningDistance(100.0, 2L, previous.latitude(), previous.longitude(),
-                        previous.currentPaceSecondsPerKm(), null, null));
+                        previous.currentPaceSecondsPerKm(), null, null, previous.recordedAt()));
         List<TrackPoint> points = List.of(trackPoint(3L), trackPoint(4L));
 
         // when
@@ -228,7 +228,8 @@ public class UpdateRunningLocationHandlerTest {
         // 그대로 더하면 거리가 두 배가 된다
         TrackPoint previous = trackPoint(2L);
         RunningDistance stored = new RunningDistance(
-                100.0, 2L, previous.latitude(), previous.longitude(), STORED_PACE, null, null);
+                100.0, 2L, previous.latitude(), previous.longitude(), STORED_PACE, null, null,
+                previous.recordedAt());
         given(loadRunningDistancePort.loadDistance(anyLong(), any())).willReturn(stored);
 
         // when -> 0,1,2는 이미 반영된 순번이다
@@ -531,7 +532,7 @@ public class UpdateRunningLocationHandlerTest {
         TrackPoint previous = trackPoint(2L);
         given(loadRunningDistancePort.loadDistance(anyLong(), any())).willReturn(
                 new RunningDistance(100.0, 2L, previous.latitude(), previous.longitude(),
-                        STORED_PACE, null, null));
+                        STORED_PACE, null, null, previous.recordedAt()));
 
         // when -> 0,1,2는 이미 거리에 반영된 순번이다
         updateRunningLocationHandler.handle(
@@ -645,7 +646,7 @@ public class UpdateRunningLocationHandlerTest {
         TrackPoint previous = trackPoint(2L);
         given(loadRunningDistancePort.loadDistance(anyLong(), any())).willReturn(
                 new RunningDistance(100.0, 2L, previous.latitude(), previous.longitude(),
-                        STORED_PACE, previous.latitude(), previous.longitude()));
+                        STORED_PACE, previous.latitude(), previous.longitude(), previous.recordedAt()));
 
         // when
         updateRunningLocationHandler.handle(command(List.of(trackPoint(1L), trackPoint(2L))));
