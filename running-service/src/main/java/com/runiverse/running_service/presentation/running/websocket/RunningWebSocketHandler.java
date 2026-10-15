@@ -278,7 +278,7 @@ public class RunningWebSocketHandler extends TextWebSocketHandler {
         send(session, RunningMessageType.RUNNING_FINISHED.message());
     }
 
-    // 일시정지·재개는 상대 화면 표시용이다 — 기록은 좌표 판정이 따로 지킨다.
+    // 일시정지·재개는 상대 화면 표시용이고, PAUSE는 그 뒤 공백을 기록에서 빼는 데도 쓴다.
     // ack가 없고 data는 보지 않는다. 상태가 그대로면 아무것도 나가지 않는다
     private void handleLiveStatus(WebSocketSession session, WebSocketEnvelope envelope,
                                   LiveRunningStatus status) throws IOException {

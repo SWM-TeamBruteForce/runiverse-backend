@@ -21,7 +21,7 @@ public class ChangeLiveRunningStatusHandler implements ChangeLiveRunningStatusUs
     private final LoadRunningDistancePort loadRunningDistancePort;
     private final MarkRunningTrackPausedPort markRunningTrackPausedPort;
 
-    // DB를 보지 않는다 — 끝난 참가자의 늦은 PAUSE는 FINISHED가 막고, 기록은 좌표 판정이 지킨다.
+    // DB를 보지 않는다 — 끝난 참가자의 늦은 PAUSE는 상태 변경을 FINISHED가 막고, 기록은 이미 확정돼 표시가 닿지 않는다.
     // Redis만 쓰므로 트랜잭션 경계도 두지 않는다
     @Override
     public void handle(ChangeLiveRunningStatusCommand command) {

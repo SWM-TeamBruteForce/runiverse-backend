@@ -35,7 +35,7 @@ public class UpdateRunningLocationHandler implements UpdateRunningLocationUsecas
     private final PublishRunningProgressPort publishRunningProgressPort;
     private final UpdateRunningComboJudge updateRunningComboJudge;
     private final UpdateRunningFinishJudge updateRunningFinishJudge;
-    // 의심점 반경·관측 정확도 상한 — 트랙 필터의 정지 판정과 같은 값을 쓴다
+    // 의심점 반경·관측 정확도 상한·일시정지 공백 — 트랙 필터와 같은 값을 쓴다
     private final TrackFilterProperties trackFilterProperties;
 
     @Override
