@@ -259,6 +259,141 @@ public class TrackFilterTest {
         assertThat(totalSeconds(filtered)).isEqualTo(90.0);
     }
 
+    // 2.8m/s로 60초 → 60초 동안 200m 공백(표시 없으면 터널로 인정되는 속도) → 30초
+    private static List<TrackPoint> runWithGapAt60() {
+        return new Track().at(0, 0, 0).run(60, 2.8).gap(60, 200.0).run(30, 2.8).points();
+    }
+
+    @Test
+    @DisplayName("여러 번 멈추면 표시마다 그 뒤의 공백을 뺀다")
+    void multiplePausesAreAllRemoved() {
+        // given -> 순번 60과 91 뒤에서 한 번씩 멈춘다
+        List<TrackPoint> points = new Track()
+                .at(0, 0, 0).run(60, 2.8)
+                .gap(60, 200.0)
+                .run(30, 2.8)
+                .gap(60, 200.0)
+                .run(30, 2.8)
+                .points();
+
+        // when
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(60L, 91L), PROPERTIES);
+
+        // then
+        assertThat(filtered.summary().pausedGapCount()).isEqualTo(2);
+        assertThat(filtered.totalMeters()).isCloseTo(120 * 2.8, within(TOLERANCE_METERS));
+        assertThat(totalSeconds(filtered)).isEqualTo(120.0);
+    }
+
+    @Test
+    @DisplayName("멈춘 채 끝나면 뺄 공백이 없어 그대로 센다")
+    void pausedAtEndRemovesNothing() {
+        // given -> 마지막 좌표(순번 60)에서 멈추고 재개하지 않았다
+        List<TrackPoint> points = new Track().at(0, 0, 0).run(60, 2.8).points();
+
+        // when
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(60L), PROPERTIES);
+
+        // then
+        assertThat(filtered.summary().pausedGapCount()).isZero();
+        assertThat(filtered.totalMeters()).isCloseTo(60 * 2.8, within(TOLERANCE_METERS));
+        assertThat(totalSeconds(filtered)).isEqualTo(60.0);
+    }
+
+    @Test
+    @DisplayName("멈추기 전 좌표가 PAUSE보다 늦게 와 표시가 앞서 찍혀도 범위 안의 공백을 뺀다")
+    void laggingMarkStillCatchesGap() {
+        // when -> 실제로는 60에서 멈췄지만 3개가 늦게 와 표시가 57이다
+        FilteredTrack filtered = TrackFilter.apply(runWithGapAt60(), List.of(57L), PROPERTIES);
+
+        // then
+        assertThat(filtered.summary().pausedGapCount()).isEqualTo(1);
+        assertThat(filtered.totalMeters()).isCloseTo(90 * 2.8, within(TOLERANCE_METERS));
+    }
+
+    @Test
+    @DisplayName("공백이 표시 뒤 범위 끝(10순번)에서 시작하면 빼고, 넘으면 관측 안 된 칸으로 판정한다")
+    void pausedGapWindowBoundary() {
+        // when -> 공백은 순번 60에서 시작한다
+        TrackFilterSummary inside = TrackFilter.apply(runWithGapAt60(), List.of(50L), PROPERTIES).summary();
+        TrackFilterSummary outside = TrackFilter.apply(runWithGapAt60(), List.of(49L), PROPERTIES).summary();
+
+        // then
+        assertThat(inside.pausedGapCount()).isEqualTo(1);
+        assertThat(outside.pausedGapCount()).isZero();
+        assertThat(outside.gapAcceptedCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("짧게 멈췄다 재개한 뒤 범위 밖에서 지난 터널은 그대로 인정한다")
+    void tunnelLongAfterShortPauseIsAccepted() {
+        // when -> 순번 30에서 공백 없이 바로 재개했고, 터널은 순번 60에서 시작한다
+        FilteredTrack filtered = TrackFilter.apply(runWithGapAt60(), List.of(30L), PROPERTIES);
+
+        // then
+        assertThat(filtered.summary().pausedGapCount()).isZero();
+        assertThat(filtered.summary().gapAcceptedCount()).isEqualTo(1);
+        assertThat(filtered.totalMeters()).isCloseTo(filtered.summary().rawMeters(), within(0.001));
+    }
+
+    @Test
+    @DisplayName("표시보다 앞에서 끝난 공백은 건드리지 않는다")
+    void gapBeforeMarkIsUntouched() {
+        // when -> 터널(60→61)을 지나고 순번 80에서 멈췄다
+        FilteredTrack filtered = TrackFilter.apply(runWithGapAt60(), List.of(80L), PROPERTIES);
+
+        // then
+        assertThat(filtered.summary().pausedGapCount()).isZero();
+        assertThat(filtered.summary().gapAcceptedCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("재연결로 같은 표시가 두 번 와도 공백은 한 번만 뺀다")
+    void duplicateMarksRemoveOnce() {
+        // when
+        FilteredTrack filtered = TrackFilter.apply(runWithGapAt60(), List.of(60L, 60L), PROPERTIES);
+
+        // then
+        assertThat(filtered.summary().pausedGapCount()).isEqualTo(1);
+        assertThat(filtered.totalMeters()).isCloseTo(90 * 2.8, within(TOLERANCE_METERS));
+    }
+
+    @Test
+    @DisplayName("10초 이하로 멈췄다 재개한 칸은 표시가 있어도 그대로 센다")
+    void shortPauseEdgeIsCounted() {
+        // given -> 순번 60에서 멈추고 8초 뒤 20m 앞에서 재개한다
+        List<TrackPoint> points = new Track()
+                .at(0, 0, 0).run(60, 2.8)
+                .gap(8, 20.0)
+                .run(30, 2.8)
+                .points();
+
+        // when
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(60L), PROPERTIES);
+
+        // then -> 수집 간격 문턱 아래라 평소 칸이다
+        assertThat(filtered.summary().pausedGapCount()).isZero();
+        assertThat(totalSeconds(filtered)).isEqualTo(98.0);
+    }
+
+    @Test
+    @DisplayName("제자리에서 멈췄다 재개하면 표시가 있어도 정지로 판정한다")
+    void pauseInPlaceWithMarkIsStop() {
+        // given
+        List<TrackPoint> points = new Track()
+                .at(0, 0, 0).run(60, 3.0)
+                .gap(60, 1.0)
+                .run(30, 3.0)
+                .points();
+
+        // when
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(60L), PROPERTIES);
+
+        // then -> 정지를 먼저 판정한다. 결과는 같고 집계만 정지로 남는다
+        assertThat(filtered.summary().stopCount()).isEqualTo(1);
+        assertThat(filtered.summary().pausedGapCount()).isZero();
+    }
+
     @Test
     @DisplayName("자기 페이스보다 훨씬 빠르게 비면 거리·시간 모두 빠진다")
     void fasterThanOwnPaceGapIsRejected() {
@@ -526,6 +661,28 @@ public class TrackFilterTest {
         assertThat(summary.stopCount()).isEqualTo(1);
         assertThat(summary.gapRejectedCount()).isEqualTo(1);
         assertThat(summary.rawMeters() - summary.filteredMeters()).isCloseTo(removed, within(1e-6));
+    }
+
+    @Test
+    @DisplayName("일시정지 공백으로 뺀 거리도 단계별 합에 들어간다")
+    void pausedGapMetersAddUp() {
+        // given -> 순번 60 뒤 일시정지 공백, 그 뒤 택시
+        List<TrackPoint> points = new Track()
+                .at(0, 0, 0).run(60, 2.8)
+                .gap(60, 200.0)
+                .run(30, 2.8)
+                .gap(60, 400.0)
+                .run(10, 2.8)
+                .points();
+
+        // when
+        TrackFilterSummary summary = TrackFilter.apply(points, List.of(60L), PROPERTIES).summary();
+
+        // then
+        assertThat(summary.pausedGapCount()).isEqualTo(1);
+        assertThat(summary.gapRejectedCount()).isEqualTo(1);
+        assertThat(summary.rawMeters() - summary.filteredMeters()).isCloseTo(
+                summary.pausedGapRemovedMeters() + summary.gapRejectedMeters(), within(1e-6));
     }
 
     @Test

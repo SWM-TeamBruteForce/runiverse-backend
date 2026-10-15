@@ -34,6 +34,7 @@ import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -464,6 +465,43 @@ class RunningTrackRedisAdapterTest {
 
         // when & then -> 부르는 쪽이 로그를 남긴다
         assertThatThrownBy(() -> adapter.markPaused(ROOM_ID, userId, 41L))
+                .isInstanceOf(RedisConnectionFailureException.class);
+        assertThat(log.events(Level.ERROR)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("일시정지 표시를 오름차순 순번으로 되읽는다")
+    void loadsPausedSequencesSorted() {
+        // given
+        SetOperations<String, String> setOperations = mock(SetOperations.class);
+        given(redisTemplate.opsForSet()).willReturn(setOperations);
+        given(setOperations.members("running:track:" + ROOM_ID + ":" + userId.value() + ":paused"))
+                .willReturn(Set.of("91", "7", "60"));
+
+        // when & then -> 집합은 꺼낸 순서가 없다
+        assertThat(adapter.loadPausedSequences(ROOM_ID, userId)).containsExactly(7L, 60L, 91L);
+    }
+
+    @Test
+    @DisplayName("일시정지 표시가 없으면 빈 목록이다")
+    void loadsEmptyWhenNotPaused() {
+        // given
+        SetOperations<String, String> setOperations = mock(SetOperations.class);
+        given(redisTemplate.opsForSet()).willReturn(setOperations);
+        given(setOperations.members(anyString())).willReturn(Set.of());
+
+        // when & then
+        assertThat(adapter.loadPausedSequences(ROOM_ID, userId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("일시정지 표시 조회 중 Redis가 닿지 않으면 잡지 않고 던진다")
+    void throwsOnLoadPausedFailure() {
+        // given
+        given(redisTemplate.opsForSet()).willThrow(new RedisConnectionFailureException("redis down"));
+
+        // when & then
+        assertThatThrownBy(() -> adapter.loadPausedSequences(ROOM_ID, userId))
                 .isInstanceOf(RedisConnectionFailureException.class);
         assertThat(log.events(Level.ERROR)).isEmpty();
     }

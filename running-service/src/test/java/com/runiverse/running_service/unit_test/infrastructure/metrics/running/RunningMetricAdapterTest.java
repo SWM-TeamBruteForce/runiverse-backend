@@ -54,6 +54,21 @@ public class RunningMetricAdapterTest {
     }
 
     @Test
+    @DisplayName("일시정지 공백으로 뺀 거리는 paused 태그로 기록한다")
+    void recordsPausedGapMeters() {
+        // given -> 일시정지 공백 1칸 180m만 뺐다
+        TrackFilterSummary paused = new TrackFilterSummary(
+                1_180, 1_000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 180, 0, 0, 0, 0, 0, 0);
+
+        // when
+        adapter.trackFiltered(paused);
+
+        // then -> 관측 안 된 칸(gap)과 섞이지 않는다
+        assertThat(filtered("paused").totalAmount()).isEqualTo(180.0);
+        assertThat(filtered("gap").totalAmount()).isZero();
+    }
+
+    @Test
     @DisplayName("뺀 거리가 0인 러닝도 표본으로 남긴다")
     void recordsZeroRemovedMeters() {
         // given -> 아무것도 거르지 않은 러닝

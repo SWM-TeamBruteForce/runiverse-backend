@@ -1122,6 +1122,73 @@ public class RunningFinisherTest {
     }
 
     @Nested
+    @DisplayName("일시정지 공백 테스트")
+    class PausedGapTest {
+
+        // 2.8m/s로 300초(840m) → 멈춘 채 60초 동안 200m 이동 → 2.8m/s로 300초(840m).
+        // 공백은 3.3m/s라 표시가 없으면 터널로 인정된다
+        private RunningTrack trackWithPausedGap() {
+            List<TrackPoint> points = new ArrayList<>();
+            for (int i = 0; i <= 300; i++) {
+                points.add(point(i, i * 2.8, i));
+            }
+            for (int i = 0; i <= 300; i++) {
+                points.add(point(301 + i, 1_040 + i * 2.8, 360 + i));
+            }
+            return new RunningTrack("raw", points);
+        }
+
+        private static TrackPoint point(long sequence, double meters, long second) {
+            return new TrackPoint(sequence, 37.5 + meters / METERS_PER_DEGREE, 127.0,
+                    null, 5.0, null, null, CADENCE, null, TRACK_START.plusSeconds(second));
+        }
+
+        private int finishSolo() {
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.SOLO, null));
+            givenTrack(trackWithPausedGap());
+            finish();
+            return savedRecord().getTotalDistance().meters();
+        }
+
+        @Test
+        @DisplayName("멈추기 전 순번 표시가 있으면 그 뒤 공백을 확정 거리에서 뺀다")
+        void removesPausedGapFromRecord() {
+            // given
+            given(loadRunningTrackPausesPort.loadPausedSequences(ROOM_ID, new UserId(USER_ID)))
+                    .willReturn(List.of(300L));
+
+            // when
+            int meters = finishSolo();
+
+            // then -> 1,680m만 남는다. 공백을 인정하면 1,880m다
+            assertThat(meters).isBetween(1_670, 1_680);
+        }
+
+        @Test
+        @DisplayName("표시를 못 읽으면 ERROR만 남기고 표시 없이 확정한다")
+        void finishesWithoutMarksWhenLoadFails() {
+            // given
+            willThrow(new IllegalStateException("redis down"))
+                    .given(loadRunningTrackPausesPort).loadPausedSequences(ROOM_ID, new UserId(USER_ID));
+            LogCapture log = LogCapture.of(RunningFinisher.class);
+
+            try {
+                // when -> 신호가 유실된 것과 같다. 공백은 지금처럼 터널로 인정된다
+                int meters = finishSolo();
+
+                // then
+                assertThat(meters).isBetween(1_870, 1_880);
+                assertThat(log.messages(Level.ERROR)).containsExactly(
+                        "[러닝] 트랙 일시정지 표시 조회 실패: 처리하지 못한 예외 - roomId=" + ROOM_ID
+                                + ", userId=" + USER_ID);
+            } finally {
+                log.stop();
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("확정 거리 미달 시 미루기 테스트")
     class GoalCheckTest {
 
