@@ -117,7 +117,7 @@ class ChangeLiveRunningStatusHandlerTest {
     @Test
     @DisplayName("일시정지 표시를 못 남겨도 던지지 않고 ERROR로 남긴다")
     void swallowsPauseMarkFailure() {
-        // given -> 좌표를 받기 전이라 트랙 표시는 남기지 않는다. 콤보 표시 실패만 본다
+        // given -> 트랙 표시는 남기지 않아 콤보 표시 실패만 본다
         given(loadRunningDistancePort.loadDistance(ROOM_ID, new UserId(USER_ID)))
                 .willReturn(RunningDistance.empty());
         willThrow(new IllegalStateException("redis down"))
@@ -191,7 +191,7 @@ class ChangeLiveRunningStatusHandlerTest {
         willThrow(new IllegalStateException("redis down"))
                 .given(markRunningTrackPausedPort).markPaused(ROOM_ID, new UserId(USER_ID), 41L);
 
-        // when -> 표시가 없으면 이번 공백은 지금처럼 관측 안 된 칸으로 판정된다
+        // when
         assertThatCode(() -> handler.handle(new ChangeLiveRunningStatusCommand(
                 USER_ID, ROOM_ID, 5_000, LiveRunningStatus.PAUSED)))
                 .doesNotThrowAnyException();

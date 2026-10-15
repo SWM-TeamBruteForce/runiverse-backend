@@ -47,8 +47,7 @@ public class ChangeLiveRunningStatusHandler implements ChangeLiveRunningStatusUs
         }
     }
 
-    // 멈추기 전 마지막 순번을 남긴다 — 트랙 필터가 이 뒤의 공백을 거리·시간에서 뺀다.
-    // 이 신호도 빼는 쪽으로만 쓴다: 조작해 봐야 자기 거리를 잃을 뿐이다
+    // 멈추기 전 마지막 순번을 남긴다 — 트랙 필터가 이 뒤의 공백을 뺀다
     private void markTrackPaused(Long runningRoomId, UserId userId) {
         try {
             long lastSequence = loadRunningDistancePort.loadDistance(runningRoomId, userId).lastSequence();
@@ -58,7 +57,7 @@ public class ChangeLiveRunningStatusHandler implements ChangeLiveRunningStatusUs
             }
             markRunningTrackPausedPort.markPaused(runningRoomId, userId, lastSequence);
         } catch (RuntimeException e) {
-            // 표시를 못 남기면 이번 공백은 지금처럼 관측 안 된 칸으로 판정된다
+            // 표시가 없으면 공백은 지금처럼 판정된다
             log.error("[러닝] 트랙 일시정지 표시 실패: 처리하지 못한 예외 - roomId={}, userId={}",
                     runningRoomId, userId.value(), e);
         }

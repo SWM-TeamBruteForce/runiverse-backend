@@ -450,7 +450,7 @@ class RunningTrackRedisAdapterTest {
         // when
         adapter.markPaused(ROOM_ID, userId, 41L);
 
-        // then -> SADD는 TTL을 건드리지 않는다. 다시 걸지 않으면 첫 표시 시각 기준으로 사라진다
+        // then -> SADD는 TTL을 건드리지 않아 다시 건다
         verify(setOperations).add(key, "41");
         verify(redisTemplate).expire(key, TTL);
         assertThat(access("running", "write", "success").count()).isEqualTo(1);
@@ -474,7 +474,7 @@ class RunningTrackRedisAdapterTest {
         // when
         adapter.delete(ROOM_ID, userId);
 
-        // then -> 남기면 같은 방·참가자로 다시 쌓일 일은 없지만 TTL까지 자리를 차지한다
+        // then
         String prefix = "running:track:" + ROOM_ID + ":" + userId.value();
         verify(redisTemplate).delete(List.of(prefix, prefix + ":seen", prefix + ":paused"));
     }

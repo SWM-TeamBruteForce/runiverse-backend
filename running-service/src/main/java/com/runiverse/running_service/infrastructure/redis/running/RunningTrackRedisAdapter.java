@@ -192,8 +192,7 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
         return fragments;
     }
 
-    // 집합이라 재연결 뒤 같은 순번으로 다시 온 PAUSE는 하나로 남는다.
-    // 잡지 않고 던진다 — 부르는 쪽이 로그를 남긴다
+    // 집합이라 재연결 뒤 다시 온 PAUSE도 하나로 남는다. 잡지 않고 던진다
     @Override
     public void markPaused(Long runningRoomId, UserId userId, long lastSequence) {
         String key = pausedKey(runningRoomId, userId);
@@ -237,7 +236,7 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
                 String.valueOf(runningRoomId), userId.value().toString(), "seen");
     }
 
-    // 일시정지 표시 — PAUSE를 받은 시점의 마지막 순번들
+    // 일시정지 표시 — PAUSE 때의 마지막 순번들
     private String pausedKey(Long runningRoomId, UserId userId) {
         return RedisKey.RUNNING_TRACK.of(
                 String.valueOf(runningRoomId), userId.value().toString(), "paused");
