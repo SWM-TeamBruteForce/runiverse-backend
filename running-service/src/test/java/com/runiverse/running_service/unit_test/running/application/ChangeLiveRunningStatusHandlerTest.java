@@ -6,7 +6,10 @@ import com.runiverse.running_service.application.running.command.status.ChangeLi
 import com.runiverse.running_service.application.running.command.status.ChangeLiveRunningStatusHandler;
 import com.runiverse.running_service.application.running.common.LiveRunningStatusChanger;
 import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
+import com.runiverse.running_service.application.running.port.out.LoadRunningDistancePort;
 import com.runiverse.running_service.application.running.port.out.MarkRunningComboPausedPort;
+import com.runiverse.running_service.application.running.port.out.MarkRunningTrackPausedPort;
+import com.runiverse.running_service.application.running.port.out.RunningDistance;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.support.LogCapture;
 import org.junit.jupiter.api.AfterEach;
@@ -24,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -41,6 +45,12 @@ class ChangeLiveRunningStatusHandlerTest {
 
     @Mock
     private MarkRunningComboPausedPort markRunningComboPausedPort;
+
+    @Mock
+    private LoadRunningDistancePort loadRunningDistancePort;
+
+    @Mock
+    private MarkRunningTrackPausedPort markRunningTrackPausedPort;
 
     @InjectMocks
     private ChangeLiveRunningStatusHandler handler;
@@ -107,7 +117,9 @@ class ChangeLiveRunningStatusHandlerTest {
     @Test
     @DisplayName("일시정지 표시를 못 남겨도 던지지 않고 ERROR로 남긴다")
     void swallowsPauseMarkFailure() {
-        // given
+        // given -> 좌표를 받기 전이라 트랙 표시는 남기지 않는다. 콤보 표시 실패만 본다
+        given(loadRunningDistancePort.loadDistance(ROOM_ID, new UserId(USER_ID)))
+                .willReturn(RunningDistance.empty());
         willThrow(new IllegalStateException("redis down"))
                 .given(markRunningComboPausedPort).markPaused(ROOM_ID, new UserId(USER_ID));
 
