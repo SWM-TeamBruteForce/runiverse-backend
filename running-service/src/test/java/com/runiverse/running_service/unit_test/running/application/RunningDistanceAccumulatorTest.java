@@ -38,6 +38,20 @@ class RunningDistanceAccumulatorTest {
         return point(sequence, meters, GOOD_ACCURACY);
     }
 
+    // 측정 시각을 따로 정한 좌표 — 일시정지 공백처럼 순번과 초가 어긋나는 칸을 만든다
+    private static TrackPoint pointAt(long sequence, double meters, long second) {
+        return new TrackPoint(
+                sequence,
+                BASE_LATITUDE + meters * METER_IN_LATITUDE,
+                BASE_LONGITUDE,
+                38.5, GOOD_ACCURACY, 2.8, 0.0, 170, 357, RECORDED_AT.plusSeconds(second));
+    }
+
+    private static RunningDistanceAccumulation accumulate(RunningDistance from, List<Long> pausedSequences,
+                                                          TrackPoint... points) {
+        return RunningDistanceAccumulator.accumulate(from, List.of(points), pausedSequences, DEFAULT_PROPERTIES);
+    }
+
     // 의심점이 기준점에 있는 누적 — 직전 배치까지 순번 0을 받았다
     private static RunningDistance anchoredAtOrigin() {
         TrackPoint origin = point(0, 0);
@@ -46,7 +60,24 @@ class RunningDistanceAccumulatorTest {
     }
 
     private static RunningDistanceAccumulation accumulate(RunningDistance from, TrackPoint... points) {
-        return RunningDistanceAccumulator.accumulate(from, List.of(points), DEFAULT_PROPERTIES);
+        return accumulate(from, List.of(), points);
+    }
+
+    @Test
+    @DisplayName("일시정지 표시 뒤 공백 칸은 누적 거리에 더하지 않는다")
+    void skipsPausedGapEdge() {
+        // given -> 순번 0에서 멈추고 60초 뒤 200m 앞에서 재개했다
+        TrackPoint resumed = pointAt(1, 200, 60);
+        assertThat(accumulate(anchoredAtOrigin(), resumed).distance().meters())
+                .isGreaterThan(190);   // 표시가 없으면 재개하는 순간 200m가 튄다
+
+        // when
+        RunningDistanceAccumulation result = accumulate(anchoredAtOrigin(), List.of(0L), resumed);
+
+        // then -> 마지막 좌표는 재개한 자리로 옮겨 다음 칸부터 이어 센다
+        assertThat(result.distance().meters()).isZero();
+        assertThat(result.distance().lastSequence()).isEqualTo(1L);
+        assertThat(result.distance().lastRecordedAt()).isEqualTo(resumed.recordedAt());
     }
 
     @Test

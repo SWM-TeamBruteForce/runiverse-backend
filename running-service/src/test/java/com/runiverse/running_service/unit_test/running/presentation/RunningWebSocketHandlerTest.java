@@ -27,6 +27,7 @@ import com.runiverse.running_service.application.running.port.out.LiveRunningSta
 import com.runiverse.running_service.application.running.port.out.LiveRunningStatusChange;
 import com.runiverse.running_service.application.running.port.out.LoadLiveRunningStatusPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningDistancePort;
+import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPausesPort;
 import com.runiverse.running_service.application.running.port.out.PublishRunningProgressPort;
 import com.runiverse.running_service.application.running.port.out.PublishSupersedePort;
 import com.runiverse.running_service.application.running.port.out.RunningComboPeer;
@@ -138,6 +139,9 @@ class RunningWebSocketHandlerTest {
     private LoadRunningDistancePort loadRunningDistancePort;
 
     @Mock
+    private LoadRunningTrackPausesPort loadRunningTrackPausesPort;
+
+    @Mock
     private SaveRunningDistancePort saveRunningDistancePort;
 
     @Mock
@@ -191,7 +195,7 @@ class RunningWebSocketHandlerTest {
                         new LiveRunningStatusChanger(changeLiveRunningStatusPort,
                                 loadRunningDistancePort, publishRunningProgressPort)),
                 new UpdateRunningLocationHandler(appendRunningTrackPort, loadRunningDistancePort,
-                        saveRunningDistancePort, changeLiveRunningStatusPort, loadLiveRunningStatusPort,
+                        loadRunningTrackPausesPort, saveRunningDistancePort, changeLiveRunningStatusPort, loadLiveRunningStatusPort,
                         publishRunningProgressPort, updateRunningComboJudge,
                         new UpdateRunningFinishJudge(runningFinisher),
                 DEFAULT_PROPERTIES),

@@ -16,6 +16,7 @@ import com.runiverse.running_service.application.running.port.out.LiveRunningSta
 import com.runiverse.running_service.application.running.port.out.LiveRunningStatusChange;
 import com.runiverse.running_service.application.running.port.out.LoadLiveRunningStatusPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningDistancePort;
+import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPausesPort;
 import com.runiverse.running_service.application.running.port.out.PublishRunningProgressPort;
 import com.runiverse.running_service.application.running.port.out.RunningDistance;
 import com.runiverse.running_service.application.running.port.out.RunningProgress;
@@ -73,6 +74,9 @@ public class UpdateRunningLocationHandlerTest {
     private LoadRunningDistancePort loadRunningDistancePort;
 
     @Mock
+    private LoadRunningTrackPausesPort loadRunningTrackPausesPort;
+
+    @Mock
     private SaveRunningDistancePort saveRunningDistancePort;
 
     @Mock
@@ -103,6 +107,7 @@ public class UpdateRunningLocationHandlerTest {
         updateRunningLocationHandler = new UpdateRunningLocationHandler(
                 appendRunningTrackPort,
                 loadRunningDistancePort,
+                loadRunningTrackPausesPort,
                 saveRunningDistancePort,
                 changeLiveRunningStatusPort,
                 loadLiveRunningStatusPort,

@@ -9,6 +9,7 @@ import com.runiverse.running_service.application.running.port.out.ChangeLiveRunn
 import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
 import com.runiverse.running_service.application.running.port.out.LoadLiveRunningStatusPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningDistancePort;
+import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPausesPort;
 import com.runiverse.running_service.application.running.port.out.PublishRunningProgressPort;
 import com.runiverse.running_service.application.running.port.out.RunningDistance;
 import com.runiverse.running_service.application.running.port.out.RunningProgress;
@@ -18,6 +19,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -25,6 +28,7 @@ public class UpdateRunningLocationHandler implements UpdateRunningLocationUsecas
 
     private final AppendRunningTrackPort appendRunningTrackPort;
     private final LoadRunningDistancePort loadRunningDistancePort;
+    private final LoadRunningTrackPausesPort loadRunningTrackPausesPort;
     private final SaveRunningDistancePort saveRunningDistancePort;
     private final ChangeLiveRunningStatusPort changeLiveRunningStatusPort;
     private final LoadLiveRunningStatusPort loadLiveRunningStatusPort;
@@ -59,8 +63,8 @@ public class UpdateRunningLocationHandler implements UpdateRunningLocationUsecas
             return UpdateRunningLocationResult.ofRunning();
         }
 
-        RunningDistanceAccumulation accumulation =
-                RunningDistanceAccumulator.accumulate(stored, command.points(), trackFilterProperties);
+        RunningDistanceAccumulation accumulation = RunningDistanceAccumulator.accumulate(stored,
+                command.points(), pausedSequences(command.runningRoomId(), userId), trackFilterProperties);
         RunningDistance updated = accumulation.distance();
         saveRunningDistancePort.saveDistance(command.runningRoomId(), userId, updated);
         // 3. 방 참가자에게 진행 상황을 알린다
@@ -99,6 +103,17 @@ public class UpdateRunningLocationHandler implements UpdateRunningLocationUsecas
             log.error("[러닝] 참가자 상태 갱신 실패: 처리하지 못한 예외 - roomId={}, userId={}",
                     runningRoomId, userId.value(), e);
             return LiveRunningStatus.RUNNING;
+        }
+    }
+
+    // 못 읽으면 표시 없이 센다 — 이번 배치의 공백만 지금처럼 더해진다
+    private List<Long> pausedSequences(Long runningRoomId, UserId userId) {
+        try {
+            return loadRunningTrackPausesPort.loadPausedSequences(runningRoomId, userId);
+        } catch (RuntimeException e) {
+            log.error("[러닝] 트랙 일시정지 표시 조회 실패: 처리하지 못한 예외 - roomId={}, userId={}",
+                    runningRoomId, userId.value(), e);
+            return List.of();
         }
     }
 

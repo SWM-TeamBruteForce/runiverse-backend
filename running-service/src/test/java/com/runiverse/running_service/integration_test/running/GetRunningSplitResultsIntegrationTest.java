@@ -106,7 +106,7 @@ public class GetRunningSplitResultsIntegrationTest extends IntegrationTestSuppor
                 // 메트릭은 이 테스트의 관심사가 아니다 — 메모리 레지스트리에 흘려보낸다
                 new RunningMetricAdapter(new SimpleMeterRegistry()));
         updateRunningLocationHandler = new UpdateRunningLocationHandler(
-                runningTrackStore, runningDistanceStore, runningDistanceStore,
+                runningTrackStore, runningDistanceStore, runningTrackStore, runningDistanceStore,
                 liveRunningStatusStore, liveRunningStatusStore,
                 runningProgressPublisher, newUpdateRunningComboJudge(),
                 new UpdateRunningFinishJudge(runningFinisher),

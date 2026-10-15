@@ -1,15 +1,19 @@
 package com.runiverse.running_service.application.running.command.location;
 
 import com.runiverse.running_service.application.running.common.TrackDistance;
+import com.runiverse.running_service.application.running.common.TrackFilter;
 import com.runiverse.running_service.application.running.common.TrackFilterProperties;
 import com.runiverse.running_service.application.running.port.out.RunningDistance;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 
 public final class RunningDistanceAccumulator {
+
+    private static final double MILLIS_PER_SECOND = 1_000.0;
 
     private RunningDistanceAccumulator() {
     }
@@ -17,8 +21,9 @@ public final class RunningDistanceAccumulator {
     // 거리와 의심점을 같은 좌표로 한 번에 훑는다 — 의심점을 따로 저장하면 배치마다 왕복이 하나 는다.
     // 의심점 반경과 관측 정확도 상한은 트랙 필터의 정지 판정과 같다:
     // 기록과 콤보에서 "멈춤"의 뜻이 같아야 한다
-    public static RunningDistanceAccumulation accumulate(
-            RunningDistance from, List<TrackPoint> points, TrackFilterProperties filter) {
+    public static RunningDistanceAccumulation accumulate(RunningDistance from, List<TrackPoint> points,
+                                                         List<Long> pausedSequences,
+                                                         TrackFilterProperties filter) {
         double meters = from.meters();
         long lastSequence = from.lastSequence();
         Double lastLatitude = from.lastLatitude();
@@ -39,7 +44,9 @@ public final class RunningDistanceAccumulator {
             if (point.sequence() <= lastSequence) {
                 continue;
             }
-            if (lastLatitude != null) {
+            // 일시정지 공백은 트랙 필터와 같은 식으로 뺀다 — 안 빼면 재개하는 순간 상대 화면 거리가 튄다
+            if (lastLatitude != null
+                    && !isPausedGap(lastSequence, lastRecordedAt, point, pausedSequences, filter)) {
                 meters += TrackDistance.between(
                         lastLatitude, lastLongitude, point.latitude(), point.longitude());
             }
@@ -74,6 +81,16 @@ public final class RunningDistanceAccumulator {
                         anchorLatitude, anchorLongitude, lastRecordedAt),
                 observed,
                 moved);
+    }
+
+    // 시각을 모르는 옛 값이면 판정하지 않고 지금처럼 센다
+    private static boolean isPausedGap(long lastSequence, LocalDateTime lastRecordedAt, TrackPoint point,
+                                       List<Long> pausedSequences, TrackFilterProperties filter) {
+        if (lastRecordedAt == null) {
+            return false;
+        }
+        double seconds = Duration.between(lastRecordedAt, point.recordedAt()).toMillis() / MILLIS_PER_SECOND;
+        return TrackFilter.isPausedGap(lastSequence, point.sequence(), seconds, pausedSequences, filter);
     }
 
     // 트랙 필터의 정지 반경과 같다 — 상한이 없으면 정확도가 나쁜 곳에서 달리는 사람도 반경 안에 머문 것으로 잡힌다

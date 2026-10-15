@@ -133,6 +133,7 @@ public class FinishRunningIntegrationTest extends IntegrationTestSupport {
         updateRunningLocationHandler = new UpdateRunningLocationHandler(
                 runningTrackStore,     // AppendRunningTrackPort
                 runningDistanceStore,  // LoadRunningDistancePort
+                runningTrackStore,     // LoadRunningTrackPausesPort
                 runningDistanceStore,  // SaveRunningDistancePort
                 liveRunningStatusStore,   // ChangeLiveRunningStatusPort
                 liveRunningStatusStore,   // LoadLiveRunningStatusPort
