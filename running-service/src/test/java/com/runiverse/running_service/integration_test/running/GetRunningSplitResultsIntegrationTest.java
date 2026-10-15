@@ -86,7 +86,8 @@ public class GetRunningSplitResultsIntegrationTest extends IntegrationTestSuppor
         startRunningHandler = new StartRunningHandler(
                 runningStore, runningStore, runningStore, runningStore);
         RunningFinisher runningFinisher = new RunningFinisher(
-                runningStore, runningStore, runningTrackStore, onboardingStore, weatherProvider,
+                runningStore, runningStore, runningTrackStore, runningTrackStore, onboardingStore,
+                weatherProvider,
                 gpsTrackUploader, runningRecordStore, runningStore, runningTrackStore,
                 runningStore, runningStore,
                 // 쿨다운 발급은 이 테스트의 주제가 아니다 — 아무것도 하지 않는다

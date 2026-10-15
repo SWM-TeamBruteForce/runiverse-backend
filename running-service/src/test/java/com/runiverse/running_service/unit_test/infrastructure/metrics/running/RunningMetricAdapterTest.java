@@ -29,6 +29,7 @@ public class RunningMetricAdapterTest {
                 3, 2, 1,
                 100, 30,
                 300, 60,
+                0, 0,
                 2, 40, 40,
                 25, 5,
                 0);
@@ -57,7 +58,7 @@ public class RunningMetricAdapterTest {
     void recordsZeroRemovedMeters() {
         // given -> 아무것도 거르지 않은 러닝
         TrackFilterSummary clean = new TrackFilterSummary(
-                1_000, 1_000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                1_000, 1_000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
         // when
         adapter.trackFiltered(clean);

@@ -8,6 +8,7 @@ public record TrackFilterSummary(
         int gapEdgeCount, int gapAcceptedCount, int gapRejectedCount,
         double gapAcceptedMeters, double gapRejectedMeters,
         double maxGapEdgeMeters, double maxGapEdgeSeconds,
+        int pausedGapCount, double pausedGapRemovedMeters,
         int stopCount, double stopSeconds, double stopRemovedMeters,
         double maxStopSeconds, double maxStopDisplacementMeters,
         int radiusClampedCount

@@ -25,7 +25,9 @@ public record TrackFilterProperties(
         @NotNull @DecimalMin("1.0") Double gapSpeedToleranceRatio,
         @NotNull @Positive Integer gapReferenceWindowSeconds,
         // 출발 직후라 비교할 직전 속도가 없을 때의 상한
-        @NotNull @Positive Double gapFallbackMaxSpeedMetersPerSecond
+        @NotNull @Positive Double gapFallbackMaxSpeedMetersPerSecond,
+        // 일시정지 표시 뒤 이 순번 수 안에서 시작한 공백만 뺀다
+        @NotNull @Positive Integer pausedGapSequenceWindow
 ) {
 
     // null 검사는 @NotNull이 따로 보고한다 — 여기서 터지면 원인이 가려진다

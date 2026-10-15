@@ -98,6 +98,7 @@ public class GetMyRunningRecordsIntegrationTest extends IntegrationTestSupport {
                 runningStore,       // LockRunningRoomPort
                 runningStore,       // LockRunningPlayerPort
                 runningTrackStore,  // LoadRunningTrackPort
+                runningTrackStore,  // LoadRunningTrackPausesPort
                 onboardingStore,    // LoadUserWeightPort
                 weatherProvider,    // LoadWeatherPort
                 gpsTrackUploader,   // SaveGpsTrackPort

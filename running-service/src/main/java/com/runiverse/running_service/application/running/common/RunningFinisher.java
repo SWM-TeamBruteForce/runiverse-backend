@@ -12,6 +12,7 @@ import com.runiverse.running_service.application.running.port.out.ExistsRunningR
 import com.runiverse.running_service.application.running.port.out.GpsTrackUpload;
 import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
 import com.runiverse.running_service.application.running.port.out.LoadRecentRunningPacesPort;
+import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPausesPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.LoadUserWeightPort;
 import com.runiverse.running_service.application.running.port.out.LoadWeatherPort;
@@ -63,6 +64,7 @@ public class RunningFinisher {
     private final LockRunningRoomPort lockRunningRoomPort;
     private final LockRunningPlayerPort lockRunningPlayerPort;
     private final LoadRunningTrackPort loadRunningTrackPort;
+    private final LoadRunningTrackPausesPort loadRunningTrackPausesPort;
     private final LoadUserWeightPort loadUserWeightPort;
     private final LoadWeatherPort loadWeatherPort;
     private final SaveGpsTrackPort saveGpsTrackPort;
@@ -141,7 +143,8 @@ public class RunningFinisher {
         // 3. 마지막 수신 좌표까지로 지표를 낸다. 멈춘 동안의 흔들림·GPS 튐·관측 못 한 이동은 먼저 걸러낸다.
         //    산출할 수 없는 트랙이면 실제 거리를 0으로 보고 상태만 확정한다
         RunningTrack track = loadRunningTrackPort.load(runningRoomId, userId);
-        FilteredTrack filtered = TrackFilter.apply(track.points(), trackFilterProperties);
+        FilteredTrack filtered = TrackFilter.apply(track.points(),
+                pausedSequences(runningRoomId, userId), trackFilterProperties);
         // 유저 종료면 마지막 좌표가 얼마나 묵었는지 본다 — 길면 클라가 남은 좌표를 먼저 보내지 않은 것이다
         Long lastPointLagSec = onGoal ? null : lastPointLagSeconds(track);
         if (deferIfShort) {
@@ -352,6 +355,17 @@ public class RunningFinisher {
         }
     }
 
+    // 못 읽으면 표시 없이 확정한다 — 신호가 유실된 것과 같아 공백은 지금처럼 판정된다
+    private List<Long> pausedSequences(Long runningRoomId, UserId userId) {
+        try {
+            return loadRunningTrackPausesPort.loadPausedSequences(runningRoomId, userId);
+        } catch (RuntimeException e) {
+            log.error("[러닝] 트랙 일시정지 표시 조회 실패: 처리하지 못한 예외 - roomId={}, userId={}",
+                    runningRoomId, userId.value(), e);
+            return List.of();
+        }
+    }
+
     // 최근 N건의 거리 합·시간 합으로 다시 낸다. 기록별 avg_pace의 산술 평균은
     // 300m 러닝과 10km 러닝을 같은 무게로 세서 짧은 기록이 값을 끌고 간다
     private void updateAvgPace(UserId userId) {
@@ -398,7 +412,8 @@ public class RunningFinisher {
                         + "accuracyRemovedDistanceM={}, spikePointCount={}, "
                         + "jumpEdgeCount={}, spikeRemovedDistanceM={}, "
                         + "gapEdgeCount={}, gapAcceptedCount={}, gapRejectedCount={}, "
-                        + "gapRejectedDistanceM={}, maxGapEdgeM={}, maxGapEdgeSec={}, stopCount={}, "
+                        + "gapRejectedDistanceM={}, maxGapEdgeM={}, maxGapEdgeSec={}, "
+                        + "pausedGapCount={}, pausedGapRemovedDistanceM={}, stopCount={}, "
                         + "stopSec={}, stopRemovedDistanceM={}, maxStopSec={}, "
                         + "maxStopDisplacementM={}, radiusClampedCount={}",
                 runningRoomId, userId, onGoal ? "GOAL" : "FINISH", lastPointLagSec,
@@ -408,7 +423,9 @@ public class RunningFinisher {
                 summary.jumpEdgeCount(), Math.round(summary.spikeRemovedMeters()),
                 summary.gapEdgeCount(), summary.gapAcceptedCount(), summary.gapRejectedCount(),
                 Math.round(summary.gapRejectedMeters()), Math.round(summary.maxGapEdgeMeters()),
-                Math.round(summary.maxGapEdgeSeconds()), summary.stopCount(),
+                Math.round(summary.maxGapEdgeSeconds()),
+                summary.pausedGapCount(), Math.round(summary.pausedGapRemovedMeters()),
+                summary.stopCount(),
                 Math.round(summary.stopSeconds()), Math.round(summary.stopRemovedMeters()),
                 Math.round(summary.maxStopSeconds()), Math.round(summary.maxStopDisplacementMeters()),
                 summary.radiusClampedCount());

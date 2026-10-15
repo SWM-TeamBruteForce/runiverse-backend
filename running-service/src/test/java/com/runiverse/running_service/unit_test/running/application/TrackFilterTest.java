@@ -28,9 +28,9 @@ public class TrackFilterTest {
     private static final double TOLERANCE_METERS = 0.5;
 
     // 운영 시작값 그대로 — 정확도 50m, 최대 속도 12m/s, 정지 5~8m·10초,
-    // 관측 안 된 칸 10초·500m·1.5m/s·×1.3·300초·출발 직후 7m/s
+    // 관측 안 된 칸 10초·500m·1.5m/s·×1.3·300초·출발 직후 7m/s, 일시정지 범위 10순번
     private static final TrackFilterProperties PROPERTIES = new TrackFilterProperties(
-            50.0, 12.0, 5.0, 8.0, 10, 10, 500.0, 1.5, 1.3, 300, 7.0);
+            50.0, 12.0, 5.0, 8.0, 10, 10, 500.0, 1.5, 1.3, 300, 7.0, 10);
 
     // 출발점 기준 미터 좌표로 트랙을 쌓는다 — north는 북쪽, east는 동쪽, second는 출발부터 초
     private static final class Track {
@@ -86,7 +86,7 @@ public class TrackFilterTest {
     }
 
     private static double pathMeters(List<TrackPoint> points) {
-        FilteredTrack untouched = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack untouched = TrackFilter.apply(points, List.of(), PROPERTIES);
         return untouched.summary().rawMeters();
     }
 
@@ -102,7 +102,7 @@ public class TrackFilterTest {
         List<TrackPoint> points = new Track().at(0, 0, 0).run(100, 3.0).points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then
         assertThat(filtered.points()).hasSize(101);
@@ -127,7 +127,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then -> A~D는 한 점으로 접힌다. Z→A, D→E, E→F만 센다
         double[] meters = filtered.cumulativeMeters();
@@ -154,7 +154,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then
         assertThat(filtered.summary().stopCount()).isZero();
@@ -168,7 +168,7 @@ public class TrackFilterTest {
         List<TrackPoint> points = new Track().at(0, 0, 0).run(60, 3.0).jitter(20, 1.0).points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then
         assertThat(filtered.summary().stopCount()).isEqualTo(1);
@@ -189,7 +189,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then
         assertThat(filtered.summary().spikePointCount()).isEqualTo(1);
@@ -209,7 +209,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then -> 관측 안 된 칸이 아니라 정지로 처리된다
         assertThat(filtered.summary().stopCount()).isEqualTo(1);
@@ -229,12 +229,34 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then
         assertThat(filtered.summary().gapAcceptedCount()).isEqualTo(1);
         assertThat(filtered.totalMeters()).isCloseTo(filtered.summary().rawMeters(), within(0.001));
         assertThat(totalSeconds(filtered)).isEqualTo(190.0);
+    }
+
+    @Test
+    @DisplayName("일시정지 표시 뒤 자기 페이스로 이동한 공백은 거리·시간 모두 빠진다")
+    void pausedGapAtOwnPaceIsRemoved() {
+        // given -> 2.8m/s로 60초, 일시정지한 채 60초 동안 200m(3.3m/s) 옮긴 뒤 재개한다
+        List<TrackPoint> points = new Track()
+                .at(0, 0, 0).run(60, 2.8)
+                .gap(60, 200.0)
+                .run(30, 2.8)
+                .points();
+        assertThat(TrackFilter.apply(points, List.of(), PROPERTIES).summary().gapAcceptedCount())
+                .isEqualTo(1);   // 표시가 없으면 터널로 인정된다
+
+        // when -> 멈추기 전 마지막 순번이 60이다
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(60L), PROPERTIES);
+
+        // then
+        assertThat(filtered.summary().pausedGapCount()).isEqualTo(1);
+        assertThat(filtered.summary().gapEdgeCount()).isZero();
+        assertThat(filtered.totalMeters()).isCloseTo(90 * 2.8, within(TOLERANCE_METERS));
+        assertThat(totalSeconds(filtered)).isEqualTo(90.0);
     }
 
     @Test
@@ -248,7 +270,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then
         assertThat(filtered.summary().gapRejectedCount()).isEqualTo(1);
@@ -267,7 +289,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then
         assertThat(filtered.summary().gapRejectedCount()).isEqualTo(1);
@@ -285,7 +307,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then
         assertThat(filtered.summary().gapRejectedCount()).isEqualTo(1);
@@ -300,8 +322,8 @@ public class TrackFilterTest {
         List<TrackPoint> over = new Track().at(0, 0, 0).run(60, 2.8).gap(170, 501.0).points();
 
         // when
-        TrackFilterSummary accepted = TrackFilter.apply(under, PROPERTIES).summary();
-        TrackFilterSummary rejected = TrackFilter.apply(over, PROPERTIES).summary();
+        TrackFilterSummary accepted = TrackFilter.apply(under, List.of(), PROPERTIES).summary();
+        TrackFilterSummary rejected = TrackFilter.apply(over, List.of(), PROPERTIES).summary();
 
         // then
         assertThat(accepted.gapAcceptedCount()).isEqualTo(1);
@@ -320,7 +342,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then
         assertThat(filtered.summary().stopCount()).isEqualTo(1);
@@ -335,8 +357,8 @@ public class TrackFilterTest {
         List<TrackPoint> fast = new Track().at(0, 0, 0).gap(30, 300.0).run(10, 3.0).points();
 
         // when
-        TrackFilterSummary accepted = TrackFilter.apply(slow, PROPERTIES).summary();
-        TrackFilterSummary rejected = TrackFilter.apply(fast, PROPERTIES).summary();
+        TrackFilterSummary accepted = TrackFilter.apply(slow, List.of(), PROPERTIES).summary();
+        TrackFilterSummary rejected = TrackFilter.apply(fast, List.of(), PROPERTIES).summary();
 
         // then
         assertThat(accepted.gapAcceptedCount()).isEqualTo(1);
@@ -355,7 +377,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then
         assertThat(filtered.summary().spikePointCount()).isEqualTo(1);
@@ -375,7 +397,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then
         assertThat(filtered.summary().jumpEdgeCount()).isEqualTo(1);
@@ -395,7 +417,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then
         assertThat(filtered.summary().jumpEdgeCount()).isZero();
@@ -413,7 +435,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then -> 거리만 인정하고 시간을 0으로 두면 그 칸 페이스가 0이 된다
         assertThat(filtered.totalMeters()).isCloseTo(120.0, within(TOLERANCE_METERS));
@@ -432,7 +454,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then
         assertThat(filtered.totalMeters()).isCloseTo(120.0, within(TOLERANCE_METERS));
@@ -450,7 +472,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then
         assertThat(filtered.summary().accuracyDroppedCount()).isEqualTo(1);
@@ -468,7 +490,7 @@ public class TrackFilterTest {
         }
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(track.points(), PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(track.points(), List.of(), PROPERTIES);
 
         // then
         assertThat(filtered.summary().stopCount()).isZero();
@@ -494,7 +516,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        TrackFilterSummary summary = TrackFilter.apply(points, PROPERTIES).summary();
+        TrackFilterSummary summary = TrackFilter.apply(points, List.of(), PROPERTIES).summary();
 
         // then
         double removed = summary.accuracyRemovedMeters() + summary.spikeRemovedMeters()
@@ -516,7 +538,7 @@ public class TrackFilterTest {
                 .points();
 
         // when
-        FilteredTrack filtered = TrackFilter.apply(points, PROPERTIES);
+        FilteredTrack filtered = TrackFilter.apply(points, List.of(), PROPERTIES);
 
         // then
         double[] meters = filtered.cumulativeMeters();
@@ -535,8 +557,8 @@ public class TrackFilterTest {
         List<TrackPoint> single = new Track().at(0, 0, 0).points();
 
         // when
-        FilteredTrack empty = TrackFilter.apply(List.of(), PROPERTIES);
-        FilteredTrack one = TrackFilter.apply(single, PROPERTIES);
+        FilteredTrack empty = TrackFilter.apply(List.of(), List.of(), PROPERTIES);
+        FilteredTrack one = TrackFilter.apply(single, List.of(), PROPERTIES);
 
         // then
         assertThat(empty.totalMeters()).isZero();

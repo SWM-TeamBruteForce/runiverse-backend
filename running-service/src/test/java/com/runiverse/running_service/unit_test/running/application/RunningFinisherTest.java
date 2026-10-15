@@ -19,6 +19,7 @@ import com.runiverse.running_service.application.running.port.out.ExistsRunningR
 import com.runiverse.running_service.application.running.port.out.GpsTrackUpload;
 import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
 import com.runiverse.running_service.application.running.port.out.LoadRecentRunningPacesPort;
+import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPausesPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.LoadUserWeightPort;
 import com.runiverse.running_service.application.running.port.out.LoadWeatherPort;
@@ -125,6 +126,9 @@ public class RunningFinisherTest {
     private LoadRunningTrackPort loadRunningTrackPort;
 
     @Mock
+    private LoadRunningTrackPausesPort loadRunningTrackPausesPort;
+
+    @Mock
     private LoadUserWeightPort loadUserWeightPort;
 
     @Mock
@@ -190,7 +194,8 @@ public class RunningFinisherTest {
     @BeforeEach
     void setUp() {
         finisher = new RunningFinisher(lockRunningRoomPort, lockRunningPlayerPort,
-                loadRunningTrackPort, loadUserWeightPort, loadWeatherPort, saveGpsTrackPort,
+                loadRunningTrackPort, loadRunningTrackPausesPort, loadUserWeightPort, loadWeatherPort,
+                saveGpsTrackPort,
                 createRunningRecordPort, updateRunningPlayerPort, deleteRunningTrackPort,
                 existsRunningPlayerPort, updateRunningRoomPort, startMatchCooldownPort,
                 existsRunningRecordPort, loadRecentRunningPacesPort, updateUserAvgPacePort,

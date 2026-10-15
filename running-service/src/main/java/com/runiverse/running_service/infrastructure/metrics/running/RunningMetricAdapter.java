@@ -26,6 +26,7 @@ public class RunningMetricAdapter implements RecordRunningMetricPort {
         recordFiltered("accuracy", summary.accuracyRemovedMeters());
         recordFiltered("spike", summary.spikeRemovedMeters());
         recordFiltered("gap", summary.gapRejectedMeters());
+        recordFiltered("paused", summary.pausedGapRemovedMeters());
         recordFiltered("stop", summary.stopRemovedMeters());
         meterRegistry.counter(GAPS, "decision", "accepted").increment(summary.gapAcceptedCount());
         meterRegistry.counter(GAPS, "decision", "rejected").increment(summary.gapRejectedCount());

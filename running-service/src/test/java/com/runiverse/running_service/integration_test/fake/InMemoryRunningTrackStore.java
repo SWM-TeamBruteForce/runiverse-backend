@@ -2,7 +2,9 @@ package com.runiverse.running_service.integration_test.fake;
 
 import com.runiverse.running_service.application.running.port.out.AppendRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.DeleteRunningTrackPort;
+import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPausesPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPort;
+import com.runiverse.running_service.application.running.port.out.MarkRunningTrackPausedPort;
 import com.runiverse.running_service.application.running.port.out.RunningTrack;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
 import com.runiverse.running_service.domain.common.vo.UserId;
@@ -12,19 +14,22 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 // RunningTrackRedisAdapter를 대신한다 — 키가 (runningRoomId, userId)이고
 // 순번마다 독립으로 중복을 거르는 것까지 실제와 맞춘다(재연결 재전송이 트랙을 부풀리지 않는다).
 // 실제 어댑터는 Redis 비트맵이 그 역할을 하고, 여기서는 Map이 대신한다
 public class InMemoryRunningTrackStore implements AppendRunningTrackPort, LoadRunningTrackPort,
-        DeleteRunningTrackPort {
+        DeleteRunningTrackPort, MarkRunningTrackPausedPort, LoadRunningTrackPausesPort {
 
     private record Key(Long runningRoomId, UserId userId) {
 
     }
 
     private final Map<Key, Map<Long, TrackPoint>> tracks = new LinkedHashMap<>();
+    private final Map<Key, Set<Long>> paused = new LinkedHashMap<>();
 
     @Override
     public int append(Long runningRoomId, UserId userId, List<TrackPoint> points) {
@@ -51,8 +56,19 @@ public class InMemoryRunningTrackStore implements AppendRunningTrackPort, LoadRu
     }
 
     @Override
+    public void markPaused(Long runningRoomId, UserId userId, long lastSequence) {
+        paused.computeIfAbsent(new Key(runningRoomId, userId), key -> new TreeSet<>()).add(lastSequence);
+    }
+
+    @Override
+    public List<Long> loadPausedSequences(Long runningRoomId, UserId userId) {
+        return List.copyOf(paused.getOrDefault(new Key(runningRoomId, userId), Set.of()));
+    }
+
+    @Override
     public void delete(Long runningRoomId, UserId userId) {
         tracks.remove(new Key(runningRoomId, userId));
+        paused.remove(new Key(runningRoomId, userId));
     }
 
     // 어댑터가 Redis에 담는 압축 배열과 같은 자리 순서다(TrackPoint.COMPACT_FIELDS).

@@ -12,9 +12,9 @@ import java.util.List;
 public final class TrackFilterFixtures {
 
     // 운영 시작값과 같다 — 정확도 50m, 최대 속도 12m/s, 정지 5~8m·10초,
-    // 관측 안 된 칸 10초·500m·1.5m/s·×1.3·300초·출발 직후 7m/s
+    // 관측 안 된 칸 10초·500m·1.5m/s·×1.3·300초·출발 직후 7m/s, 일시정지 범위 10순번
     public static final TrackFilterProperties DEFAULT_PROPERTIES = new TrackFilterProperties(
-            50.0, 12.0, 5.0, 8.0, 10, 10, 500.0, 1.5, 1.3, 300, 7.0);
+            50.0, 12.0, 5.0, 8.0, 10, 10, 500.0, 1.5, 1.3, 300, 7.0, 10);
 
     private TrackFilterFixtures() {
     }

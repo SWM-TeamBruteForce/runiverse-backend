@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalDouble;
 
-// 기록 계산 전에 오염된 좌표를 거른다 — 멈춘 동안의 흔들림, GPS 튐, 관측하지 못한 이동.
+// 기록 계산 전에 오염된 좌표를 거른다 — 멈춘 동안의 흔들림, GPS 튐, 관측하지 못한 이동, 일시정지 공백.
 // 칸(이웃한 두 좌표)마다 인정 거리·인정 시간을 정하고, 거부한 칸은 둘을 함께 0으로 한다.
 // 하나만 빼면 시간 없이 거리만 늘거나 그 반대가 돼 구간 페이스가 틀어진다
 public final class TrackFilter {
@@ -20,7 +20,8 @@ public final class TrackFilter {
     private TrackFilter() {
     }
 
-    public static FilteredTrack apply(List<TrackPoint> rawPoints, TrackFilterProperties properties) {
+    public static FilteredTrack apply(List<TrackPoint> rawPoints, List<Long> pausedSequences,
+                                      TrackFilterProperties properties) {
         Stats stats = new Stats();
         stats.rawMeters = pathMeters(rawPoints);
         List<TrackPoint> accurate = dropInaccurate(rawPoints, properties, stats);
@@ -46,6 +47,10 @@ public final class TrackFilter {
             } else if (to.recordedAt().isBefore(from.recordedAt())) {
                 // 시계가 뒤로 간 칸이다(재부팅·시간대 변경) — 시간을 믿을 수 없어 거리도 함께 뺀다
                 accepted = false;
+            } else if (isPausedGap(from.sequence(), to.sequence(), seconds, pausedSequences, properties)) {
+                // 사용자가 멈춘다고 알린 공백이다
+                stats.recordPausedGap(meters);
+                accepted = false;
             } else if (seconds > properties.gapMinSeconds()) {
                 accepted = acceptGap(points, runMeters, runSeconds, edge, meters, seconds,
                         properties, stats);
@@ -65,6 +70,16 @@ public final class TrackFilter {
         }
         stats.filteredMeters = size == 0 ? 0 : cumulativeMeters[size - 1];
         return new FilteredTrack(points, cumulativeMeters, cumulativeSeconds, stats.toSummary());
+    }
+
+    // 표시 S를 넘고 S 뒤 범위 안에서 시작한 공백 칸. 러닝 중 누적 거리도 이 식을 쓴다
+    public static boolean isPausedGap(long fromSequence, long toSequence, double seconds,
+                                      List<Long> pausedSequences, TrackFilterProperties properties) {
+        if (seconds <= properties.gapMinSeconds()) {
+            return false;
+        }
+        return pausedSequences.stream().anyMatch(paused -> toSequence > paused
+                && fromSequence <= paused + properties.pausedGapSequenceWindow());
     }
 
     private static List<TrackPoint> dropInaccurate(List<TrackPoint> points,
@@ -223,6 +238,8 @@ public final class TrackFilter {
         double gapRejectedMeters;
         double maxGapEdgeMeters;
         double maxGapEdgeSeconds;
+        int pausedGapCount;
+        double pausedGapRemovedMeters;
         int stopCount;
         double stopSeconds;
         double stopRemovedMeters;
@@ -243,6 +260,12 @@ public final class TrackFilter {
             maxGapEdgeSeconds = Math.max(maxGapEdgeSeconds, seconds);
         }
 
+        // 관측 안 된 칸 집계와 따로 센다
+        void recordPausedGap(double meters) {
+            pausedGapCount++;
+            pausedGapRemovedMeters += meters;
+        }
+
         void recordStop(double seconds, double removedMeters, double displacementMeters) {
             stopCount++;
             stopSeconds += seconds;
@@ -257,6 +280,7 @@ public final class TrackFilter {
                     spikePointCount, jumpEdgeCount, spikeRemovedMeters,
                     gapEdgeCount, gapAcceptedCount, gapRejectedCount,
                     gapAcceptedMeters, gapRejectedMeters, maxGapEdgeMeters, maxGapEdgeSeconds,
+                    pausedGapCount, pausedGapRemovedMeters,
                     stopCount, stopSeconds, stopRemovedMeters, maxStopSeconds, maxStopDisplacementMeters,
                     radiusClampedCount);
         }

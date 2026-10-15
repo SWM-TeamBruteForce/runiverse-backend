@@ -301,7 +301,7 @@ public class TrackAnalyzerTest {
 
         // when -> 운영 판정값으로 실제 필터를 거친다
         TrackAnalysis analysis = TrackAnalyzer.analyze(
-                TrackFilter.apply(points, DEFAULT_PROPERTIES), TARGET, WEIGHT, PROPERTIES)
+                TrackFilter.apply(points, List.of(), DEFAULT_PROPERTIES), TARGET, WEIGHT, PROPERTIES)
                 .orElseThrow();
 
         // then -> 움직인 시간은 약 400초, 실제 기간은 멈춘 60초를 더해 약 460초다
