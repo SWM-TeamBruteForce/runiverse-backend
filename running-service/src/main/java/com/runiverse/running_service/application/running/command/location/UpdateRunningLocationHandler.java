@@ -106,7 +106,7 @@ public class UpdateRunningLocationHandler implements UpdateRunningLocationUsecas
         }
     }
 
-    // 못 읽으면 표시 없이 센다 — 이번 배치의 공백만 지금처럼 더해진다
+    // 못 읽으면 이번 배치는 표시 없이 센다
     private List<Long> pausedSequences(Long runningRoomId, UserId userId) {
         try {
             return loadRunningTrackPausesPort.loadPausedSequences(runningRoomId, userId);

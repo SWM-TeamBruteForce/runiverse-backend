@@ -141,7 +141,7 @@ class RunningDistanceAccumulatorTest {
         // when
         RunningDistanceAccumulation result = accumulate(legacy, List.of(0L), pointAt(1, 200, 60));
 
-        // then -> 배포 순간 멈춰 있던 사람만 지금처럼 튄다. 이번 배치가 시각을 남긴다
+        // then -> 이번 배치가 시각을 남긴다
         assertThat(result.distance().meters()).isGreaterThan(190);
         assertThat(result.distance().lastRecordedAt()).isEqualTo(RECORDED_AT.plusSeconds(60));
     }

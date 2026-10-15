@@ -57,7 +57,7 @@ public class ChangeLiveRunningStatusHandler implements ChangeLiveRunningStatusUs
             }
             markRunningTrackPausedPort.markPaused(runningRoomId, userId, lastSequence);
         } catch (RuntimeException e) {
-            // 표시가 없으면 공백은 지금처럼 판정된다
+            // 표시가 없으면 공백은 관측 안 된 칸으로 판정된다
             log.error("[러닝] 트랙 일시정지 표시 실패: 처리하지 못한 예외 - roomId={}, userId={}",
                     runningRoomId, userId.value(), e);
         }

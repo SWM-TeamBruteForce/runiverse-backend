@@ -1174,7 +1174,7 @@ public class RunningFinisherTest {
             LogCapture log = LogCapture.of(RunningFinisher.class);
 
             try {
-                // when -> 신호가 유실된 것과 같다. 공백은 지금처럼 터널로 인정된다
+                // when -> 신호가 유실된 것과 같아 공백이 터널로 인정된다
                 int meters = finishSolo();
 
                 // then

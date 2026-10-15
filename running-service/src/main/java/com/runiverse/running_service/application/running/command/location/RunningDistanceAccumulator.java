@@ -83,7 +83,7 @@ public final class RunningDistanceAccumulator {
                 moved);
     }
 
-    // 시각을 모르는 옛 값이면 판정하지 않고 지금처럼 센다
+    // 시각을 모르는 옛 값이면 판정하지 않고 센다
     private static boolean isPausedGap(long lastSequence, LocalDateTime lastRecordedAt, TrackPoint point,
                                        List<Long> pausedSequences, TrackFilterProperties filter) {
         if (lastRecordedAt == null) {

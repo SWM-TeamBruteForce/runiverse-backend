@@ -355,7 +355,7 @@ public class RunningFinisher {
         }
     }
 
-    // 못 읽으면 표시 없이 확정한다 — 신호가 유실된 것과 같아 공백은 지금처럼 판정된다
+    // 못 읽으면 표시 없이 확정한다 — 신호가 유실된 것과 같다
     private List<Long> pausedSequences(Long runningRoomId, UserId userId) {
         try {
             return loadRunningTrackPausesPort.loadPausedSequences(runningRoomId, userId);
