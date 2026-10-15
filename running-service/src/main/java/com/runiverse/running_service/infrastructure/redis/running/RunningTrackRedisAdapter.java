@@ -3,6 +3,7 @@ package com.runiverse.running_service.infrastructure.redis.running;
 import com.runiverse.running_service.application.running.exception.RunningTrackUnavailableException;
 import com.runiverse.running_service.application.running.port.out.AppendRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.DeleteRunningTrackPort;
+import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPausesPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.MarkRunningTrackPausedPort;
 import com.runiverse.running_service.application.running.port.out.RunningTrack;
@@ -25,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -38,7 +40,7 @@ import static com.runiverse.running_service.infrastructure.metrics.running.Runni
 @Component
 @RequiredArgsConstructor
 public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRunningTrackPort, DeleteRunningTrackPort,
-        MarkRunningTrackPausedPort {
+        MarkRunningTrackPausedPort, LoadRunningTrackPausesPort {
 
     // 순번마다 비트 한 칸으로 중복을 판정한다 - 커서와 달리 뒤늦게 온 좌표도 자기 자리에 들어간다.
     // SETBIT은 이전 비트를 돌려주므로 0이면 처음 보는 순번이다
@@ -200,6 +202,20 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
             redisTemplate.opsForSet().add(key, String.valueOf(lastSequence));
             redisTemplate.expire(key, properties.ttl());
         });
+    }
+
+    // 잡지 않고 던진다 — 부르는 쪽이 로그를 남긴다
+    @Override
+    public List<Long> loadPausedSequences(Long runningRoomId, UserId userId) {
+        Set<String> members = stateMeter.read(REDIS, TRACK, RUNNING, runningRoomId,
+                () -> redisTemplate.opsForSet().members(pausedKey(runningRoomId, userId)));
+        if (members == null) {
+            return List.of();
+        }
+        return members.stream()
+                .map(Long::valueOf)
+                .sorted()
+                .toList();
     }
 
     // 종료 확정 뒤 버퍼를 비운다. TTL이 있어 남겨도 새지는 않는다.
