@@ -39,6 +39,9 @@ class SoloRunningE2eTest extends E2eTestSupport {
     private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
     // 종료는 S3 업로드와 날씨 조회를 함께 태워 응답이 가장 느린 구간이다
     private static final Duration FINISH_TIMEOUT = Duration.ofSeconds(30);
+    private static final int PAUSED_AT = 30;                     // 이 순번까지 보내고 멈춘다
+    private static final int PAUSE_SECONDS = 60;
+    private static final double MOVED_WHILE_PAUSED_METERS = 180.0;
 
     // 한 테스트 안의 모든 좌표가 같은 기준시각을 써야 한다 —
     // 점마다 now()를 다시 읽으면 간격이 미세하게 어긋난다. JUnit은 테스트마다 인스턴스를 새로 만든다
@@ -143,6 +146,34 @@ class SoloRunningE2eTest extends E2eTestSupport {
         assertThat(record.get("totalDistanceMeters")).isEqualTo(me.get("totalDistanceMeters"));
         assertThat(record.get("totalDurationSeconds")).isEqualTo(me.get("totalDurationSeconds"));
         assertThat((String) record.get("routePolyline")).isNotBlank();
+    }
+
+    @Test
+    @DisplayName("일시정지한 채 이동한 거리는 기록에 들어가지 않는다")
+    void distanceMovedWhilePausedIsExcluded() {
+        // given - 150m를 달리고 멈춘 채 60초 동안 180m 옮긴 뒤 150m를 더 달린다.
+        // 공백 속도 2.9m/s는 직전 속도 2.5m/s × 1.3 안이라 일시정지 신호가 없으면 터널로 인정된다
+        TestUser user = signUpAndOnboard();
+        long runningRoomId = post("/running-rooms/solo", Map.of(), user.accessToken())
+                .number("runningRoomId");
+        try (RunningWebSocket socket = connectRunningWebSocket(user.accessToken())) {
+            socket.send("RUNNING_START", Map.of("runningRoomId", runningRoomId));
+            socket.await("RUNNING_STARTED");
+            // when - 앱처럼 남은 좌표를 다 보낸 뒤 PAUSE, 재개하면 RESUME 뒤 좌표
+            sendTrack(socket, 0, PAUSED_AT + 1, 0, -PAUSE_SECONDS);
+            socket.send("RUNNING_PAUSE", Map.of());
+            socket.send("RUNNING_RESUME", Map.of());
+            sendTrack(socket, PAUSED_AT + 1, POINT_COUNT, MOVED_WHILE_PAUSED_METERS, 0);
+            socket.send("RUNNING_FINISH", Map.of("forced", false));
+            socket.await("RUNNING_FINISHED", FINISH_TIMEOUT);
+        }
+
+        // then - 달린 300m·120초만 남는다. 옮긴 구간이 들어가면 480m·180초다
+        Map<String, Object> me = get("/running-rooms/" + runningRoomId + "/results", user.accessToken())
+                .objects("players").get(0);
+        assertThat((Integer) me.get("totalDistanceMeters"))
+                .isCloseTo(EXPECTED_DISTANCE_METERS, within(DISTANCE_TOLERANCE_METERS));
+        assertThat((Integer) me.get("totalDurationSeconds")).isLessThan(150);
     }
 
     @Test
@@ -301,21 +332,30 @@ class SoloRunningE2eTest extends E2eTestSupport {
 
     // 좌표는 단말이 하듯 배치로 나눠 보낸다 — 한 번에 다 보내면 누적 로직이 한 번만 돈다
     private void sendTrack(RunningWebSocket socket) {
-        for (int from = 0; from < POINT_COUNT; from += BATCH_SIZE) {
+        sendTrack(socket, 0, POINT_COUNT, 0, 0);
+    }
+
+    // [from, to) 순번을 보낸다. 모든 점을 북쪽으로 extraMeters, 시각을 extraSeconds만큼 옮긴다
+    private void sendTrack(RunningWebSocket socket, int from, int to, double extraMeters, long extraSeconds) {
+        for (int start = from; start < to; start += BATCH_SIZE) {
             List<Map<String, Object>> batch = new ArrayList<>();
-            for (int sequence = from; sequence < Math.min(from + BATCH_SIZE, POINT_COUNT); sequence++) {
-                batch.add(point(sequence));
+            for (int sequence = start; sequence < Math.min(start + BATCH_SIZE, to); sequence++) {
+                batch.add(point(sequence, extraMeters, extraSeconds));
             }
             socket.send("RUNNING_LOCATION_UPDATE", Map.of("locations", batch));
         }
     }
 
+    private Map<String, Object> point(int sequence) {
+        return point(sequence, 0, 0);
+    }
+
     /**
      * 정북으로 일정 간격 걸어가는 트랙 한 점. 시작 시각은 러닝 길이만큼 과거로 잡는다.
      */
-    private Map<String, Object> point(int sequence) {
+    private Map<String, Object> point(int sequence, double extraMeters, long extraSeconds) {
         double latitude = START_LATITUDE
-                + sequence * METERS_PER_STEP / METERS_PER_LATITUDE_DEGREE;
+                + (sequence * METERS_PER_STEP + extraMeters) / METERS_PER_LATITUDE_DEGREE;
         Map<String, Object> point = new HashMap<>();
         point.put("sequence", sequence);
         point.put("latitude", latitude);
@@ -327,7 +367,7 @@ class SoloRunningE2eTest extends E2eTestSupport {
         point.put("cadenceSpm", CADENCE_SPM);
         point.put("currentPaceSecondsPerKm", PACE_SECONDS_PER_KM);
         // LocalDateTime은 오프셋 없는 ISO 문자열이라야 서버가 그대로 받는다
-        point.put("recordedAt", trackStartAt.plusSeconds((long) sequence * SECONDS_PER_STEP)
+        point.put("recordedAt", trackStartAt.plusSeconds((long) sequence * SECONDS_PER_STEP + extraSeconds)
                 .format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         return point;
     }
