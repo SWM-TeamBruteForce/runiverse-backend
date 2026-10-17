@@ -1,0 +1,12 @@
+# 로컬 smoke에서 k6 → Prometheus 경로를 확인할 때만 쓴다(COMPOSE_PROFILES=metrics).
+# 서버 측정용 설정은 모니터링 서버의 ~/monitoring/prometheus.yml이다.
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: runiverse-local
+    metrics_path: /api/v1/actuator/prometheus
+    static_configs:
+      - targets: ['app:8080']
+        labels:
+          env: local

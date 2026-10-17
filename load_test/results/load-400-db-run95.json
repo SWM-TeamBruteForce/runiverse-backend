@@ -1,0 +1,131 @@
+{
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "WS 핸드셰이크 101": {
+                    "fails": 0,
+                    "name": "WS 핸드셰이크 101",
+                    "path": "::WS 핸드셰이크 101",
+                    "id": "8e4757902b0bcc2b6a93d2b157442ece",
+                    "passes": 500
+                }
+            }
+    },
+    "metrics": {
+        "data_sent": {
+            "count": 47998743,
+            "rate": 72579.04270056423
+        },
+        "running_combo_updates": {
+            "count": 57069,
+            "rate": 86.29420541030628
+        },
+        "running_finish_rtt": {
+            "p(90)": 464.10000000000025,
+            "p(95)": 626.3499999999997,
+            "avg": 285.35,
+            "min": 83,
+            "med": 257,
+            "max": 1245
+        },
+        "running_batch_rtt": {
+            "p(95)": 23,
+            "avg": 11.982838589981448,
+            "min": 3,
+            "med": 10,
+            "max": 176,
+            "p(90)": 17
+        },
+        "checks": {
+            "passes": 500,
+            "fails": 0,
+            "thresholds": {
+                "rate==1": false
+            },
+            "value": 1
+        },
+        "data_received": {
+            "count": 34248586,
+            "rate": 51787.38921825404
+        },
+        "vus_max": {
+            "value": 400,
+            "min": 400,
+            "max": 400
+        },
+        "ws_msgs_sent": {
+            "count": 25016,
+            "rate": 37.8267683426067
+        },
+        "ws_msgs_received": {
+            "count": 157388,
+            "rate": 237.98686504262005
+        },
+        "running_ws_errors": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+                "count==0": false
+            }
+        },
+        "ws_sessions": {
+            "count": 500,
+            "rate": 0.7560514938960405
+        },
+        "ws_session_duration": {
+            "avg": 480044.8402417557,
+            "min": 206107.330784,
+            "med": 601128.954298,
+            "max": 602141.716764,
+            "p(90)": 601381.0712179999,
+            "p(95)": 601506.5511547
+        },
+        "running_start_rtt": {
+            "avg": 71.174,
+            "min": 14,
+            "med": 72,
+            "max": 280,
+            "p(90)": 107,
+            "p(95)": 124
+        },
+        "vus": {
+            "value": 5,
+            "min": 5,
+            "max": 400
+        },
+        "ws_connecting": {
+            "med": 12.8736615,
+            "max": 127.150511,
+            "p(90)": 23.61574730000001,
+            "p(95)": 34.20306134999999,
+            "avg": 14.940809477999995,
+            "min": 3.496557
+        },
+        "running_finish_completed": {
+            "passes": 400,
+            "fails": 0,
+            "thresholds": {
+                "rate==1": false
+            },
+            "value": 1
+        },
+        "iteration_duration": {
+            "p(90)": 655288.3164592,
+            "p(95)": 658328.770529,
+            "avg": 631297.9618019727,
+            "min": 601512.433345,
+            "med": 631217.6420955,
+            "max": 661328.474707
+        },
+        "iterations": {
+            "count": 400,
+            "rate": 0.6048411951168324
+        }
+    },
+    "setup_data": {
+        "testStartMs": 1792064788402
+    }
+}

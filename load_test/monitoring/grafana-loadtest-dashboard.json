@@ -1,0 +1,751 @@
+{
+  "title": "Runiverse 러닝 상태 저장소 부하 테스트",
+  "uid": "runiverse-loadtest",
+  "tags": [
+    "runiverse",
+    "loadtest"
+  ],
+  "timezone": "browser",
+  "refresh": "10s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "schemaVersion": 39,
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Data source",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "env",
+        "type": "query",
+        "query": "label_values(process_cpu_usage, env)",
+        "refresh": 2,
+        "current": {
+          "text": "test",
+          "value": "test"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        }
+      },
+      {
+        "name": "store",
+        "type": "query",
+        "query": "label_values(runiverse_running_state_access_seconds_count{env=\"$env\"}, store)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "상태 저장소 — 러닝 중",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "러닝 중 접근 p99 (store·target·operation)",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by (le, store, target, operation) (rate(runiverse_running_state_access_seconds_bucket{env=\"$env\", store=~\"$store\", phase=\"running\"}[1m])))",
+          "legendFormat": "{{store}} {{target}} {{operation}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "id": 2,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "러닝 중 접근 p50 (store·target·operation)",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le, store, target, operation) (rate(runiverse_running_state_access_seconds_bucket{env=\"$env\", store=~\"$store\", phase=\"running\"}[1m])))",
+          "legendFormat": "{{store}} {{target}} {{operation}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "id": 3,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "상태 접근 초당 건수",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (store, phase, operation) (rate(runiverse_running_state_access_seconds_count{env=\"$env\", store=~\"$store\"}[1m]))",
+          "legendFormat": "{{store}} {{phase}} {{operation}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "id": 4,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "상태 접근 실패 (초당)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (store, target, operation) (rate(runiverse_running_state_access_seconds_count{env=\"$env\", store=~\"$store\", result=\"failure\"}[1m]))",
+          "legendFormat": "{{store}} {{target}} {{operation}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "id": 5,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "row",
+      "title": "상태 저장소 — 종료 집계",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 6,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "종료 시 접근 p99 (store·target·operation)",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 19
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by (le, store, target, operation) (rate(runiverse_running_state_access_seconds_bucket{env=\"$env\", store=~\"$store\", phase=\"finish\"}[5m])))",
+          "legendFormat": "{{store}} {{target}} {{operation}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "id": 7,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "종료 읽기 — 1,000개당 읽기 시간",
+      "description": "종료 집계 읽기 시간 합 ÷ 읽은 개수 합 × 1000. 러닝 길이가 달라도 store끼리 비교할 수 있다",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 19
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1000 * sum by (store, target) (rate(runiverse_running_state_access_seconds_sum{env=\"$env\", store=~\"$store\", phase=\"finish\", operation=\"read\"}[5m])) / sum by (store, target) (rate(runiverse_running_state_loaded_items_sum{env=\"$env\", store=~\"$store\"}[5m]))",
+          "legendFormat": "{{store}} {{target}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "id": 8,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "row",
+      "title": "DB 커넥션 (HikariCP)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "id": 9,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "커넥션 active / pending / max",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 29
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(hikaricp_connections_active{env=\"$env\"})",
+          "legendFormat": "active",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum(hikaricp_connections_pending{env=\"$env\"})",
+          "legendFormat": "pending",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "sum(hikaricp_connections_max{env=\"$env\"})",
+          "legendFormat": "max",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "id": 10,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "커넥션 획득 대기 / 사용 시간 (최댓값)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 29
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(hikaricp_connections_acquire_seconds_max{env=\"$env\"})",
+          "legendFormat": "acquire max",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "max(hikaricp_connections_usage_seconds_max{env=\"$env\"})",
+          "legendFormat": "usage max",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "id": 11,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "row",
+      "title": "앱 서버 자원",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
+      "id": 12,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU 사용률 (프로세스 / 서버 전체)",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "max": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "process_cpu_usage{env=\"$env\"}",
+          "legendFormat": "process",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "system_cpu_usage{env=\"$env\"}",
+          "legendFormat": "system",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "id": 13,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "JVM 힙 사용량",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jvm_memory_used_bytes{env=\"$env\", area=\"heap\"})",
+          "legendFormat": "used",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum(jvm_memory_max_bytes{env=\"$env\", area=\"heap\"})",
+          "legendFormat": "max",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "id": 14,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "GC 정지 시간 (초당)",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(jvm_gc_pause_seconds_sum{env=\"$env\"}[1m]))",
+          "legendFormat": "gc pause",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "id": 15,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "row",
+      "title": "k6 — 사용자 체감 (클라이언트에서 잰 왕복)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 46
+      },
+      "panels": [],
+      "id": 16
+    },
+    {
+      "type": "timeseries",
+      "title": "배치 왕복 (좌표 송신 → 본인 진행 알림)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 47
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "k6_running_batch_rtt_p99{store=~\"$store\"}",
+          "legendFormat": "{{test_scenario}} run{{run_id}} {{store}} p99"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "k6_running_batch_rtt_p50{store=~\"$store\"}",
+          "legendFormat": "{{test_scenario}} run{{run_id}} {{store}} p50"
+        }
+      ],
+      "description": "k6가 테스트 시작부터 누적해 낸 값이다 — 회차 끝의 값이 그 회차의 결과다",
+      "id": 17
+    },
+    {
+      "type": "timeseries",
+      "title": "종료 왕복 (FINISH → RUNNING_FINISHED)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 47
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "k6_running_finish_rtt_p99{store=~\"$store\"}",
+          "legendFormat": "{{test_scenario}} run{{run_id}} {{store}} p99"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "k6_running_finish_rtt_p50{store=~\"$store\"}",
+          "legendFormat": "{{test_scenario}} run{{run_id}} {{store}} p50"
+        }
+      ],
+      "description": "k6가 테스트 시작부터 누적해 낸 값이다 — 회차 끝의 값이 그 회차의 결과다",
+      "id": 18
+    },
+    {
+      "type": "timeseries",
+      "title": "시작 왕복 (START → RUNNING_STARTED)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 47
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "k6_running_start_rtt_p99{store=~\"$store\"}",
+          "legendFormat": "{{test_scenario}} run{{run_id}} {{store}} p99"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "k6_running_start_rtt_p50{store=~\"$store\"}",
+          "legendFormat": "{{test_scenario}} run{{run_id}} {{store}} p50"
+        }
+      ],
+      "description": "k6가 테스트 시작부터 누적해 낸 값이다 — 회차 끝의 값이 그 회차의 결과다",
+      "id": 19
+    },
+    {
+      "type": "timeseries",
+      "title": "동시 러너 수 (k6 VU)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 55
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "k6_vus{store=~\"$store\"}",
+          "legendFormat": "{{test_scenario}} run{{run_id}} {{store}}"
+        }
+      ],
+      "id": 20
+    },
+    {
+      "type": "timeseries",
+      "title": "에러 · 의도치 않은 끊김 (분당)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 55
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (test_scenario, run_id, store, code) (increase(k6_running_ws_errors_total{store=~\"$store\"}[1m]))",
+          "legendFormat": "{{test_scenario}} run{{run_id}} {{store}} error {{code}}"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (test_scenario, run_id, store) (increase(k6_running_unexpected_disconnects_total{store=~\"$store\"}[1m]))",
+          "legendFormat": "{{test_scenario}} run{{run_id}} {{store}} disconnect"
+        }
+      ],
+      "id": 21
+    },
+    {
+      "type": "timeseries",
+      "title": "종료 완료율",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 55
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "k6_running_finish_completed_rate{store=~\"$store\"}",
+          "legendFormat": "{{test_scenario}} run{{run_id}} {{store}}"
+        }
+      ],
+      "id": 22
+    }
+  ]
+}

@@ -15,7 +15,7 @@
 | Infra | AWS (EC2 Auto Scaling, ALB, ECR, S3, SES, SSM Parameter Store) |
 | CI/CD | GitHub Actions (OIDC → AWS) |
 | Observability | Actuator, Micrometer, Prometheus, Grafana, Filebeat |
-| Test | JUnit 5, Mockito, Docker Compose 기반 E2E (LocalStack) |
+| Test | JUnit 5, Mockito, Docker Compose 기반 E2E (LocalStack), k6 부하 테스트 |
 
 ## 프로젝트 구조
 
@@ -23,6 +23,7 @@
 runiverse-backend
 ├── running-service   # Spring Boot API 서버 (클린 아키텍처 + DDD)
 ├── e2e_test          # Docker Compose 기반 E2E 테스트
+├── load_test         # k6 부하 테스트 (러닝 상태 저장소 Redis vs RDS 비교)
 ├── infra             # 로그 수집(Filebeat) 설정
 └── docs              # 명세·컨벤션 문서
 ```
@@ -35,7 +36,17 @@ cd running-service
 ./gradlew bootRun   # 앱 실행 (컨텍스트 경로: /api/v1)
 ```
 
-> 실행과 테스트에는 `running-service/.env` 파일이 필요합니다.
+> 앱 실행에는 `running-service/.env` 파일이 필요합니다. 단위 테스트는 `.env` 없이 돌아갑니다.
+
+```bash
+./e2e_test/run-e2e.sh   # E2E — 배포 이미지를 Docker로 띄워 실행
+```
+
+## 부하 테스트
+
+러닝 중 상태(좌표·누적 거리·참가자 상태·콤보)를 Redis에 둘 때와 RDS에 둘 때를 k6로 같은 부하에서 비교했습니다.
+1,000명 동시 러닝까지 두 저장소 모두 전원 성공했고 응답 속도도 비슷했습니다. RDS로 옮겨도 pub/sub 때문에 Redis가 남아 비용이 줄지 않아 **Redis를 유지하고 AOF를 켜기로** 했습니다.
+구성과 실행 순서는 [load_test/README.md](load_test/README.md), 측정 결과는 [load_test/RESULTS.md](load_test/RESULTS.md)에 있습니다.
 
 ## 브랜치 전략 · 배포
 
@@ -66,3 +77,7 @@ cd running-service
 | **조지환** | **김동완** | **박찬** |
 | [@jihwanjo-98](https://github.com/jihwanjo-98) | [@KimDwDev](https://github.com/KimDwDev) | [@zxc88kr](https://github.com/zxc88kr) |
 | AI / Frontend | Backend | Backend |
+
+## 라이선스
+
+이 프로젝트는 [MIT License](LICENSE)를 따릅니다.

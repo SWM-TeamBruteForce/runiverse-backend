@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>charts</title>
+<style>
+  :root { --surface: #ffffff; --ink: #111110; --ink-2: #6b6a65; --grid: #eeede9; --base: #c9c8c2;
+          --redis: #2a78d6; --db: #eb6834; --muted: #b9b8b2; }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--surface); width: auto; padding: 32px;
+         font: 13px/1.3 "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+         font-variant-numeric: tabular-nums; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, 392px); gap: 40px 32px; }
+  .panel h3 { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+  .legend { font-size: 12px; color: var(--ink-2); display: flex; gap: 12px; margin-bottom: 6px; height: 16px; }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+  svg text { font-size: 12px; fill: var(--ink-2); }
+  svg .v { fill: var(--ink); font-weight: 600; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="grid" id="grid"></div>
+<script>
+// 값은 load_test/RESULTS.md(k6 요약·Grafana)에서 그대로 옮긴다
+const PANELS = [
+  { title: '좌표 배치 왕복 p95 (ms)', legend: true,
+    groups: ['1,000명', '400명 동시 시작'], series: [['redis', [27, 377]], ['db', [25, 43]]] },
+  { title: 'DB 커넥션 최대 사용 (풀 10)', legend: true, max: 10, cap: 10,
+    groups: ['1,000명'], series: [['redis', [3]], ['db', [10]]] },
+  { title: '10초 이상 좌표 단절 러너 (Redis 장애)', max: 400,
+    groups: ['AOF 미적용', 'AOF 적용'], single: [['muted', 400], ['redis', 13]] },
+  { title: '400명 같은 시점 종료 (Redis)', max: 400,
+    groups: ['성공', '실패'], single: [['redis', 129], ['muted', 271]] },
+];
+const COLOR = { redis: 'var(--redis)', db: 'var(--db)', muted: 'var(--muted)' };
+const NAME = { redis: 'EC2 Redis', db: 'RDS' };
+const ns = 'http://www.w3.org/2000/svg';
+
+function niceMax(v) {
+  const step = Math.pow(10, Math.floor(Math.log10(v)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * step >= v) return m * step;
+  return 10 * step;
+}
+
+function panel(p) {
+  const el = document.createElement('div'); el.className = 'panel';
+  el.innerHTML = `<h3>${p.title}</h3><div class="legend">${p.legend
+    ? Object.entries(NAME).map(([k, n]) => `<span><i style="background:${COLOR[k]}"></i>${n}</span>`).join('') : ''}</div>`;
+  const W = 392, H = 220, M = { t: 22, r: 8, b: 26, l: 36 };
+  const iw = W - M.l - M.r, ih = H - M.t - M.b;
+  const values = p.single ? p.single.map(s => s[1]) : p.series.flatMap(s => s[1]);
+  const max = p.max ?? niceMax(Math.max(...values));
+  const y = v => M.t + ih - (v / max) * ih;
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('width', W);
+  const add = (tag, a, t) => { const e = document.createElementNS(ns, tag);
+    for (const [k, v] of Object.entries(a)) e.setAttribute(k, v); if (t !== undefined) e.textContent = t; svg.appendChild(e); return e; };
+  for (let i = 0; i <= 4; i++) {
+    const v = max * i / 4;
+    add('line', { x1: M.l, x2: W - M.r, y1: y(v), y2: y(v), stroke: 'var(--grid)' });
+    add('text', { x: M.l - 6, y: y(v) + 4, 'text-anchor': 'end' }, Number.isInteger(v) ? v : v.toFixed(1));
+  }
+  if (p.cap) add('line', { x1: M.l, x2: W - M.r, y1: y(p.cap), y2: y(p.cap), stroke: 'var(--ink-2)', 'stroke-dasharray': '4 4' });
+  const band = iw / p.groups.length;
+  const bar = (x, w, v, color) => {
+    const top = y(v), base = y(0), r = Math.min(4, base - top);
+    add('path', { d: `M${x},${base} V${top + r} Q${x},${top} ${x + r},${top} H${x + w - r} Q${x + w},${top} ${x + w},${top + r} V${base} Z`, fill: color });
+    add('text', { x: x + w / 2, y: top - 6, 'text-anchor': 'middle', class: 'v' }, v);
+  };
+  p.groups.forEach((g, i) => {
+    const cx = M.l + band * i + band / 2;
+    add('text', { x: cx, y: H - 6, 'text-anchor': 'middle' }, g);
+    if (p.single) {
+      const w = Math.min(64, band * 0.42);
+      bar(cx - w / 2, w, p.single[i][1], COLOR[p.single[i][0]]);
+    } else {
+      const w = Math.min(44, band * 0.3), gap = 2, n = p.series.length;
+      p.series.forEach(([k, vals], j) => bar(cx - (n * w + (n - 1) * gap) / 2 + j * (w + gap), w, vals[i], COLOR[k]));
+    }
+  });
+  add('line', { x1: M.l, x2: W - M.r, y1: y(0), y2: y(0), stroke: 'var(--base)' });
+  el.appendChild(svg);
+  return el;
+}
+const grid = document.getElementById('grid');
+// #0,1 처럼 주소 뒤에 번호를 붙이면 그 그래프만 그린다 — 장별 이미지를 따로 뽑을 때 쓴다
+const pick = location.hash.slice(1).split(',').filter(Boolean).map(Number);
+PANELS.filter((_, i) => pick.length === 0 || pick.includes(i)).forEach(p => grid.appendChild(panel(p)));
+</script>
+</body>
+</html>
