@@ -14,8 +14,13 @@ public final class TrackResampler {
     private TrackResampler() {
     }
 
-    public static List<BoundaryPoint> resample(List<TrackPoint> points, double[] cumulative,
-                                               int targetDistanceMeters, int intervalMeters) {
+    // 필터가 0으로 한 칸 위에는 누적 거리가 늘지 않아 경계점이 찍히지 않는다 —
+    // 정지·거부한 구간은 앞뒤 경계점 사이 직선으로 건너뛴다
+    public static List<BoundaryPoint> resample(FilteredTrack track, int targetDistanceMeters,
+                                               int intervalMeters) {
+        List<TrackPoint> points = track.points();
+        double[] cumulative = track.cumulativeMeters();
+        double[] movingSeconds = track.cumulativeMovingSeconds();
         if (points.size() < 2) {
             return List.of();
         }
@@ -29,16 +34,18 @@ public final class TrackResampler {
         List<BoundaryPoint> boundaries = new ArrayList<>(lastBoundary / intervalMeters + 1);
         int cursor = 1;   // 누적 배열이 단조 증가라 앞으로만 훑으면 된다 — 전체가 O(점 수 + 경계 수)
         for (int distance = 0; distance <= lastBoundary; distance += intervalMeters) {
+            // 누적 거리가 경계 이상인 첫 점을 찾는다 — 경계가 정지 구간에 정확히 걸려도
+            // 길이 0인 칸이 아니라 정지가 시작되는 점에 붙는다
             while (cursor < cumulative.length - 1 && cumulative[cursor] < distance) {
                 cursor++;
             }
-            boundaries.add(interpolate(points, cumulative, cursor, distance));
+            boundaries.add(interpolate(points, cumulative, movingSeconds, cursor, distance));
         }
         return boundaries;
     }
 
     private static BoundaryPoint interpolate(List<TrackPoint> points, double[] cumulative,
-                                             int cursor, int distance) {
+                                             double[] movingSeconds, int cursor, int distance) {
         TrackPoint from = points.get(cursor - 1);
         TrackPoint to = points.get(cursor);
         double span = cumulative[cursor] - cumulative[cursor - 1];
@@ -49,6 +56,8 @@ public final class TrackResampler {
                 from.latitude() + (to.latitude() - from.latitude()) * ratio,
                 from.longitude() + (to.longitude() - from.longitude()) * ratio,
                 interpolateTime(from.recordedAt(), to.recordedAt(), ratio),
+                // 거리와 같은 비율로 나눈다 — 인정한 칸에서는 거리와 시간이 함께 늘기 때문이다
+                movingSeconds[cursor - 1] + (movingSeconds[cursor] - movingSeconds[cursor - 1]) * ratio,
                 cursor - 1);
     }
 

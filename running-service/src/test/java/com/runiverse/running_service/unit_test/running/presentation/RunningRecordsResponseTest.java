@@ -23,7 +23,7 @@ public class RunningRecordsResponseTest {
         GetMyRunningRecordsResult result = new GetMyRunningRecordsResult(List.of(
                 new GetMyRunningRecordsResult.RunningRecord(
                         501L, 125L, RunningRoomType.MATCH, 3L, STARTED_AT,
-                        5020, 1800, 359, 42, "u{~vFvyys@fS]pT_@")));
+                        5020, 1800, 359, 42)));
 
         // when
         RunningRecordsResponse response = RunningRecordsResponse.from(result);
@@ -39,7 +39,6 @@ public class RunningRecordsResponseTest {
         assertThat(record.totalDurationSeconds()).isEqualTo(1800);
         assertThat(record.averagePaceSecondsPerKm()).isEqualTo(359);
         assertThat(record.totalElevationGainMeters()).isEqualTo(42);
-        assertThat(record.routePolyline()).isEqualTo("u{~vFvyys@fS]pT_@");
     }
 
     @Test
@@ -49,7 +48,7 @@ public class RunningRecordsResponseTest {
         GetMyRunningRecordsResult result = new GetMyRunningRecordsResult(List.of(
                 new GetMyRunningRecordsResult.RunningRecord(
                         501L, 125L, RunningRoomType.SOLO, 1L, STARTED_AT,
-                        5020, 1800, 359, null, "u{~vF")));
+                        5020, 1800, 359, null)));
 
         // when
         RunningRecordsResponse response = RunningRecordsResponse.from(result);

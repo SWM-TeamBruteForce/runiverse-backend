@@ -36,7 +36,8 @@ public final class RunningWebSocket implements AutoCloseable {
         this.received = received;
     }
 
-    static RunningWebSocket connect(HttpClient httpClient, String url, String accessToken) {
+    static RunningWebSocket connect(HttpClient httpClient, String url, String accessToken,
+                                    Map<String, String> headers) {
         BlockingQueue<Map<String, Object>> received = new LinkedBlockingQueue<>();
         WebSocket.Builder builder = httpClient.newWebSocketBuilder()
                 .connectTimeout(DEFAULT_TIMEOUT);
@@ -44,6 +45,7 @@ public final class RunningWebSocket implements AutoCloseable {
         if (accessToken != null) {
             builder.header("Authorization", "Bearer " + accessToken);
         }
+        headers.forEach(builder::header);
         try {
             WebSocket socket = builder
                     .buildAsync(URI.create(url), new Collector(received))

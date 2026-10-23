@@ -7,8 +7,10 @@ import com.runiverse.running_service.application.user.command.profileimage.Chang
 import com.runiverse.running_service.application.user.command.profileimage.ChangeProfileImageHandler;
 import com.runiverse.running_service.application.user.command.profileimage.DeleteProfileImageCommand;
 import com.runiverse.running_service.application.user.command.profileimage.DeleteProfileImageHandler;
-import com.runiverse.running_service.application.user.command.profileimage.ProfileImageContentType;
-import com.runiverse.running_service.application.user.command.profileimage.ProfileImageKeyPolicy;
+import com.runiverse.running_service.application.user.common.ImageContentType;
+import com.runiverse.running_service.application.user.common.UploadedImageVerifier;
+import com.runiverse.running_service.application.user.common.UserImageType;
+import com.runiverse.running_service.application.user.common.UserImageUrlResolver;
 import com.runiverse.running_service.application.user.exception.ProfileNotFoundException;
 import com.runiverse.running_service.application.user.query.profileimage.GetProfileImageUrlHandler;
 import com.runiverse.running_service.application.user.query.profileimage.GetProfileImageUrlQuery;
@@ -47,7 +49,7 @@ public class GetProfileImageUrlIntegrationTest extends IntegrationTestSupport {
         uploadedImageStore = new FakeUploadedImageStore();
         viewUrlGenerator = new FakeViewUrlGenerator();
         changeProfileImageHandler = new ChangeProfileImageHandler(
-                uploadedImageStore,  // LoadUploadedImagePort
+                new UploadedImageVerifier(uploadedImageStore),  // LoadUploadedImagePort
                 userStore            // UpdateProfileImagePort
         );
         deleteProfileImageHandler = new DeleteProfileImageHandler(
@@ -55,7 +57,7 @@ public class GetProfileImageUrlIntegrationTest extends IntegrationTestSupport {
         );
         handler = new GetProfileImageUrlHandler(
                 userStore,           // LoadUserByIdPort
-                viewUrlGenerator     // GenerateViewUrlPort
+                new UserImageUrlResolver(viewUrlGenerator)  // GenerateViewUrlPort
         );
     }
 
@@ -65,8 +67,8 @@ public class GetProfileImageUrlIntegrationTest extends IntegrationTestSupport {
 
     // 업로드까지 마친 key를 반영한다 — 발급만 받은 key는 변경 핸들러가 막는다
     private String registerProfileImage(UUID userId) {
-        String key = ProfileImageKeyPolicy.create(
-                userId, UuidCreator.getTimeOrderedEpoch(), ProfileImageContentType.JPEG).value();
+        String key = UserImageType.PROFILE.createKey(
+                userId, UuidCreator.getTimeOrderedEpoch(), ImageContentType.JPEG);
         uploadedImageStore.register(key, SIZE_BYTES, JPEG);
         changeProfileImageHandler.handle(new ChangeProfileImageCommand(userId, key));
         return key;

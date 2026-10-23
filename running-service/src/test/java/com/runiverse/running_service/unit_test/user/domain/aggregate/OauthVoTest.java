@@ -23,8 +23,9 @@ public class OauthVoTest {
         @DisplayName("소문자 provider 이름으로 Provider를 생성할 수 있다")
         void createProviderSuccess() {
             // when & then
-            assertThat(Provider.from("kakao")).isEqualTo(Provider.KAKAO);
             assertThat(Provider.from("google")).isEqualTo(Provider.GOOGLE);
+            assertThat(Provider.from("kakao")).isEqualTo(Provider.KAKAO);
+            assertThat(Provider.from("apple")).isEqualTo(Provider.APPLE);
         }
 
         @Test

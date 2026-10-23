@@ -11,6 +11,7 @@ import com.runiverse.running_service.application.running.command.solo.OpenSoloRo
 import com.runiverse.running_service.application.running.command.solo.OpenSoloRoomHandler;
 import com.runiverse.running_service.application.running.command.start.StartRunningCommand;
 import com.runiverse.running_service.application.running.command.start.StartRunningHandler;
+import com.runiverse.running_service.application.running.common.LiveRunningStatusChanger;
 import com.runiverse.running_service.application.running.common.RunningFinishProperties;
 import com.runiverse.running_service.application.running.common.RunningFinisher;
 import com.runiverse.running_service.application.running.exception.NotRoomPlayerException;
@@ -23,10 +24,12 @@ import com.runiverse.running_service.application.user.command.onboarding.Complet
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingHandler;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.record.RunningRecord;
+import com.runiverse.running_service.infrastructure.metrics.running.RunningMetricAdapter;
 import com.runiverse.running_service.integration_test.IntegrationTestSupport;
 import com.runiverse.running_service.integration_test.fake.FakeViewUrlGenerator;
 import com.runiverse.running_service.integration_test.fake.InMemoryPlayerProfileStore;
 import com.runiverse.running_service.integration_test.fake.InMemoryRunningResultStore;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,6 +42,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static com.runiverse.running_service.support.TrackFilterFixtures.DEFAULT_PROPERTIES;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
@@ -112,17 +116,27 @@ public class GetRunningResultsIntegrationTest extends IntegrationTestSupport {
                 runningRecordStore, // ExistsRunningRecordPort
                 runningRecordStore, // LoadRecentRunningPacesPort
                 onboardingStore,    // UpdateUserAvgPacePort
+                new LiveRunningStatusChanger( // LiveRunningStatusChanger
+                        liveRunningStatusStore, runningDistanceStore, runningProgressPublisher),
+                newRunningComboArchiver(), // RunningComboArchiver
+                runningComboStore,  // MarkRunningComboFinishedPort
                 event -> {          // ApplicationEventPublisher
                 },
                 PROPERTIES
-        );
+                ,
+                DEFAULT_PROPERTIES,
+                // 메트릭은 이 테스트의 관심사가 아니다 — 메모리 레지스트리에 흘려보낸다
+                new RunningMetricAdapter(new SimpleMeterRegistry()));
         updateRunningLocationHandler = new UpdateRunningLocationHandler(
                 runningTrackStore,        // AppendRunningTrackPort
                 runningDistanceStore,     // LoadRunningDistancePort
                 runningDistanceStore,     // SaveRunningDistancePort
+                liveRunningStatusStore,   // ChangeLiveRunningStatusPort
+                liveRunningStatusStore,   // LoadLiveRunningStatusPort
                 runningProgressPublisher, // PublishRunningProgressPort
                 newUpdateRunningComboJudge(),
-                new UpdateRunningFinishJudge(runningFinisher)
+                new UpdateRunningFinishJudge(runningFinisher),
+                DEFAULT_PROPERTIES
         );
         finishRunningHandler = new FinishRunningHandler(runningFinisher);
 
@@ -182,12 +196,13 @@ public class GetRunningResultsIntegrationTest extends IntegrationTestSupport {
         GetRunningResultsResult result =
                 handler.handle(new GetRunningResultsQuery(runningRoomId, userId));
 
-        // then -> 북쪽으로만 달렸으므로 경도는 그대로고 위도만 커진다
-        assertThat(result.routes()).isNotEmpty();
-        assertThat(result.routes().get(0).latitude()).isCloseTo(37.5, within(PRECISION));
-        assertThat(result.routes().get(0).longitude()).isCloseTo(127.0, within(PRECISION));
-        assertThat(result.routes().get(result.routes().size() - 1).latitude())
-                .isGreaterThan(result.routes().get(0).latitude());
+        // then -> 끊긴 곳 없이 달렸으니 조각 하나다. 북쪽으로만 달렸으므로 경도는 그대로고 위도만 커진다
+        assertThat(result.routes()).hasSize(1);
+        var route = result.routes().get(0);
+        assertThat(route).isNotEmpty();
+        assertThat(route.get(0).latitude()).isCloseTo(37.5, within(PRECISION));
+        assertThat(route.get(0).longitude()).isCloseTo(127.0, within(PRECISION));
+        assertThat(route.get(route.size() - 1).latitude()).isGreaterThan(route.get(0).latitude());
     }
 
     @Test
@@ -303,7 +318,7 @@ public class GetRunningResultsIntegrationTest extends IntegrationTestSupport {
         List<TrackPoint> points = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             points.add(new TrackPoint(i, 37.5 + i * 2.5 / METERS_PER_DEGREE, 127.0,
-                    null, 5.0, null, null, 168, null, TRACK_START.plusSeconds(i)));
+                    null, 5.0, null, null, 168, null, TRACK_START.plusSeconds(i), 0));
         }
         updateRunningLocationHandler.handle(
                 new UpdateRunningLocationCommand(userId, runningRoomId, null, points));

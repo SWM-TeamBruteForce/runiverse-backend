@@ -28,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -82,7 +83,8 @@ class RoomInfoAssemblerTest {
         roomInfoAssembler = new RoomInfoAssembler(
                 loadMatchPlayersPort, loadPlayerProfilesPort, generateViewUrlPort,
                 new MatchProperties(CLOSE_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET,
-                        PACE_TIE_TOLERANCE, COOLDOWN),
+                        PACE_TIE_TOLERANCE, COOLDOWN,
+                        LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000)),
                 loadActiveApplicationPort, loadMatchRoomPort, loadMatchRoomDetailPort);
     }
 

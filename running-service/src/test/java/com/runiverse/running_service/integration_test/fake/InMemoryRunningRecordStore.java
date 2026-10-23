@@ -3,6 +3,9 @@ package com.runiverse.running_service.integration_test.fake;
 import com.runiverse.running_service.application.running.port.out.CreateRunningRecordPort;
 import com.runiverse.running_service.application.running.port.out.ExistsRunningRecordPort;
 import com.runiverse.running_service.application.running.port.out.LoadRecentRunningPacesPort;
+import com.runiverse.running_service.application.running.port.out.LoadRecordedRoutesPort;
+import com.runiverse.running_service.application.running.port.out.RecordedRoute;
+import com.runiverse.running_service.application.running.port.out.RecordedSplitTime;
 import com.runiverse.running_service.application.running.port.out.RecentRunningPace;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.record.RunningRecord;
@@ -18,8 +21,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 // RunningRecordPersistenceAdapter를 대신한다
-public class InMemoryRunningRecordStore
-        implements CreateRunningRecordPort, ExistsRunningRecordPort, LoadRecentRunningPacesPort {
+public class InMemoryRunningRecordStore implements CreateRunningRecordPort, ExistsRunningRecordPort,
+        LoadRecentRunningPacesPort, LoadRecordedRoutesPort {
 
     private record Key(Long runningRoomId, UUID userId) {
 
@@ -62,6 +65,26 @@ public class InMemoryRunningRecordStore
     public boolean existsInRoom(RunningRoomId runningRoomId) {
         return records.keySet().stream()
                 .anyMatch(key -> key.runningRoomId().equals(runningRoomId.value()));
+    }
+
+    @Override
+    public List<RecordedRoute> loadRoutes(Long runningRoomId) {
+        return records.values().stream()
+                .filter(record -> record.getRunningRoomId().value().equals(runningRoomId))
+                .map(record -> new RecordedRoute(
+                        record.getUserId().value(),
+                        record.getSegments().stream()
+                                .map(segment -> segment.getRoutePolyline().value())
+                                .toList(),
+                        record.getSplits().stream()
+                                .map(split -> new RecordedSplitTime(
+                                        split.getSegmentNumber().value(),
+                                        split.getRouteRange().startIndex(),
+                                        split.getRouteRange().endIndex(),
+                                        split.getPeriod().startAt(),
+                                        split.getPeriod().endAt()))
+                                .toList()))
+                .toList();
     }
 
     // 검증 전용

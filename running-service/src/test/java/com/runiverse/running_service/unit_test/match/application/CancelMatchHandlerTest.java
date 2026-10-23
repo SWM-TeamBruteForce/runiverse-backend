@@ -9,15 +9,18 @@ import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
 import com.runiverse.running_service.application.match.exception.ActiveMatchNotFoundException;
 import com.runiverse.running_service.application.match.exception.MatchAlreadyStartedException;
 import com.runiverse.running_service.application.match.port.out.LockMatchApplicationPort;
+import com.runiverse.running_service.application.match.port.out.LoadMatchPlayersPort;
 import com.runiverse.running_service.application.match.port.out.LoadMatchRoomPort;
 import com.runiverse.running_service.application.match.port.out.LockMatchRoomPort;
 import com.runiverse.running_service.application.match.port.out.MatchCooldownPort;
 import com.runiverse.running_service.application.match.port.out.MatchEventType;
+import com.runiverse.running_service.application.match.port.out.MatchPlayer;
 import com.runiverse.running_service.application.match.port.out.MatchStreamEvent;
 import com.runiverse.running_service.application.match.port.out.RoomInfo;
 import com.runiverse.running_service.application.match.port.out.UpdateMatchApplicationPort;
 import com.runiverse.running_service.application.match.port.out.UpdateMatchRoomPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.domain.running.metric.vo.Pace;
 import com.runiverse.running_service.domain.running.player.RunningPlayer;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerId;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerStatus;
@@ -37,6 +40,7 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -79,6 +83,9 @@ class CancelMatchHandlerTest {
     private LockMatchRoomPort lockMatchRoomPort;
 
     @Mock
+    private LoadMatchPlayersPort loadMatchPlayersPort;
+
+    @Mock
     private UpdateMatchApplicationPort updateMatchApplicationPort;
 
     @Mock
@@ -99,9 +106,10 @@ class CancelMatchHandlerTest {
     void setUp() {
         cancelMatchHandler = new CancelMatchHandler(
                 lockMatchApplicationPort, loadMatchRoomPort, lockMatchRoomPort,
-                updateMatchApplicationPort, updateMatchRoomPort, matchCooldownPort,
+                loadMatchPlayersPort, updateMatchApplicationPort, updateMatchRoomPort, matchCooldownPort,
                 new MatchProperties(CLOSE_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET,
-                        PACE_TIE_TOLERANCE, COOLDOWN),
+                        PACE_TIE_TOLERANCE, COOLDOWN,
+                        LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000)),
                 roomInfoAssembler, eventPublisher);
     }
 
@@ -209,6 +217,54 @@ class CancelMatchHandlerTest {
         RunningRoom updated = updatedRoom();
         assertThat(updated.getStatus()).isEqualTo(RunningRoomStatus.MATCHING);
         assertThat(updated.getPlayerCount().current()).isOne();
+    }
+
+    @Test
+    @DisplayName("나가면 남은 참가자의 페이스로 방 평균을 다시 낸다")
+    void recalculatesAvgPaceWithRemainingPlayers() {
+        // given -> 600인 내가 나가면 300인 상대만 남는다
+        givenActiveMatch(room(startAfter(Duration.ofHours(2)), 2));
+        given(loadMatchPlayersPort.loadPlayers(new RunningRoomId(ROOM_ID))).willReturn(List.of(
+                new MatchPlayer(USER_ID, 600),
+                new MatchPlayer(UuidCreator.getTimeOrderedEpoch(), 300)));
+
+        // when
+        cancelMatchHandler.handle(new CancelMatchCommand(USER_ID));
+
+        // then
+        assertThat(updatedRoom().getAvgPace()).map(Pace::secondsPerKm).contains(300);
+    }
+
+    @Test
+    @DisplayName("마지막 참가자가 나가면 방 평균을 지운다")
+    void clearsAvgPaceWhenLastPlayerLeaves() {
+        // given
+        givenActiveMatch(room(startAfter(Duration.ofHours(2)), 1));
+        given(loadMatchPlayersPort.loadPlayers(new RunningRoomId(ROOM_ID)))
+                .willReturn(List.of(new MatchPlayer(USER_ID, AVG_PACE)));
+
+        // when
+        cancelMatchHandler.handle(new CancelMatchCommand(USER_ID));
+
+        // then -> 평균 낼 대상이 없다
+        assertThat(updatedRoom().getAvgPace()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("시작된 방에서 나가면 방 평균을 그대로 둔다")
+    void keepsAvgPaceWhenLeavingAfterStart() {
+        // given -> 앱을 켜지 않아 JOINED로 남은 참가자다
+        RunningRoom room = room(LocalDateTime.now().minusMinutes(5), 2);
+        room.closeMatching();
+        room.start();
+        givenActiveMatch(room);
+
+        // when
+        cancelMatchHandler.handle(new CancelMatchCommand(USER_ID));
+
+        // then -> 뛴 방의 평균으로 남긴다
+        assertThat(updatedRoom().getAvgPace()).map(Pace::secondsPerKm).contains(AVG_PACE);
+        verifyNoInteractions(loadMatchPlayersPort);
     }
 
     @Test

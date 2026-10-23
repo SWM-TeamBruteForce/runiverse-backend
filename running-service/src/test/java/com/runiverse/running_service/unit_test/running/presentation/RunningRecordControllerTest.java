@@ -89,7 +89,7 @@ class RunningRecordControllerTest {
                         new GetMyRunningRecordsResult.RunningRecord(
                                 501L, 125L, RunningRoomType.MATCH, 3L,
                                 LocalDateTime.of(2026, 9, 28, 19, 0, 30, 123_456_000),
-                                5020, 1800, 359, null, "u{~vFvyys@fS]pT_@"))));
+                                5020, 1800, 359, null))));
 
         // when
         MvcResult result = mockMvc.perform(request("2026-09-27", "2026-10-03")).andReturn();
@@ -103,7 +103,7 @@ class RunningRecordControllerTest {
         assertThat(record.keySet()).containsExactly(
                 "runningRecordId", "runningRoomId", "type", "playerCount", "startedAt",
                 "totalDistanceMeters", "totalDurationSeconds", "averagePaceSecondsPerKm",
-                "totalElevationGainMeters", "routePolyline");
+                "totalElevationGainMeters");
         assertThat(record)
                 .containsEntry("runningRecordId", 501)
                 .containsEntry("runningRoomId", 125)
@@ -115,8 +115,7 @@ class RunningRecordControllerTest {
                 .containsEntry("totalDurationSeconds", 1800)
                 .containsEntry("averagePaceSecondsPerKm", 359)
                 // 값이 없어도 키는 내려간다
-                .containsEntry("totalElevationGainMeters", null)
-                .containsEntry("routePolyline", "u{~vFvyys@fS]pT_@");
+                .containsEntry("totalElevationGainMeters", null);
     }
 
     @Test

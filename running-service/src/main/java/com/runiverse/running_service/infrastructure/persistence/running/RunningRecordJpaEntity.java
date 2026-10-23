@@ -78,9 +78,6 @@ public class RunningRecordJpaEntity extends BaseCreatedAtEntity {
     // S3 원본 트랙 키. 재계산·분석용이라 API 응답에는 쓰지 않는다
     @Column(name = "gps_track_key", nullable = false, updatable = false)
     private String gpsTrackKey;
-    // API가 내려주는 유일한 경로 데이터. 구간 인덱스가 이 배열의 위치를 가리킨다
-    @Column(name = "route_polyline", nullable = false, updatable = false, columnDefinition = "text")
-    private String routePolyline;
     // WMO 4677 코드 — 악조건 여부는 저장하지 않고 판정 시 계산한다
     @Column(name = "weather_code", nullable = false, updatable = false)
     private int weatherCode;
@@ -94,7 +91,7 @@ public class RunningRecordJpaEntity extends BaseCreatedAtEntity {
     private RunningRecordJpaEntity(RunningRoomJpaEntity room, UUID userId, int avgPace,
                                    int totalDistance, int totalDuration, Integer avgCadence,
                                    Integer totalElevationGain, int totalCalories,
-                                   String gpsTrackKey, String routePolyline, int weatherCode,
+                                   String gpsTrackKey, int weatherCode,
                                    BigDecimal temperature, LocalDateTime startAt,
                                    LocalDateTime endAt) {
         this.room = room;
@@ -106,7 +103,6 @@ public class RunningRecordJpaEntity extends BaseCreatedAtEntity {
         this.totalElevationGain = totalElevationGain;
         this.totalCalories = totalCalories;
         this.gpsTrackKey = gpsTrackKey;
-        this.routePolyline = routePolyline;
         this.weatherCode = weatherCode;
         this.temperature = temperature;
         this.startAt = startAt;
@@ -117,11 +113,10 @@ public class RunningRecordJpaEntity extends BaseCreatedAtEntity {
                                                 int avgPace, int totalDistance, int totalDuration,
                                                 Integer avgCadence, Integer totalElevationGain,
                                                 int totalCalories, String gpsTrackKey,
-                                                String routePolyline, int weatherCode,
-                                                BigDecimal temperature, LocalDateTime startAt,
-                                                LocalDateTime endAt) {
+                                                int weatherCode, BigDecimal temperature,
+                                                LocalDateTime startAt, LocalDateTime endAt) {
         return new RunningRecordJpaEntity(room, userId, avgPace, totalDistance, totalDuration,
-                avgCadence, totalElevationGain, totalCalories, gpsTrackKey, routePolyline,
+                avgCadence, totalElevationGain, totalCalories, gpsTrackKey,
                 weatherCode, temperature, startAt, endAt);
     }
 }

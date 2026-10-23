@@ -24,17 +24,36 @@ public class RunningResultsResponseTest {
     @DisplayName("경로는 [위도, 경도] 순서의 두 칸 배열로 나간다")
     void 위도가_먼저다() {
         // given -> 서울 좌표. 위도(37)와 경도(127)가 확연히 달라 뒤집히면 바로 드러난다
-        GetRunningResultsResult result = result(List.of(
+        GetRunningResultsResult result = result(List.of(List.of(
                 new RoutePoint(37.5665, 126.9780),
-                new RoutePoint(37.5666, 126.9781)));
+                new RoutePoint(37.5666, 126.9781))));
 
         // when
         RunningResultsResponse response = RunningResultsResponse.from(result);
 
         // then -> GeoJSON은 경도가 먼저라 반대다. 여기서 뒤집으면 지도가 엉뚱한 곳을 그린다
+        assertThat(response.routes()).hasSize(1);
+        assertThat(response.routes().get(0)).hasSize(2);
+        assertThat(response.routes().get(0).get(0)).containsExactly(37.5665, 126.9780);
+        assertThat(response.routes().get(0).get(1)).containsExactly(37.5666, 126.9781);
+    }
+
+    @Test
+    @DisplayName("조각은 나뉜 그대로 한 겹 더 감싸 나간다 -> 클라가 조각 사이를 잇지 않는다")
+    void 조각을_나뉜_그대로_내린다() {
+        // given -> 일시정지 앞 두 점, 재개 뒤 한 점
+        GetRunningResultsResult result = result(List.of(
+                List.of(new RoutePoint(37.5665, 126.9780), new RoutePoint(37.5666, 126.9781)),
+                List.of(new RoutePoint(37.5700, 126.9800))));
+
+        // when
+        RunningResultsResponse response = RunningResultsResponse.from(result);
+
+        // then -> 한 줄로 합치면 재개 지점까지 선이 그어진다
         assertThat(response.routes()).hasSize(2);
-        assertThat(response.routes().get(0)).containsExactly(37.5665, 126.9780);
-        assertThat(response.routes().get(1)).containsExactly(37.5666, 126.9781);
+        assertThat(response.routes().get(0)).hasSize(2);
+        assertThat(response.routes().get(1)).singleElement()
+                .satisfies(point -> assertThat(point).containsExactly(37.5700, 126.9800));
     }
 
     @Test
@@ -54,7 +73,7 @@ public class RunningResultsResponseTest {
     @DisplayName("최상위 값과 참가자 지표가 자리 그대로 옮겨진다")
     void 필드가_자리_그대로_옮겨진다() {
         // given
-        GetRunningResultsResult result = result(List.of(new RoutePoint(37.5665, 126.9780)));
+        GetRunningResultsResult result = result(List.of(List.of(new RoutePoint(37.5665, 126.9780))));
 
         // when
         RunningResultsResponse response = RunningResultsResponse.from(result);
@@ -126,7 +145,7 @@ public class RunningResultsResponseTest {
     }
 
     // 지표는 전부 다른 값으로 둔다 — 같은 값이면 자리가 바뀌어도 통과한다
-    private GetRunningResultsResult result(List<RoutePoint> routes) {
+    private GetRunningResultsResult result(List<List<RoutePoint>> routes) {
         return new GetRunningResultsResult(
                 ROOM_ID, STARTED_AT, FINISHED_AT, routes,
                 List.of(new GetRunningResultsResult.Player(

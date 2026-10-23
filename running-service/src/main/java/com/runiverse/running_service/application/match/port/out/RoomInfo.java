@@ -14,7 +14,7 @@ public record RoomInfo(
         // running_rooms.close_at(방이 실제로 닫힌 시각)과 이름이 겹치니 주의
         LocalDateTime closeAt,
         Integer targetDistanceMeters,
-        // 참가자가 없으면 null — 평균 낼 대상이 없다
+        // 시작 전에 참가자가 0이 되면 null — 평균 낼 대상이 없다
         Integer teamAveragePaceSecondsPerKm,
         List<RoomPlayer> players
 ) {

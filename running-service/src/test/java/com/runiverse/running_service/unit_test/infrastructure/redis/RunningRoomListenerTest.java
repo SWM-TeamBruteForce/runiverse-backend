@@ -7,6 +7,7 @@ import com.runiverse.running_service.application.running.port.in.BroadcastRunnin
 import com.runiverse.running_service.application.running.port.in.CloseSupersededSessionUsecase;
 import com.runiverse.running_service.application.running.port.out.RunningComboRelation;
 import com.runiverse.running_service.application.running.port.out.RunningComboUpdate;
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
 import com.runiverse.running_service.application.running.port.out.RunningProgress;
 import com.runiverse.running_service.infrastructure.redis.running.ComboMessage;
 import com.runiverse.running_service.infrastructure.redis.running.ProgressMessage;
@@ -112,8 +113,8 @@ class RunningRoomListenerTest {
     @Test
     @DisplayName("진행 통지도 같은 봉투로 되살아난다")
     void progressMessageRoundTrips() {
-        // given
-        RunningProgress progress = new RunningProgress(FIRST, 3_433, 5_000, 345, false);
+        // given -> 상태는 enum이라 이름으로 직렬화된다 — 가장 흔한 RUNNING이 아닌 값으로 왕복을 확인한다
+        RunningProgress progress = new RunningProgress(FIRST, 3_433, 5_000, 345, LiveRunningStatus.PAUSED);
 
         // when
         listener.onMessage(published(

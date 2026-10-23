@@ -41,7 +41,7 @@ public class GetMySettingsHandlerTest {
 
     private void givenUser(UUID userId, boolean alertConsent, ProfileVisibility profileVisibility) {
         User user = new User(userId, EMAIL, PASSWORD_HASH, alertConsent,
-                null, profileVisibility, INTRODUCTION);
+                null, null, profileVisibility, INTRODUCTION);
         when(loadUserByIdPort.loadById(new UserId(userId))).thenReturn(Optional.of(user));
     }
 

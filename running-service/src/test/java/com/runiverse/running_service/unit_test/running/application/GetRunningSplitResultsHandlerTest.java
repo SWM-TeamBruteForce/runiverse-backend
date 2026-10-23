@@ -67,6 +67,9 @@ public class GetRunningSplitResultsHandlerTest {
     private static final List<BoundaryPoint> ROUTE = List.of(
             boundary(0, 35.0), boundary(10, 36.0), boundary(20, 37.0),
             boundary(30, 38.0), boundary(40, 39.0));
+    // 일시정지 뒤 2번 조각. 1번 조각과 섞이면 바로 보이게 위도를 50부터 둔다
+    private static final List<BoundaryPoint> RESUMED_ROUTE = List.of(
+            boundary(50, 50.0), boundary(60, 51.0), boundary(70, 52.0));
 
     @Mock
     private LoadRunningRoomPort loadRunningRoomPort;
@@ -202,6 +205,61 @@ public class GetRunningSplitResultsHandlerTest {
     }
 
     @Test
+    @DisplayName("구간은 자기가 속한 조각에서만 자른다 -> 같은 번호라도 다른 조각의 점을 쓰지 않는다")
+    void 소속_조각에서_자른다() {
+        // given -> 2번 조각의 [0, 1]이다. 1번 조각에서 잘랐다면 위도 35·36이 나온다
+        givenRoomAndPlayers();
+        givenSplits(splitIn(ME, 1, 2, 0, 1));
+        givenRecordAndProfiles();
+
+        // when
+        GetRunningSplitResultsResult.Split split =
+                handler.handle(new GetRunningSplitResultsQuery(ROOM_ID, ME)).splits().get(0);
+
+        // then
+        assertThat(split.routes()).hasSize(2);
+        assertThat(split.routes().get(0).latitude()).isCloseTo(50.0, within(PRECISION));
+        assertThat(split.routes().get(1).latitude()).isCloseTo(51.0, within(PRECISION));
+    }
+
+    @Test
+    @DisplayName("끊긴 곳에 걸친 구간은 뒤 조각의 첫 점 하나만 실린다 -> 선을 긋지 않는다")
+    void 걸친_구간은_점_하나다() {
+        // given -> 1번 조각 마지막 구간 [3, 4] 다음, 2번 조각으로 넘어가는 구간이 [0, 0]이다
+        givenRoomAndPlayers();
+        givenSplits(split(ME, 4, 3, 4), splitIn(ME, 5, 2, 0, 0), splitIn(ME, 6, 2, 0, 1));
+        givenRecordAndProfiles();
+
+        // when
+        List<GetRunningSplitResultsResult.Split> splits =
+                handler.handle(new GetRunningSplitResultsQuery(ROOM_ID, ME)).splits();
+
+        // then -> 1번 조각 끝(39)과 2번 조각 처음(50)을 잇는 선이 생기면 안 된다
+        assertThat(splits.get(0).routes()).extracting(point -> point.latitude())
+                .containsExactly(38.0, 39.0);
+        assertThat(splits.get(1).routes()).singleElement()
+                .satisfies(point -> assertThat(point.latitude()).isCloseTo(50.0, within(PRECISION)));
+        assertThat(splits.get(2).routes()).extracting(point -> point.latitude())
+                .containsExactly(50.0, 51.0);
+    }
+
+    @Test
+    @DisplayName("기록에 없는 조각을 가리키는 구간은 경로가 없다 -> 저장이 깨져도 남의 조각을 쓰지 않는다")
+    void 없는_조각을_가리키면_경로가_없다() {
+        // given -> 조각은 둘뿐인데 3번 조각을 가리킨다
+        givenRoomAndPlayers();
+        givenSplits(splitIn(ME, 1, 3, 0, 1));
+        givenRecordAndProfiles();
+
+        // when
+        GetRunningSplitResultsResult.Split split =
+                handler.handle(new GetRunningSplitResultsQuery(ROOM_ID, ME)).splits().get(0);
+
+        // then
+        assertThat(split.routes()).isNull();
+    }
+
+    @Test
     @DisplayName("본인이 도달하지 못한 구간은 경로가 없다 -> 남은 남대로 지표만 실린다")
     void 도달하지_못한_구간은_경로가_없다() {
         // given -> 상대만 3번 구간까지 갔다
@@ -314,7 +372,8 @@ public class GetRunningSplitResultsHandlerTest {
     private void givenRecordAndProfiles() {
         when(loadRunningResultRecordPort.loadRecord(any(), any())).thenReturn(Optional.of(
                 new RunningResultRecord(
-                        PolylineEncoder.encode(ROUTE), STARTED_AT, FINISHED_AT, 5020, 42)));
+                        List.of(PolylineEncoder.encode(ROUTE), PolylineEncoder.encode(RESUMED_ROUTE)),
+                        STARTED_AT, FINISHED_AT, 5020, 42)));
         Map<UUID, PlayerProfile> profiles = new HashMap<>();
         profiles.put(ME, new PlayerProfile(ME, "동완러너", null, null));
         profiles.put(OTHER, new PlayerProfile(OTHER, "러닝초보", null, null));
@@ -327,11 +386,17 @@ public class GetRunningSplitResultsHandlerTest {
 
     // 지표를 전부 다른 값으로 둔다 — 같은 값이면 자리가 바뀌어도 통과한다
     private RunningSplitRow split(UUID userId, int splitNumber, int startIndex, int endIndex) {
+        return splitIn(userId, splitNumber, 1, startIndex, endIndex);
+    }
+
+    // 경로 범위는 segmentNumber 조각 안의 점 번호다
+    private RunningSplitRow splitIn(UUID userId, int splitNumber, int segmentNumber,
+                                    int startIndex, int endIndex) {
         return new RunningSplitRow(userId, splitNumber, SPLIT_DISTANCE, 3, 345, 162, null, 1,
-                startIndex, endIndex);
+                segmentNumber, startIndex, endIndex);
     }
 
     private static BoundaryPoint boundary(int distanceMeters, double latitude) {
-        return new BoundaryPoint(distanceMeters, latitude, 127.0, STARTED_AT, 0);
+        return new BoundaryPoint(distanceMeters, latitude, 127.0, STARTED_AT, 0, 0);
     }
 }

@@ -8,6 +8,7 @@ import com.runiverse.running_service.domain.user.vo.Gender;
 import com.runiverse.running_service.domain.user.vo.Introduction;
 import com.runiverse.running_service.domain.user.vo.Nickname;
 import com.runiverse.running_service.domain.user.vo.PasswordHash;
+import com.runiverse.running_service.domain.user.vo.BackgroundImageKey;
 import com.runiverse.running_service.domain.user.vo.ProfileImageKey;
 import com.runiverse.running_service.domain.user.vo.ProfileVisibility;
 import com.runiverse.running_service.domain.user.vo.Provider;
@@ -51,6 +52,10 @@ public class UserPersistenceAdapterTest {
 
     private static String profileImageKeyOf(UUID userId) {
         return "profiles/" + userId + "/photo.jpg";
+    }
+
+    private static String backgroundImageKeyOf(UUID userId) {
+        return "backgrounds/" + userId + "/photo.jpg";
     }
 
     // 카카오 회원번호
@@ -122,7 +127,7 @@ public class UserPersistenceAdapterTest {
         UUID userId = UuidCreator.getTimeOrderedEpoch();
 
         UserJpaEntity entity = UserJpaEntity.create(
-                userId, email, PASSWORD_HASH, true, profileImageKeyOf(userId), ProfileVisibility.FRIENDS, "러닝을 좋아합니다"
+                userId, email, PASSWORD_HASH, true, profileImageKeyOf(userId), null, ProfileVisibility.FRIENDS, "러닝을 좋아합니다"
         );
 
         givenUserQueryReturns(email, Stream.of(entity));
@@ -167,7 +172,7 @@ public class UserPersistenceAdapterTest {
         String email = "test@example.com";
 
         UserJpaEntity entity = UserJpaEntity.create(
-                UuidCreator.getTimeOrderedEpoch(), email, PASSWORD_HASH, false, null, ProfileVisibility.PUBLIC, null
+                UuidCreator.getTimeOrderedEpoch(), email, PASSWORD_HASH, false, null, null, ProfileVisibility.PUBLIC, null
         );
 
         givenUserQueryReturns(email, Stream.of(entity));
@@ -186,7 +191,7 @@ public class UserPersistenceAdapterTest {
         // given -> 소셜 전용 계정은 password_hash와 introduction이 NULL로 저장된다
         UUID userId = UuidCreator.getTimeOrderedEpoch();
         UserJpaEntity entity = UserJpaEntity.create(
-                userId, "kakao@example.com", null, false, null, ProfileVisibility.PUBLIC, null
+                userId, "kakao@example.com", null, false, null, null, ProfileVisibility.PUBLIC, null
         );
 
         givenProviderQueryReturns(PROVIDER_ID, Stream.of(entity));
@@ -207,6 +212,32 @@ public class UserPersistenceAdapterTest {
 
         // 사진은 빈 문자열이 아니라 빈 Optional로 복원된다
         assertThat(user.getProfileImageKey()).isEmpty();
+        assertThat(user.getBackgroundImageKey()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("프로필·배경 키를 각자 자리로 복원한다")
+    void loadByEmailRestoresBothImageKeys() {
+        // given -> 두 키가 모두 String 인자라 자리가 뒤바뀌어도 컴파일된다
+        String email = "test@example.com";
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        UserJpaEntity entity = UserJpaEntity.create(
+                userId, email, PASSWORD_HASH, true, profileImageKeyOf(userId), backgroundImageKeyOf(userId),
+                ProfileVisibility.PUBLIC, null
+        );
+
+        givenUserQueryReturns(email, Stream.of(entity));
+
+        // when
+        User user = userPersistenceAdapter.loadByEmail(email).orElseThrow();
+
+        // then
+        assertThat(user.getProfileImageKey())
+                .map(ProfileImageKey::value)
+                .contains(profileImageKeyOf(userId));
+        assertThat(user.getBackgroundImageKey())
+                .map(BackgroundImageKey::value)
+                .contains(backgroundImageKeyOf(userId));
     }
 
     @Test
@@ -287,9 +318,9 @@ public class UserPersistenceAdapterTest {
     }
 
     @Test
-    @DisplayName("신규 유저를 저장하면 profile_image_key는 NULL로 저장된다")
+    @DisplayName("신규 유저를 저장하면 profile_image_key·background_image_key는 NULL로 저장된다")
     void savePersistsNullProfileImageKeyForNewUser() {
-        // given -> 가입 시점에는 프로필 사진이 없다
+        // given -> 가입 시점에는 프로필·배경 사진이 없다
         User user = new User(
                 UuidCreator.getTimeOrderedEpoch(), "local@example.com", PASSWORD_HASH
         );
@@ -302,6 +333,7 @@ public class UserPersistenceAdapterTest {
         verify(entityManager).persist(captor.capture());
 
         assertThat(captor.getValue().getProfileImageKey()).isNull();
+        assertThat(captor.getValue().getBackgroundImageKey()).isNull();
     }
 
     @Test
@@ -311,7 +343,7 @@ public class UserPersistenceAdapterTest {
         UUID userId = UuidCreator.getTimeOrderedEpoch();
         User user = new User(
                 userId, "local@example.com", PASSWORD_HASH, false,
-                profileImageKeyOf(userId), ProfileVisibility.PUBLIC, ""
+                profileImageKeyOf(userId), null, ProfileVisibility.PUBLIC, ""
         );
 
         // when
@@ -322,6 +354,27 @@ public class UserPersistenceAdapterTest {
         verify(entityManager).persist(captor.capture());
 
         assertThat(captor.getValue().getProfileImageKey()).isEqualTo(profileImageKeyOf(userId));
+    }
+
+    @Test
+    @DisplayName("배경 사진이 있는 유저를 저장하면 background_image_key에 key가 채워진다")
+    void savePersistsBackgroundImageKey() {
+        // given -> 프로필 키와 함께 넣어 자리가 뒤바뀌지 않는지 본다
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        User user = new User(
+                userId, "local@example.com", PASSWORD_HASH, false,
+                profileImageKeyOf(userId), backgroundImageKeyOf(userId), ProfileVisibility.PUBLIC, ""
+        );
+
+        // when
+        userPersistenceAdapter.save(user);
+
+        // then
+        ArgumentCaptor<UserJpaEntity> captor = ArgumentCaptor.forClass(UserJpaEntity.class);
+        verify(entityManager).persist(captor.capture());
+
+        assertThat(captor.getValue().getProfileImageKey()).isEqualTo(profileImageKeyOf(userId));
+        assertThat(captor.getValue().getBackgroundImageKey()).isEqualTo(backgroundImageKeyOf(userId));
     }
 
     @Test
@@ -346,7 +399,7 @@ public class UserPersistenceAdapterTest {
         // given
         UUID userId = UuidCreator.getTimeOrderedEpoch();
         UserJpaEntity entity = UserJpaEntity.create(
-                userId, "test@example.com", PASSWORD_HASH, false, null, ProfileVisibility.PUBLIC, null
+                userId, "test@example.com", PASSWORD_HASH, false, null, null, ProfileVisibility.PUBLIC, null
         );
 
         when(entityManager.find(UserJpaEntity.class, userId)).thenReturn(entity);
@@ -469,7 +522,7 @@ public class UserPersistenceAdapterTest {
         UUID userId = UuidCreator.getTimeOrderedEpoch();
         UserJpaEntity entity = UserJpaEntity.create(
                 userId, "runner@runiverse.com", PASSWORD_HASH, true,
-                profileImageKeyOf(userId), ProfileVisibility.PUBLIC, ""
+                profileImageKeyOf(userId), null, ProfileVisibility.PUBLIC, ""
         );
         when(entityManager.find(UserJpaEntity.class, userId)).thenReturn(entity);
         String newKey = "profiles/" + userId + "/019ffa54-917f-7477-9482-5792597ef3b0.jpg";
@@ -495,13 +548,77 @@ public class UserPersistenceAdapterTest {
     }
 
     @Test
+    @DisplayName("배경 이미지 key를 바꾸면 조회한 엔티티에 반영하고 프로필 key는 그대로 둔다")
+    void updateBackgroundImageChangesOnlyBackgroundKey() {
+        // given -> 두 key가 한 행에 있어 한쪽 변경이 다른 쪽을 덮으면 안 된다
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        UserJpaEntity entity = UserJpaEntity.create(
+                userId, "runner@runiverse.com", PASSWORD_HASH, true,
+                profileImageKeyOf(userId), null, ProfileVisibility.PUBLIC, ""
+        );
+        when(entityManager.find(UserJpaEntity.class, userId)).thenReturn(entity);
+
+        // when
+        userPersistenceAdapter.updateBackgroundImage(
+                new UserId(userId), new BackgroundImageKey(backgroundImageKeyOf(userId)));
+
+        // then -> 별도 저장 호출 없이 엔티티 상태만 바꾼다
+        assertThat(entity.getBackgroundImageKey()).isEqualTo(backgroundImageKeyOf(userId));
+        assertThat(entity.getProfileImageKey()).isEqualTo(profileImageKeyOf(userId));
+    }
+
+    @Test
+    @DisplayName("사용자가 없으면 배경 이미지를 바꾸지 않고 예외를 던진다")
+    void updateBackgroundImageThrowsWhenUserNotFound() {
+        // given
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        when(entityManager.find(UserJpaEntity.class, userId)).thenReturn(null);
+
+        // when & then
+        assertThatThrownBy(() -> userPersistenceAdapter.updateBackgroundImage(
+                new UserId(userId), new BackgroundImageKey(backgroundImageKeyOf(userId))))
+                .isInstanceOf(UserNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("배경 이미지를 지우면 배경 key만 null로 만든다")
+    void clearBackgroundImageRemovesOnlyBackgroundKey() {
+        // given -> S3 객체는 그대로 두고 DB의 연결만 끊는다
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        UserJpaEntity entity = UserJpaEntity.create(
+                userId, "runner@runiverse.com", PASSWORD_HASH, true,
+                profileImageKeyOf(userId), backgroundImageKeyOf(userId), ProfileVisibility.PUBLIC, ""
+        );
+        when(entityManager.find(UserJpaEntity.class, userId)).thenReturn(entity);
+
+        // when
+        userPersistenceAdapter.clearBackgroundImage(new UserId(userId));
+
+        // then
+        assertThat(entity.getBackgroundImageKey()).isNull();
+        assertThat(entity.getProfileImageKey()).isEqualTo(profileImageKeyOf(userId));
+    }
+
+    @Test
+    @DisplayName("사용자가 없으면 배경 이미지를 지우지 않고 예외를 던진다")
+    void clearBackgroundImageThrowsWhenUserNotFound() {
+        // given
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        when(entityManager.find(UserJpaEntity.class, userId)).thenReturn(null);
+
+        // when & then
+        assertThatThrownBy(() -> userPersistenceAdapter.clearBackgroundImage(new UserId(userId)))
+                .isInstanceOf(UserNotFoundException.class);
+    }
+
+    @Test
     @DisplayName("소개글을 빈 문자열로 지우면 컬럼을 null로 비운다")
     void updateIntroductionConvertsEmptyToNull() {
         // given -> 도메인은 소개글 없음을 빈 문자열로 들고 있지만 컬럼에는 남기지 않는다
         UUID userId = UuidCreator.getTimeOrderedEpoch();
         UserJpaEntity entity = UserJpaEntity.create(
                 userId, "runner@runiverse.com", PASSWORD_HASH, true,
-                null, ProfileVisibility.PUBLIC, "즐겁게 달려요"
+                null, null, ProfileVisibility.PUBLIC, "즐겁게 달려요"
         );
         when(entityManager.find(UserJpaEntity.class, userId)).thenReturn(entity);
 
@@ -519,7 +636,7 @@ public class UserPersistenceAdapterTest {
         UUID userId = UuidCreator.getTimeOrderedEpoch();
         UserJpaEntity entity = UserJpaEntity.create(
                 userId, "runner@runiverse.com", PASSWORD_HASH, true,
-                profileImageKeyOf(userId), ProfileVisibility.PUBLIC, ""
+                profileImageKeyOf(userId), null, ProfileVisibility.PUBLIC, ""
         );
         when(entityManager.find(UserJpaEntity.class, userId)).thenReturn(entity);
 
@@ -537,7 +654,7 @@ public class UserPersistenceAdapterTest {
         UUID userId = UuidCreator.getTimeOrderedEpoch();
         UserJpaEntity entity = UserJpaEntity.create(
                 userId, "runner@runiverse.com", PASSWORD_HASH, true,
-                null, ProfileVisibility.PUBLIC, ""
+                null, null, ProfileVisibility.PUBLIC, ""
         );
         when(entityManager.find(UserJpaEntity.class, userId)).thenReturn(entity);
 
@@ -567,7 +684,7 @@ public class UserPersistenceAdapterTest {
         UUID userId = UuidCreator.getTimeOrderedEpoch();
         UserJpaEntity entity = UserJpaEntity.create(
                 userId, "runner@runiverse.com", PASSWORD_HASH, true,
-                null, ProfileVisibility.PUBLIC, ""
+                null, null, ProfileVisibility.PUBLIC, ""
         );
         when(entityManager.find(UserJpaEntity.class, userId)).thenReturn(entity);
         String newHash = "$argon2id$v=19$m=16384,t=2,p=1$YW5vdGhlcnNhbHQ$bmV3aGFzaA";
@@ -653,7 +770,7 @@ public class UserPersistenceAdapterTest {
         UUID userId = UuidCreator.getTimeOrderedEpoch();
         UserJpaEntity entity = UserJpaEntity.create(
                 userId, "runner@runiverse.com", PASSWORD_HASH, true,
-                null, ProfileVisibility.PUBLIC, ""
+                null, null, ProfileVisibility.PUBLIC, ""
         );
         when(entityManager.find(UserJpaEntity.class, userId)).thenReturn(entity);
 
@@ -672,7 +789,7 @@ public class UserPersistenceAdapterTest {
         UUID userId = UuidCreator.getTimeOrderedEpoch();
         UserJpaEntity entity = UserJpaEntity.create(
                 userId, "runner@runiverse.com", PASSWORD_HASH, true,
-                null, ProfileVisibility.PUBLIC, ""
+                null, null, ProfileVisibility.PUBLIC, ""
         );
         when(entityManager.find(UserJpaEntity.class, userId)).thenReturn(entity);
 

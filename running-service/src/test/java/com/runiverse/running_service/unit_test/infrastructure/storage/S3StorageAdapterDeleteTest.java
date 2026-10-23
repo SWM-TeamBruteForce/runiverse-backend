@@ -159,6 +159,7 @@ public class S3StorageAdapterDeleteTest {
         // when & then -> 삼키면 사진이 남은 채 기록만 비워져 다음 실행에 다시 걸리지 않는다
         assertThatThrownBy(() -> adapter.deleteAllByPrefix(PREFIX))
                 .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(PREFIX)
                 .hasMessageContaining("AccessDenied");
     }
 

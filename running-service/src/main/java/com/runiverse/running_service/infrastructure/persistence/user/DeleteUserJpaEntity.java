@@ -29,7 +29,7 @@ import java.util.UUID;
 )
 @Check(name = "ck_delete_user_gender", constraints = "gender is null or gender in ('MALE', 'FEMALE')")
 @Check(name = "ck_delete_user_login_type",
-        constraints = "login_type in ('LOCAL', 'GOOGLE', 'KAKAO')")
+        constraints = "login_type in ('LOCAL', 'GOOGLE', 'KAKAO', 'APPLE')")
 @Check(name = "ck_delete_user_birth_year", constraints = "birth_year is null or birth_year >= 1900")
 @Check(name = "ck_delete_user_avg_pace",
         constraints = "avg_pace is null or avg_pace between 120 and 1800")

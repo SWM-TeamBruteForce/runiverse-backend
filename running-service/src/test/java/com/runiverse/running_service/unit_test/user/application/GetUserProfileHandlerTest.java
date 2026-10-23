@@ -1,6 +1,7 @@
 package com.runiverse.running_service.unit_test.user.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.user.common.UserImageUrlResolver;
 import com.runiverse.running_service.application.user.exception.ProfileNotFoundException;
 import com.runiverse.running_service.application.user.port.out.GenerateViewUrlPort;
 import com.runiverse.running_service.application.user.port.out.LoadNicknamePort;
@@ -12,10 +13,10 @@ import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.user.User;
 import com.runiverse.running_service.domain.user.vo.Nickname;
 import com.runiverse.running_service.domain.user.vo.ProfileVisibility;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -48,12 +49,18 @@ public class GetUserProfileHandlerTest {
     @Mock
     private GenerateViewUrlPort generateViewUrlPort;
 
-    @InjectMocks
     private GetUserProfileHandler handler;
+
+    // URL 변환은 공유 컴포넌트가 맡는다 — 실물을 끼워 서명 포트와의 상호작용까지 그대로 본다
+    @BeforeEach
+    void setUp() {
+        handler = new GetUserProfileHandler(
+                loadUserByIdPort, loadNicknamePort, new UserImageUrlResolver(generateViewUrlPort));
+    }
 
     private static User userWith(UUID userId, String profileImageKey, String introduction) {
         return new User(userId, "runner@runiverse.com", PASSWORD_HASH, true,
-                profileImageKey, ProfileVisibility.PUBLIC, introduction);
+                profileImageKey, null, ProfileVisibility.PUBLIC, introduction);
     }
 
     private static String keyOf(UUID userId) {

@@ -30,6 +30,9 @@ public abstract class E2eTestSupport {
             System.getenv().getOrDefault("E2E_BASE_URL", "http://localhost:8080/api/v1");
     private static final String APP_CONTAINER =
             System.getenv().getOrDefault("E2E_APP_CONTAINER", "runiverse-e2e-app");
+    // compose가 container_name 없이 붙이는 기본 이름이다 — compose.yml의 프로젝트명·서비스명과 같아야 한다
+    private static final String S3_CONTAINER =
+            System.getenv().getOrDefault("E2E_S3_CONTAINER", "runiverse-e2e-localstack-1");
     // 핸들러가 등록된 경로(application.properties의 websocket.running-endpoint)를 컨텍스트 경로 뒤에 붙인다
     private static final String RUNNING_WEBSOCKET_URL =
             BASE_URL.replaceFirst("^http", "ws") + "/ws/running";
@@ -37,6 +40,10 @@ public abstract class E2eTestSupport {
     private static final Pattern VERIFICATION_CODE = Pattern.compile("\\d{6}");
     private static final int CODE_LOOKUP_RETRIES = 10;
     private static final int MAIL_BODY_LINES = 5;
+    // 서버가 앱 버전 헤더가 없는 요청을 거절한다 — 따로 넘기지 않으면 지원하는 앱처럼 싣는다.
+    // 값은 sql/app-versions.sql의 안드로이드 최신 버전이다
+    private static final Map<String, String> SUPPORTED_APP_VERSION =
+            Map.of("X-App-Platform", "ANDROID", "X-App-Version", "1.2.0");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
@@ -90,7 +97,7 @@ public abstract class E2eTestSupport {
     }
 
     private Response exchange(String method, String path, Map<String, ?> request,
-                              String accessToken) {
+                              String accessToken, Map<String, String> headers) {
         // 본문 없는 메서드에 빈 문자열을 실으면 Content-Type만 남아 서버가 파싱을 시도한다
         HttpRequest.BodyPublisher body = request == null
                 ? HttpRequest.BodyPublishers.noBody()
@@ -105,33 +112,45 @@ public abstract class E2eTestSupport {
         if (accessToken != null) {
             builder.header("Authorization", "Bearer " + accessToken);
         }
+        headers.forEach(builder::header);
         HttpResponse<String> response = send(builder.build());
         return new Response(response.statusCode(), parse(response.body()));
     }
 
     protected Response get(String path, String accessToken) {
-        return exchange("GET", path, null, accessToken);
+        return exchange("GET", path, null, accessToken, SUPPORTED_APP_VERSION);
+    }
+
+    /** 기본 앱 버전 헤더 대신 이 헤더만 싣는다 — 빈 맵이면 앱 버전 헤더 없이 보낸다. */
+    protected Response get(String path, String accessToken, Map<String, String> headers) {
+        return exchange("GET", path, null, accessToken, headers);
     }
 
     protected Response post(String path, Map<String, ?> request, String accessToken) {
-        return exchange("POST", path, request, accessToken);
+        return exchange("POST", path, request, accessToken, SUPPORTED_APP_VERSION);
     }
 
     protected Response patch(String path, Map<String, ?> request, String accessToken) {
-        return exchange("PATCH", path, request, accessToken);
+        return exchange("PATCH", path, request, accessToken, SUPPORTED_APP_VERSION);
     }
 
     protected Response delete(String path, String accessToken) {
-        return exchange("DELETE", path, null, accessToken);
+        return exchange("DELETE", path, null, accessToken, SUPPORTED_APP_VERSION);
     }
 
     /** 러닝 WebSocket에 붙는다. 토큰이 null이면 핸드셰이크가 401로 막히는지 확인하는 용도다. */
     protected RunningWebSocket connectRunningWebSocket(String accessToken) {
-        return RunningWebSocket.connect(HTTP_CLIENT, RUNNING_WEBSOCKET_URL, accessToken);
+        return RunningWebSocket.connect(HTTP_CLIENT, RUNNING_WEBSOCKET_URL, accessToken, SUPPORTED_APP_VERSION);
+    }
+
+    /** 기본 앱 버전 헤더 대신 이 헤더만 싣는다 — 빈 맵이면 앱 버전 헤더 없이 연결한다. */
+    protected RunningWebSocket connectRunningWebSocket(String accessToken, Map<String, String> headers) {
+        return RunningWebSocket.connect(HTTP_CLIENT, RUNNING_WEBSOCKET_URL, accessToken, headers);
     }
 
     protected MatchStream openMatchStream(String accessToken) {
-        return MatchStream.open(HTTP_CLIENT, BASE_URL + "/running-matches/stream", accessToken);
+        return MatchStream.open(HTTP_CLIENT, BASE_URL + "/running-matches/stream", accessToken,
+                SUPPORTED_APP_VERSION);
     }
 
     /** 메일 인증 → 가입까지만 한다. 액세스 토큰을 돌려준다. */
@@ -198,6 +217,33 @@ public abstract class E2eTestSupport {
             }
         }
         return null;
+    }
+
+    /**
+     * 사용자 자산 버킷에 객체를 직접 넣는다. presigned URL의 호스트는 컨테이너 안에서만 풀려
+     * 테스트가 그 URL로 올릴 수 없다 — 대신 localstack 안에서 같은 key·형식·크기로 올린다.
+     * 서버가 반영 때 보는 것은 HeadObject의 크기와 Content-Type뿐이라 판정에는 차이가 없다.
+     */
+    protected void uploadUserAsset(String key, String contentType, int sizeBytes) {
+        // key는 셸 문자열에 섞지 않고 위치 인자로 넘긴다
+        String script = "head -c \"$3\" /dev/zero > /tmp/e2e-upload"
+                + " && awslocal s3api put-object --bucket \"$E2E_USER_ASSET_BUCKET\""
+                + " --key \"$1\" --content-type \"$2\" --body /tmp/e2e-upload > /dev/null";
+        try {
+            Process process = new ProcessBuilder("docker", "exec", S3_CONTAINER,
+                    "sh", "-c", script, "sh", key, contentType, String.valueOf(sizeBytes))
+                    .redirectErrorStream(true)
+                    .start();
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            if (process.waitFor() != 0) {
+                throw new IllegalStateException("S3 업로드에 실패했습니다: " + output);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("S3 업로드가 중단되었습니다", e);
+        }
     }
 
     private static String containerLogs() {

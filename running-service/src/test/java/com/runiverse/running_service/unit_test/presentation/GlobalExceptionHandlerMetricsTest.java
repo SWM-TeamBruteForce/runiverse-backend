@@ -8,6 +8,7 @@ import com.runiverse.running_service.observability.metrics.HttpRequestMetricsFil
 import com.runiverse.running_service.presentation.common.exception.GlobalExceptionHandler;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -102,6 +103,15 @@ class GlobalExceptionHandlerMetricsTest {
     }
 
     @Test
+    @DisplayName("경로 변수 제약 위반은 500이 아니라 400으로 응답하고 INVALID_REQUEST를 원인으로 남긴다")
+    void methodValidationFailure() throws Exception {
+        MockHttpServletResponse response = mockMvc.perform(get("/probe/rooms/{roomId}", 0)).andReturn().getResponse();
+
+        assertThat(response.getStatus()).isEqualTo(400);
+        assertThat(only("reason")).isEqualTo("INVALID_REQUEST");
+    }
+
+    @Test
     @DisplayName("본문을 읽지 못하면 MALFORMED_REQUEST_BODY를 원인으로 남긴다")
     void malformedBody() throws Exception {
         perform(post("/probe/validated").contentType(MediaType.APPLICATION_JSON).content("{ 깨진"));
@@ -125,6 +135,29 @@ class GlobalExceptionHandlerMetricsTest {
         assertThat(response.getStatus()).isEqualTo(404);
         assertThat(response.getContentAsString()).contains("\"code\":\"NOT_FOUND\"");
         assertThat(only("reason")).isEqualTo("NOT_FOUND");
+    }
+
+    @Test
+    @DisplayName("받지 않는 메서드는 405와 Allow 헤더로 응답하고 METHOD_NOT_ALLOWED를 원인으로 남긴다")
+    void methodNotAllowed() throws Exception {
+        MockHttpServletResponse response = mockMvc.perform(get("/probe/business")).andReturn().getResponse();
+
+        assertThat(response.getStatus()).isEqualTo(405);
+        assertThat(response.getHeader("Allow")).isEqualTo("POST");
+        assertThat(response.getContentAsString()).contains("\"code\":\"METHOD_NOT_ALLOWED\"");
+        assertThat(only("reason")).isEqualTo("METHOD_NOT_ALLOWED");
+    }
+
+    @Test
+    @DisplayName("받지 않는 본문 형식은 415로 응답하고 UNSUPPORTED_MEDIA_TYPE을 원인으로 남긴다")
+    void unsupportedMediaType() throws Exception {
+        MockHttpServletResponse response = mockMvc.perform(
+                post("/probe/validated").contentType(MediaType.TEXT_PLAIN).content("name")
+        ).andReturn().getResponse();
+
+        assertThat(response.getStatus()).isEqualTo(415);
+        assertThat(response.getContentAsString()).contains("\"code\":\"UNSUPPORTED_MEDIA_TYPE\"");
+        assertThat(only("reason")).isEqualTo("UNSUPPORTED_MEDIA_TYPE");
     }
 
     @Test
@@ -152,6 +185,11 @@ class GlobalExceptionHandlerMetricsTest {
 
         @GetMapping("/probe/users/{userId}")
         String user(@PathVariable UUID userId) {
+            return "ok";
+        }
+
+        @GetMapping("/probe/rooms/{roomId}")
+        String room(@PathVariable @Min(1) Long roomId) {
             return "ok";
         }
 

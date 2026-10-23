@@ -11,6 +11,7 @@ import com.runiverse.running_service.application.running.command.solo.OpenSoloRo
 import com.runiverse.running_service.application.running.command.solo.OpenSoloRoomHandler;
 import com.runiverse.running_service.application.running.command.start.StartRunningCommand;
 import com.runiverse.running_service.application.running.command.start.StartRunningHandler;
+import com.runiverse.running_service.application.running.common.LiveRunningStatusChanger;
 import com.runiverse.running_service.application.running.common.RunningFinishProperties;
 import com.runiverse.running_service.application.running.common.RunningFinisher;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
@@ -22,8 +23,10 @@ import com.runiverse.running_service.application.user.command.onboarding.Complet
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.record.RunningRecord;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
+import com.runiverse.running_service.infrastructure.metrics.running.RunningMetricAdapter;
 import com.runiverse.running_service.integration_test.IntegrationTestSupport;
 import com.runiverse.running_service.integration_test.fake.InMemoryRunningRecordListStore;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,6 +39,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static com.runiverse.running_service.support.TrackFilterFixtures.DEFAULT_PROPERTIES;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("내 러닝 기록 목록 조회 통합 테스트")
@@ -108,17 +112,27 @@ public class GetMyRunningRecordsIntegrationTest extends IntegrationTestSupport {
                 runningRecordStore, // ExistsRunningRecordPort
                 runningRecordStore, // LoadRecentRunningPacesPort
                 onboardingStore,    // UpdateUserAvgPacePort
+                new LiveRunningStatusChanger( // LiveRunningStatusChanger
+                        liveRunningStatusStore, runningDistanceStore, runningProgressPublisher),
+                newRunningComboArchiver(), // RunningComboArchiver
+                runningComboStore,  // MarkRunningComboFinishedPort
                 event -> {          // ApplicationEventPublisher
                 },
                 PROPERTIES
-        );
+                ,
+                DEFAULT_PROPERTIES,
+                // 메트릭은 이 테스트의 관심사가 아니다 — 메모리 레지스트리에 흘려보낸다
+                new RunningMetricAdapter(new SimpleMeterRegistry()));
         updateRunningLocationHandler = new UpdateRunningLocationHandler(
                 runningTrackStore,        // AppendRunningTrackPort
                 runningDistanceStore,     // LoadRunningDistancePort
                 runningDistanceStore,     // SaveRunningDistancePort
+                liveRunningStatusStore,   // ChangeLiveRunningStatusPort
+                liveRunningStatusStore,   // LoadLiveRunningStatusPort
                 runningProgressPublisher, // PublishRunningProgressPort
                 newUpdateRunningComboJudge(),
-                new UpdateRunningFinishJudge(runningFinisher)
+                new UpdateRunningFinishJudge(runningFinisher),
+                DEFAULT_PROPERTIES
         );
         finishRunningHandler = new FinishRunningHandler(runningFinisher);
         handler = new GetMyRunningRecordsHandler(
@@ -149,7 +163,6 @@ public class GetMyRunningRecordsIntegrationTest extends IntegrationTestSupport {
         assertThat(listed.totalDistanceMeters()).isEqualTo(record.getTotalDistance().meters());
         assertThat(listed.totalDurationSeconds()).isEqualTo(record.getTotalDuration().seconds());
         assertThat(listed.averagePaceSecondsPerKm()).isEqualTo(record.getAvgPace().secondsPerKm());
-        assertThat(listed.routePolyline()).isEqualTo(record.getRoutePolyline().value());
     }
 
     @Test
@@ -233,7 +246,7 @@ public class GetMyRunningRecordsIntegrationTest extends IntegrationTestSupport {
         List<TrackPoint> points = new ArrayList<>(TRACK_POINTS);
         for (int i = 0; i < TRACK_POINTS; i++) {
             points.add(new TrackPoint(i, 37.5 + i * 2.5 / METERS_PER_DEGREE, 127.0,
-                    null, 5.0, null, null, 168, null, trackStart.plusSeconds(i)));
+                    null, 5.0, null, null, 168, null, trackStart.plusSeconds(i), 0));
         }
         updateRunningLocationHandler.handle(
                 new UpdateRunningLocationCommand(userId, runningRoomId, null, points));

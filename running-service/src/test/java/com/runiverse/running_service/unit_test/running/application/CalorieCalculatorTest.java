@@ -35,12 +35,22 @@ public class CalorieCalculatorTest {
     }
 
     @Test
+    @DisplayName("산소 섭취량을 ACSM 환산식으로 열량으로 바꾼다")
+    void convertsOxygenUptakeWithAcsmFormula() {
+        // when
+        int kcal = CalorieCalculator.kcal(PACE_10KMH, 1_800, WEIGHT_70KG);
+
+        // then -> 산소 섭취량 36.83mL/kg/분 × 70kg × 30분 / 200 = 386.75
+        assertThat(kcal).isEqualTo(387);
+    }
+
+    @Test
     @DisplayName("멈춰 있던 구간은 안정 대사량만큼만 계산한다")
     void stoppedSegmentCostsRestingMetabolismOnly() {
         // given -> 10m를 700초에 지난 구간(사실상 정지). 페이스는 70,000 초/km
         int kcal = CalorieCalculator.kcal(70_000, 700, WEIGHT_70KG);
 
-        // then -> MET가 1로 수렴하므로 70kg × 700/3600시간 ≈ 14kcal.
+        // then -> 서 있을 때의 섭취량만 남아 3.5mL/kg/분 × 70kg × 11.7분 / 200 ≈ 14kcal.
         // clamp를 걸었다면 8km/h로 달린 것처럼 부풀려진다
         assertThat(kcal).isCloseTo(14, within(1));
     }
@@ -96,7 +106,7 @@ public class CalorieCalculatorTest {
         // given -> SplitPace 상한(86,400,000 초/km)
         int kcal = CalorieCalculator.kcal(86_400_000, 60, WEIGHT_70KG);
 
-        // then -> 속도가 사실상 0이라 MET 1, 70kg × 60/3600시간 ≈ 1kcal
+        // then -> 속도가 사실상 0이라 3.5mL/kg/분 × 70kg × 1분 / 200 ≈ 1kcal
         assertThat(kcal).isCloseTo(1, within(1));
     }
 }

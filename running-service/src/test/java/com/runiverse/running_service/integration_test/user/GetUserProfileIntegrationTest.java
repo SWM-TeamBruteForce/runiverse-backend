@@ -7,6 +7,7 @@ import com.runiverse.running_service.application.user.command.onboarding.Complet
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingHandler;
 import com.runiverse.running_service.application.user.command.profile.ChangeMyProfileCommand;
 import com.runiverse.running_service.application.user.command.profile.ChangeMyProfileHandler;
+import com.runiverse.running_service.application.user.common.UserImageUrlResolver;
 import com.runiverse.running_service.application.user.exception.ProfileNotFoundException;
 import com.runiverse.running_service.application.user.query.profile.GetUserProfileHandler;
 import com.runiverse.running_service.application.user.query.profile.GetUserProfileQuery;
@@ -63,7 +64,7 @@ public class GetUserProfileIntegrationTest extends IntegrationTestSupport {
         getUserProfileHandler = new GetUserProfileHandler(
                 userStore,        // LoadUserByIdPort
                 onboardingStore,  // LoadNicknamePort
-                viewUrlGenerator  // GenerateViewUrlPort
+                new UserImageUrlResolver(viewUrlGenerator)  // GenerateViewUrlPort
         );
     }
 

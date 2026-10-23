@@ -12,14 +12,19 @@ import com.runiverse.running_service.domain.running.metric.vo.Pace;
 import com.runiverse.running_service.domain.running.metric.vo.RunningPeriod;
 import com.runiverse.running_service.domain.running.metric.vo.Temperature;
 import com.runiverse.running_service.domain.running.metric.vo.WeatherCode;
+import com.runiverse.running_service.domain.running.record.exception.SegmentNumberNotSequentialException;
+import com.runiverse.running_service.domain.running.record.exception.SegmentsRequiredException;
 import com.runiverse.running_service.domain.running.record.exception.SplitNumberNotSequentialException;
 import com.runiverse.running_service.domain.running.record.exception.SplitPeriodNotSequentialException;
 import com.runiverse.running_service.domain.running.record.exception.SplitPeriodOutOfRecordException;
 import com.runiverse.running_service.domain.running.record.exception.SplitRouteNotConnectedException;
 import com.runiverse.running_service.domain.running.record.exception.SplitRouteNotStartingAtOriginException;
+import com.runiverse.running_service.domain.running.record.exception.SplitRouteNotStartingAtSegmentException;
+import com.runiverse.running_service.domain.running.record.exception.SplitSegmentNotFoundException;
+import com.runiverse.running_service.domain.running.record.exception.SplitSegmentNotSequentialException;
 import com.runiverse.running_service.domain.running.record.exception.SplitsRequiredException;
 import com.runiverse.running_service.domain.running.record.vo.GpsTrackKey;
-import com.runiverse.running_service.domain.running.record.vo.RoutePolyline;
+import com.runiverse.running_service.domain.running.record.vo.RouteRange;
 import com.runiverse.running_service.domain.running.record.vo.RunningRecordId;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
 import lombok.Builder;
@@ -42,7 +47,8 @@ public class RunningRecord {
     private final ElapsedTime totalDuration;
     private final Calories totalCalories;
     private final GpsTrackKey gpsTrackKey;
-    private final RoutePolyline routePolyline;
+    // 끊긴 곳에서 나뉜 경로 — 조각 번호 순이고, 이으면 기록의 10m 경계점 전체다
+    private final List<RunningSegment> segments;
     private final RunningPeriod period;
     private final WeatherCode weatherCode;
     private final Temperature temperature;
@@ -54,7 +60,7 @@ public class RunningRecord {
     @Builder
     private RunningRecord(Long runningRecordId, Long runningRoomId, UUID userId,
                           int avgPace, int totalDistance, int totalDuration, Integer totalCalories,
-                          String gpsTrackKey, String routePolyline,
+                          String gpsTrackKey, List<SegmentDraft> segments,
                           LocalDateTime startAt, LocalDateTime endAt,
                           Integer weatherCode, BigDecimal temperature,
                           Integer avgCadence, Integer totalElevationGain,
@@ -70,7 +76,6 @@ public class RunningRecord {
         }
         this.totalCalories = new Calories(totalCalories);
         this.gpsTrackKey = new GpsTrackKey(gpsTrackKey);
-        this.routePolyline = new RoutePolyline(routePolyline);
         this.period = new RunningPeriod(startAt, endAt);
         if (weatherCode == null) {
             throw new WeatherCodeRequiredException();
@@ -80,7 +85,8 @@ public class RunningRecord {
         this.avgCadence = avgCadence == null ? null : new Cadence(avgCadence);
         this.totalElevationGain =
                 totalElevationGain == null ? null : new ElevationGain(totalElevationGain);
-        this.splits = assembleSplits(splits, this.period);   // 방어 복사 + 불변
+        this.segments = assembleSegments(segments);           // 방어 복사 + 불변
+        this.splits = assembleSplits(splits, this.period, this.segments.size());
     }
 
     // ID 관련해서
@@ -112,13 +118,14 @@ public class RunningRecord {
     }
 
     // 구간 하나만 봐서는 알 수 없고, 기록 전체를 봐야 아는 위반들
-    private static void validateSplits(List<RunningSplit> splits, RunningPeriod recordPeriod) {
+    private static void validateSplits(List<RunningSplit> splits, RunningPeriod recordPeriod,
+                                       int segmentCount) {
         if (splits == null || splits.isEmpty()) {
             throw new SplitsRequiredException();
         }
         for (int i = 0; i < splits.size(); i++) {
             RunningSplit split = splits.get(i);
-            // 구간 번호는 1부터 빠짐없이 이어진다
+            // 구간 번호는 조각과 무관하게 1부터 빠짐없이 이어진다
             if (split.getSplitNumber().value() != i + 1) {
                 throw new SplitNumberNotSequentialException();
             }
@@ -126,32 +133,71 @@ public class RunningRecord {
             if (!recordPeriod.contains(split.getPeriod())) {
                 throw new SplitPeriodOutOfRecordException();
             }
+            // 구간은 기록에 있는 조각에 속한다
+            if (split.getSegmentNumber().value() > segmentCount) {
+                throw new SplitSegmentNotFoundException();
+            }
         }
-        // 경로는 폴리라인 첫 점에서 시작한다
-        if (splits.get(0).getRouteRange().startIndex() != 0) {
-            throw new SplitRouteNotStartingAtOriginException();
-        }
-        // 구간 경로는 끝점을 공유하며 이어진다
+        validateSegmentStart(splits.get(0));
         for (int i = 0; i < splits.size() - 1; i++) {
-            if (!splits.get(i).getRouteRange().connectsTo(splits.get(i + 1).getRouteRange())) {
-                throw new SplitRouteNotConnectedException();
+            RunningSplit current = splits.get(i);
+            RunningSplit next = splits.get(i + 1);
+            int currentSegment = current.getSegmentNumber().value();
+            int nextSegment = next.getSegmentNumber().value();
+            // 달린 순서라 조각 번호는 줄지 않는다
+            if (nextSegment < currentSegment) {
+                throw new SplitSegmentNotSequentialException();
+            }
+            if (nextSegment == currentSegment) {
+                // 같은 조각 안의 구간 경로는 끝점을 공유하며 이어진다
+                if (!current.getRouteRange().connectsTo(next.getRouteRange())) {
+                    throw new SplitRouteNotConnectedException();
+                }
+            } else {
+                validateSegmentStart(next);
             }
             // 구간 시각도 순서대로 이어진다 — 경계가 붙는 것은 허용, 겹치는 것만 막는다
-            if (splits.get(i).getPeriod().endAt()
-                    .isAfter(splits.get(i + 1).getPeriod().startAt())) {
+            if (current.getPeriod().endAt().isAfter(next.getPeriod().startAt())) {
                 throw new SplitPeriodNotSequentialException();
             }
         }
     }
 
+    // 조각의 첫 구간은 그 조각의 0번 점에서 시작한다.
+    // 1번 조각은 출발점이라 [0, 1]로 시작하고, 2번 이후는 끊긴 곳에 걸친 구간이라 0번 점 하나만 가리킨다 —
+    // 시작 경계점은 앞 조각에 있어 이 조각 안에서는 가리킬 수 없다
+    private static void validateSegmentStart(RunningSplit split) {
+        RouteRange range = split.getRouteRange();
+        if (range.startIndex() != 0) {
+            throw new SplitRouteNotStartingAtOriginException();
+        }
+        if (!split.getSegmentNumber().isFirst() && range.endIndex() != 0) {
+            throw new SplitRouteNotStartingAtSegmentException();
+        }
+    }
+
+    // 조각 번호는 1부터 빠짐없이 이어진다 — 달린 순서가 곧 번호다
+    private static List<RunningSegment> assembleSegments(List<SegmentDraft> drafts) {
+        if (drafts == null || drafts.isEmpty()) {
+            throw new SegmentsRequiredException();
+        }
+        List<RunningSegment> segments = drafts.stream().map(RunningSegment::from).toList();   // 불변
+        for (int i = 0; i < segments.size(); i++) {
+            if (segments.get(i).getSegmentNumber().value() != i + 1) {
+                throw new SegmentNumberNotSequentialException();
+            }
+        }
+        return segments;
+    }
+
     // 구간은 기록을 거쳐야만 만들어진다 — 조립하고 기록 전체 기준 검증까지 여기서 끝낸다
     private static List<RunningSplit> assembleSplits(List<SplitDraft> drafts,
-                                                     RunningPeriod recordPeriod) {
+                                                     RunningPeriod recordPeriod, int segmentCount) {
         if (drafts == null || drafts.isEmpty()) {
             throw new SplitsRequiredException();
         }
         List<RunningSplit> splits = drafts.stream().map(RunningSplit::from).toList();   // 불변
-        validateSplits(splits, recordPeriod);
+        validateSplits(splits, recordPeriod, segmentCount);
         return splits;
     }
 }

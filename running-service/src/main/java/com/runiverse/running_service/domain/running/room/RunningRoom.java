@@ -36,7 +36,7 @@ public class RunningRoom {
     private final Distance targetDistance;       // 정해진 뒤 바뀌지 않는다
     private RunningRoomStatus status;
     private PlayerCount playerCount;
-    private Pace avgPace;       // 참가자가 없으면 null — 평균 낼 대상이 없다
+    private Pace avgPace;       // 시작 전에 참가자가 0이 되면 null — 시작 후에는 바꾸지 않는다
     private final List<RoomSession> sessions;    // 방이 맺고 있는 관계들
 
     //

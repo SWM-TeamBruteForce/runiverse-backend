@@ -23,9 +23,9 @@ public record RunningRecordsResponse(List<RunningRecordResponse> runningRecords)
             int totalDistanceMeters,
             int totalDurationSeconds,
             int averagePaceSecondsPerKm,
-            Integer totalElevationGainMeters,   // 유효 표본이 부족하면 null
-            String routePolyline
+            Integer totalElevationGainMeters    // 유효 표본이 부족하면 null
     ) {
+
         static RunningRecordResponse from(GetMyRunningRecordsResult.RunningRecord record) {
             return new RunningRecordResponse(
                     record.runningRecordId(),
@@ -36,8 +36,7 @@ public record RunningRecordsResponse(List<RunningRecordResponse> runningRecords)
                     record.totalDistanceMeters(),
                     record.totalDurationSeconds(),
                     record.averagePaceSecondsPerKm(),
-                    record.totalElevationGainMeters(),
-                    record.routePolyline());
+                    record.totalElevationGainMeters());
         }
     }
 }

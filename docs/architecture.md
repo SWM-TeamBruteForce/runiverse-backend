@@ -23,6 +23,7 @@ presentation ──▶ [port/in] application [port/out] ◀── infrastructure
 domain/
   <domain>/             aggregate · vo · exception
   common/exception/     BusinessException · ErrorCode (도메인용)
+  common/vo/            UserId · Platform (여러 도메인 공용)
 
 application/
   <domain>/command/     상태를 바꾸는 유스케이스 — 기능별 Command · Handler · Result(선택)
@@ -30,15 +31,21 @@ application/
   <domain>/port/in/     *Usecase — Handler가 구현
   <domain>/port/out/    아웃바운드 인터페이스 · 전용 입출력 모델
   <domain>/exception/   외부 확인이 필요한 실패
+  <domain>/common/      한 도메인 안의 여러 유스케이스가 함께 쓰는 정책·조립기 (포트는 두지 않는다)
   common/exception/     BusinessException · ErrorCode (유스케이스용)
   common/port/out/      도메인에 매이지 않는 공통 아웃바운드 포트
 
-infrastructure/         기술 단위 — persistence · redis · security · oauth · mail · storage · identifier · config
+infrastructure/         기술 단위 — persistence · redis · security · oauth · mail · storage · identifier · config 등
+
 presentation/
   <domain>/             controller · request · response
+  <domain>/sse/         SSE 연결 · 설정
+  <domain>/websocket/   WebSocket 핸들러 · 연결 · 메시지
   common/exception/     GlobalExceptionHandler · *ErrorCode · ErrorExposurePolicy
+  common/filter/        서블릿 필터와 그 등록 설정
   common/response/      ErrorResponse
   common/security/      JwtAuthenticationEntryPoint · JwtAccessDeniedHandler
+  common/websocket/     WebSocketEnvelope
 
 observability/
   logging/              RequestIdFilter · MDC 키 상수 · 로그 태그
@@ -59,7 +66,7 @@ AuthController ──▶ SignUpUsecase ──▶ SignUpHandler ──▶ SaveUse
 ## 레이어별 규칙
 
 - **domain/**: VO는 생성 시점에 검증하고 도메인 예외를 던진다.
-- **application/**: 상태 변경은 `command/`, 조회는 `query/`에 두고 후자에 `@Transactional(readOnly = true)`를 건다. `port/in`은 둘을 구분하지 않는다. 그 아래 기능 패키지는 **같은 비즈니스 개념·정책 때문에 함께 바뀌는 유스케이스**로 묶는다 — 화면·엔드포인트·필드 수는 기준이 아니다. 같은 기능이 양쪽에 있으면 이름이 겹치는 것이 정상이다. DB 트랜잭션은 application에서 관리한다. 보통 Handler가 경계지만 필요하면 내부 컴포넌트가 맡고, Redis 전용처럼 DB를 쓰지 않으면 경계가 없어도 된다.
+- **application/**: 상태 변경은 `command/`, 조회는 `query/`에 두고 후자에 `@Transactional(readOnly = true)`를 건다. 단, 필터가 모든 요청마다 부르는 버전 판정(`CheckAppVersionHandler`)은 쿼리 하나뿐이라 트랜잭션을 열지 않는다. `port/in`은 둘을 구분하지 않는다. 그 아래 기능 패키지는 **같은 비즈니스 개념·정책 때문에 함께 바뀌는 유스케이스**로 묶는다 — 화면·엔드포인트·필드 수는 기준이 아니다. 같은 기능이 양쪽에 있으면 이름이 겹치는 것이 정상이다. DB 트랜잭션은 application에서 관리한다. 보통 Handler가 경계지만 필요하면 내부 컴포넌트가 맡고, Redis 전용처럼 DB를 쓰지 않으면 경계가 없어도 된다. 참가자와 방을 함께 잠그면 참가자 → 방 순서로 잠근다(엇갈리면 교착). flush 때의 UPDATE도 잠금으로 센다.
 - **port/out**: 작고 응집된 인터페이스로 나누고 Handler에는 필요한 포트만 주입한다. 사용 유스케이스나 변경 이유가 다르면 포트를 분리한다.
 - **infrastructure/**: 도메인 ↔ JPA 변환을 맡는다. application 포트의 기본 기술 구현체는 `*Adapter`로 명명한다. 외부 제공자와 직접 통신하면 `*Client`, 여러 Client를 선택해 application 포트를 구현하면 `*Router`로 명명한다. 인스턴스 로컬 상태를 보관하며 그 조회 포트를 겸하는 컴포넌트는 `*Registry`로 명명할 수 있다. 같은 애그리거트·저장 기술의 포트는 어댑터 하나가 함께 구현할 수 있다.
 - **presentation/**: 컨트롤러와 그 request·response는 API가 다루는 리소스의 도메인에 둔다. 경로가 아니라 리소스로 정한다 — `/users/me/running-records`는 러닝 기록이라 `running`, `/users/me/status`는 매칭·러닝 상태를 묶은 사용자 상태라 `user`다. HTTP 메트릭·중앙 예외 로그의 도메인이 이 패키지로 정해진다. 컨트롤러 처리 중 발생한 예외는 `GlobalExceptionHandler`, 인증 진입 실패는 `AuthenticationEntryPoint`에서 변환한다.
@@ -68,7 +75,7 @@ AuthController ──▶ SignUpUsecase ──▶ SignUpHandler ──▶ SaveUse
 
 - **애그리거트 루트**: 루트만 외부에 노출한다. `User`가 `OauthUser`·`UserOnboarding`을 내부에 들고, 포트는 루트 단위로 저장·조회한다.
 - **애그리거트 행위**: 애그리거트가 스스로 불변식을 지킨다. 상태는 `linkOauth`·`completeOnboarding`처럼 의도가 드러나는 메서드로만 바꾸고, 위반 시 도메인 예외를 던진다. 생성 방식이 여럿이면 정적 팩토리(`User.registerWithOauth`)로 구분한다.
-- **VO**: 식별자·이메일·닉네임처럼 의미 있는 값은 원시 타입 대신 `record`로 만들어 불변·값 동등성을 강제하고 생성자에서 검증한다. 고정된 값 집합은 `enum`(`Gender`·`Provider`)으로 둔다. Request DTO의 Bean Validation과 VO 검증은 목적(400 노출 / 불변식)이 다르므로 합치지 않고, VO를 정본으로 함께 고친다.
+- **VO**: 식별자·이메일·닉네임처럼 의미 있는 값은 원시 타입 대신 `record`로 만들어 불변·값 동등성을 강제하고 생성자에서 검증한다. 고정된 값 집합은 `enum`(`Gender`·`Provider`)으로 둔다. Request DTO의 Bean Validation과 VO 검증은 목적(400 노출 / 불변식)이 다르므로 합치지 않고, VO를 정본으로 함께 고친다. Request DTO에 커스텀 제약(`ConstraintValidator`)을 만들지 않고, 내장 제약으로 안 되는 검증은 `@AssertTrue`로 쓴다.
 - **애그리거트 간 참조**: 객체는 ID로 참조한다(*Reference by Identity*). DB FK 여부는 수명주기와 삭제 정책에 따라 [erd.md](erd.md)를 따르며, 독립적인 논리 참조는 앱에서 무결성을 관리한다. 애그리거트 내부는 객체 참조와 FK를 사용한다.
 - **예외 구분**: VO 검증·애그리거트 불변식 위반은 `domain/`, 외부 확인이 필요한 실패(중복·조회·인증·연동)는 `application/`에 둔다. 두 레이어에 동명 `BusinessException`·`ErrorCode`가 있으니 import 시 확인한다.
 
@@ -78,6 +85,6 @@ AuthController ──▶ SignUpUsecase ──▶ SignUpHandler ──▶ SaveUse
 
 현재의 리팩터링 예외는 아래 범위에만 적용한다. 새 의존을 추가하거나 기존 예외 범위를 넓히는 근거로 삼지 않는다.
 
-- **security 직접 참조**: 현재 허용하는 import는 `SecurityConfig` → `JwtAuthenticationEntryPoint`·`JwtAccessDeniedHandler`, `JwtAuthenticationEntryPoint` → `BlockedTokenValidator`·`ExpiredTokenValidator`뿐이다.
+- **security·WebSocket 직접 참조**: 현재 허용하는 import는 `SecurityConfig` → `JwtAuthenticationEntryPoint`·`JwtAccessDeniedHandler`, `JwtAuthenticationEntryPoint` → `BlockedTokenValidator`·`ExpiredTokenValidator`, `WebSocketConfig` → `JwtHandshakeInterceptor`·`RunningWebSocketHandler`뿐이다.
 - **`UserOnboarding` 별도 영속화**: `ExistsOnboardingPort`의 별도 존재 확인, `CompleteOnboardingHandler` → `SaveOnboardingPort.saveOnboarding(UserOnboarding)` → `UserPersistenceAdapter`의 별도 저장, `UserPersistenceAdapter.toDomain(UserJpaEntity)`가 `UserOnboarding`을 복원하지 않는 현재 흐름만 허용한다.
 - **`delete_users` 보관 만료 처리**: `RedactDeletedUserPort.redact` → `UserPersistenceAdapter`가 `DeletedUser`를 복원하지 않고 `email`·`nickname`을 직접 비우는 현재 흐름만 허용한다. 스냅샷은 탈퇴 시점의 불변 기록이고 만료 제거는 보관 정책 집행이라 애그리거트 상태 전이로 보지 않는다. `delete_users`를 도메인으로 읽는 유스케이스가 생기면 이 예외는 유지할 수 없다.

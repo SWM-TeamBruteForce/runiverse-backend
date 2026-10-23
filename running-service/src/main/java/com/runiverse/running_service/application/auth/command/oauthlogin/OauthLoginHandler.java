@@ -3,6 +3,7 @@ package com.runiverse.running_service.application.auth.command.oauthlogin;
 import com.runiverse.running_service.application.auth.exception.UnsupportedProviderException;
 import com.runiverse.running_service.application.auth.port.in.OauthLoginUsecase;
 import com.runiverse.running_service.application.auth.port.out.GenerateTokenPort;
+import com.runiverse.running_service.application.auth.port.out.LoadAppleProfilePort;
 import com.runiverse.running_service.application.auth.port.out.LoadGoogleProfilePort;
 import com.runiverse.running_service.application.auth.port.out.LoadKakaoProfilePort;
 import com.runiverse.running_service.application.auth.port.out.OauthProfile;
@@ -23,8 +24,9 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class OauthLoginHandler implements OauthLoginUsecase {
 
-    private final LoadKakaoProfilePort loadKakaoProfilePort;
     private final LoadGoogleProfilePort loadGoogleProfilePort;
+    private final LoadKakaoProfilePort loadKakaoProfilePort;
+    private final LoadAppleProfilePort loadAppleProfilePort;
     private final OauthUserResolver oauthUserResolver;
     private final GenerateTokenPort generateTokenPort;
     private final RefreshTokenHashPort refreshTokenHashPort;
@@ -40,8 +42,9 @@ public class OauthLoginHandler implements OauthLoginUsecase {
             provider = resolveProvider(command.provider());
             // 2. provider 자격 증명으로 프로필 확인
             OauthProfile oauthProfile = switch (provider) {
-                case KAKAO -> loadKakaoProfilePort.load(command.authorizationCode(), command.codeVerifier());
                 case GOOGLE -> loadGoogleProfilePort.load(command.idToken());
+                case KAKAO -> loadKakaoProfilePort.load(command.authorizationCode(), command.codeVerifier());
+                case APPLE -> loadAppleProfilePort.load(command.idToken(), command.nonce());
             };
             // 3. 조회 or 가입 (트랜잭션)
             User user = oauthUserResolver.findOrRegister(oauthProfile);

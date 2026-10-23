@@ -4,6 +4,7 @@ import com.runiverse.running_service.application.match.command.stream.MatchStrea
 import com.runiverse.running_service.application.match.common.MatchProperties;
 import com.runiverse.running_service.application.match.common.MatchRoomChangedEvent;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
+import com.runiverse.running_service.application.match.port.out.LoadMatchPlayersPort;
 import com.runiverse.running_service.application.match.port.out.LoadMatchRoomPort;
 import com.runiverse.running_service.application.match.port.out.LockMatchApplicationPort;
 import com.runiverse.running_service.application.match.port.out.MatchStreamEvent;
@@ -16,6 +17,7 @@ import com.runiverse.running_service.application.running.port.out.LockRunningRoo
 import com.runiverse.running_service.application.running.port.out.StartMatchCooldownPort;
 import com.runiverse.running_service.application.running.port.out.UpdateRunningPlayerPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.domain.running.metric.vo.Pace;
 import com.runiverse.running_service.domain.running.player.RunningPlayer;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerStatus;
 import com.runiverse.running_service.domain.running.room.RunningRoom;
@@ -27,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -40,6 +43,7 @@ public class SettleRunningForAccountDeletionHandler
     private final LockMatchApplicationPort lockMatchApplicationPort;
     private final LoadMatchRoomPort loadMatchRoomPort;
     private final LockRunningRoomPort lockRunningRoomPort;
+    private final LoadMatchPlayersPort loadMatchPlayersPort;
     private final UpdateMatchRoomPort updateMatchRoomPort;
     private final UpdateRunningPlayerPort updateRunningPlayerPort;
     private final StartMatchCooldownPort startMatchCooldownPort;
@@ -109,6 +113,8 @@ public class SettleRunningForAccountDeletionHandler
         LocalDateTime now = LocalDateTime.now();
         player.leave(isCancelPenalty(room, now), now);
         updateRunningPlayerPort.update(player);
+        // 평균은 시작 전에만 남은 참가자로 다시 낸다 — 시작 후에는 뛴 방의 평균으로 남긴다
+        room.recalculateAvgPace(pacesAfterLeave(room, userId));
         leaveRoom(userId, room, now);
     }
 
@@ -121,6 +127,14 @@ public class SettleRunningForAccountDeletionHandler
             eventPublisher.publishEvent(new MatchRoomChangedEvent(
                     MatchStreamEvent.updated(roomInfoAssembler.assemble(room))));
         }
+    }
+
+    // 나가는 사람의 세션은 아직 저장 전이라 조회에 잡힌다 — 기존 참가자에서 나가는 사람을 빼고 계산한다
+    private List<Pace> pacesAfterLeave(RunningRoom room, UserId leaver) {
+        return loadMatchPlayersPort.loadPlayers(room.getRunningRoomId().orElseThrow()).stream()
+                .filter(player -> !player.userId().equals(leaver.value()))
+                .map(player -> new Pace(player.avgPaceSecondsPerKm()))
+                .toList();
     }
 
     // 매칭 취소(CancelMatchHandler)와 같은 기준이다 — 마감이 지난 2인 이상 매칭 방을 깨면 제재 대상이다

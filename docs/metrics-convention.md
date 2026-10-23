@@ -59,9 +59,17 @@ runiverse.<도메인>.<기능 폴더>.<동작>
 
 | 쓴다 | 쓰지 않는다 |
 |---|---|
-| `domain=auth\|user\|match\|running\|scheduling\|common` | `userId`, `roomId`, `requestId`, `scheduledJobId` |
+| `domain=auth\|user\|relationship\|match\|running\|scheduling\|app\|common` | `userId`, `roomId`, `requestId`, `scheduledJobId` |
 | `result=success\|failure` | 이메일, 좌표, 예외 메시지 |
 | `reason=<아래 목록>` | 요청 경로 원문 — 템플릿(`/users/{userId}/profile`)만 |
+| `decision=<메트릭별 목록>` — 성공·실패가 아닌 업무 판정의 갈래 | |
+| `filter=pause\|accuracy\|spike\|gap\|stop` — 트랙 필터 단계 | |
+| `store=redis\|db` — 러닝 상태를 둔 저장소 | |
+| `target=<메트릭별 목록>` — 접근한 상태의 종류 | |
+| `phase=running\|finish` — 러닝 중 배치마다 도는 접근인지, 종료 때 한 번 도는 접근인지 | |
+| `operation=read\|write` | |
+
+- `decision`은 `result`와 섞어 쓰지 않는다. `result`는 처리가 성공했는지, `decision`은 성공한 처리가 어느 쪽으로 판정했는지다. 값 목록은 메트릭마다 아래 직접 만드는 것 표에 적는다.
 
 - **같은 이름의 메트릭은 태그 key 구성이 항상 같아야 한다** — Prometheus 레지스트리가 강제한다. 해당 없는 값도 비우지 않고 정해진 값(`none`·`unknown`)을 넣는다.
 - 태그 key는 camelCase, 값은 소문자로 쓴다. `reason`만 코드 이름을 그대로 쓴다.
@@ -115,6 +123,7 @@ runiverse.<도메인>.<기능 폴더>.<동작>
 - **진입점 메트릭:** 레이어를 import하지 않는 공통 장치는 `observability/metrics/`에 둔다. `reason`은 예외를 처리한 presentation(중앙 예외 핸들러, 인증 진입점)이 요청 속성에 남기고, `observability`가 그 값을 읽어 센다 — 속성 key 상수는 `observability`가 소유한다.
 - **핸들러 메트릭:** application은 Micrometer를 import하지 않는다. `port/out`의 기록 포트를 호출하고, infrastructure가 `MeterRegistry`로 구현한다.
 - **외부 시스템 호출 시간·실패:** infrastructure 어댑터가 직접 기록한다.
+- **러닝 상태 저장소 접근:** 어댑터가 `RunningStateMeter`를 거쳐 기록한다. 포트 호출 1번이 1건이다 — 저장소 명령 수로 세면 Redis의 HSET+EXPIRE처럼 DB에선 한 번일 일이 두 번으로 잡혀 저장소끼리 비교할 수 없다. 저장소를 바꿔 끼운 어댑터도 같은 이름·태그로 `store`만 달리 기록한다.
 
 ## 기본 제공과 직접 만드는 것
 
@@ -133,9 +142,15 @@ runiverse.<도메인>.<기능 폴더>.<동작>
 | 이름 | 종류 | 기록 위치 | 상태 |
 |---|---|---|---|
 | `runiverse.http.requests` | Counter | `observability/metrics/` | 사용 중 |
-| `runiverse.auth.oauthlogin` | Counter | `OauthLoginHandler` → `AuthMetricAdapter` | 사용 중 — `provider=kakao\|google\|unknown`, `result`, `reason` |
+| `runiverse.auth.oauthlogin` | Counter | `OauthLoginHandler` → `AuthMetricAdapter` | 사용 중 — `provider=google\|kakao\|apple\|unknown`, `result`, `reason` |
 | `runiverse.websocket.messages` | Counter | 러닝 WebSocket 핸들러 | 예정 |
 | `runiverse.sse.events` | Counter | 매칭 스트림 연결 | 예정 |
+| `runiverse.running.finish.filtered` | DistributionSummary (baseUnit `meters`) | `RunningFinisher` → `RunningMetricAdapter` | 사용 중 — `filter=pause\|accuracy\|spike\|gap\|stop`. 종료 확정 1건당(기록이 생기지 않는 종료 포함) 트랙 필터 단계별로 뺀 거리(feature-spec 트랙 필터). 0도 기록한다. 히스토그램을 켠다(1~10,000m). 판정값 조정용 |
+| `runiverse.running.finish.gaps` | Counter | `RunningFinisher` → `RunningMetricAdapter` | 사용 중 — `decision=accepted\|rejected`. 관측 안 된 칸의 인정·거부 수 |
+| `runiverse.running.location.goal` | Counter | `RunningFinisher`(자동 종료) → `RunningMetricAdapter` | 사용 중 — `decision=finished\|pending`. 러닝 중 누적이 목표를 넘은 배치에서 확정 거리로 끝냈는지, 미달이라 미뤘는지 |
+| `runiverse.running.finish.goalpending` | DistributionSummary (baseUnit `meters`) | `RunningFinisher`(`forced=false` 종료) → `RunningMetricAdapter` | 사용 중 — `forced=false` 종료를 미뤘을 때의 남은 거리(`RUNNING_GOAL_PENDING`의 `remainingMeters`). 화면 거리와 서버 확정 거리가 얼마나 어긋나는지 본다. 히스토그램을 켠다(1~10,000m) |
+| `runiverse.running.state.access` | Timer | 러닝 상태 어댑터 → `RunningStateMeter` | 사용 중 — `store=redis\|db`, `target=track\|distance\|status\|combo_snapshot\|combo_pair\|combo_segment`, `phase=running\|finish`, `operation=read\|write`, `result`. 러닝 상태 저장소 왕복의 횟수·시간. 같은 부하를 `store`만 바꿔 돌려 Redis와 DB를 비교한다. 히스토그램을 켠다(100µs~5s — Redis가 1ms 아래라 기본 하한이면 분포가 첫 칸에 몰린다) |
+| `runiverse.running.state.loaded` | DistributionSummary (baseUnit `items`) | 러닝 상태 어댑터(종료 집계 읽기) → `RunningStateMeter` | 사용 중 — `store=redis\|db`, `target=track\|combo_segment`. 종료 때 러닝 하나치를 통째로 읽은 개수(좌표 수, 콤보 구간 수). 저장소 물리 단위(stream 엔트리·행)가 아니라 논리 단위로 센다. `state.access`의 시간과 나눠 1,000개당 시간으로 저장소를 비교한다. 히스토그램을 켠다(1~30,000) |
 
 ## 노출
 

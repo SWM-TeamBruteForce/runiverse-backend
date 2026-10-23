@@ -16,8 +16,7 @@ public record GetMyRunningRecordsResult(List<RunningRecord> runningRecords) {
             int totalDistanceMeters,
             int totalDurationSeconds,
             int averagePaceSecondsPerKm,
-            Integer totalElevationGainMeters,   // 유효 표본이 부족하면 null
-            String routePolyline
+            Integer totalElevationGainMeters  // 유효 표본이 부족하면 null
     ) {
 
     }

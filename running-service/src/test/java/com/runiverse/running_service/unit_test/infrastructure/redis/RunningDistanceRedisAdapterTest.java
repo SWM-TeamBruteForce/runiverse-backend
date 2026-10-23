@@ -3,9 +3,13 @@ package com.runiverse.running_service.unit_test.infrastructure.redis;
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.running.port.out.RunningDistance;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.infrastructure.metrics.running.RunningStateMeter;
+import com.runiverse.running_service.infrastructure.metrics.running.RunningStateMeterProperties;
 import com.runiverse.running_service.infrastructure.redis.running.RunningDistanceRedisAdapter;
 import com.runiverse.running_service.infrastructure.redis.running.RunningTrackProperties;
 import ch.qos.logback.classic.Level;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import com.runiverse.running_service.support.LogCapture;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,6 +52,7 @@ class RunningDistanceRedisAdapterTest {
     private UserId userId;
 
     private LogCapture log;
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @AfterEach
     void tearDown() {
@@ -57,7 +62,10 @@ class RunningDistanceRedisAdapterTest {
     @BeforeEach
     void setUp() {
         log = LogCapture.of(RunningDistanceRedisAdapter.class);
-        adapter = new RunningDistanceRedisAdapter(redisTemplate, new RunningTrackProperties(TTL));
+        // 계측은 실제 구현을 쓴다 — 문턱을 크게 잡아 지연 로그가 어댑터 로그 검증에 섞이지 않게 한다
+        RunningStateMeter stateMeter = new RunningStateMeter(
+                meterRegistry, new RunningStateMeterProperties(Duration.ofHours(1)));
+        adapter = new RunningDistanceRedisAdapter(redisTemplate, new RunningTrackProperties(TTL), stateMeter);
         given(redisTemplate.opsForValue()).willReturn(valueOperations);
         userId = new UserId(UuidCreator.getTimeOrderedEpoch());
     }
@@ -65,8 +73,9 @@ class RunningDistanceRedisAdapterTest {
     @Test
     @DisplayName("저장된 값을 누적 거리로 되살린다")
     void loadsStoredDistance() {
-        // given -> 저장 포맷은 누적거리|마지막순번|위도|경도|페이스다
-        given(valueOperations.get(anyString())).willReturn("3000.25|180|35.17955|129.07564|345");
+        // given -> 저장 포맷은 누적거리|마지막순번|일시정지구간|위도|경도|페이스|의심점위도|의심점경도다
+        given(valueOperations.get(anyString()))
+                .willReturn("3000.25|180|2|35.17955|129.07564|345|35.17950|129.07560");
 
         // when
         RunningDistance distance = adapter.loadDistance(ROOM_ID, userId);
@@ -74,47 +83,60 @@ class RunningDistanceRedisAdapterTest {
         // then
         assertThat(distance.meters()).isEqualTo(3000.25);
         assertThat(distance.lastSequence()).isEqualTo(180L);
+        assertThat(distance.lastPauseSegment()).isEqualTo(2);
         assertThat(distance.lastLatitude()).isEqualTo(35.17955);
         assertThat(distance.lastLongitude()).isEqualTo(129.07564);
         assertThat(distance.lastPaceSecondsPerKm()).isEqualTo(345);
+        assertThat(distance.anchorLatitude()).isEqualTo(35.17950);
+        assertThat(distance.anchorLongitude()).isEqualTo(129.07560);
     }
 
     @Test
-    @DisplayName("페이스가 없는 옛 4필드 값도 누적 거리를 잃지 않고 읽는다")
-    void loadsLegacyFourFieldValue() {
-        // given -> 배포 순간 뛰고 있던 러닝의 값이 TTL 안에 남아 있다.
-        // 이걸 형식 불일치로 버리면 그 사람들의 누적 거리가 통째로 0으로 되돌아간다
-        given(valueOperations.get(anyString())).willReturn("3000.25|180|35.17955|129.07564");
+    @DisplayName("의심점이 비어 있으면 null로 되살린다")
+    void loadsNullAnchor() {
+        // given -> 정확도가 나쁜 좌표만 받아 아직 의심점이 없다
+        given(valueOperations.get(anyString()))
+                .willReturn("3000.25|180|0|35.17955|129.07564|345|null|null");
 
         // when
         RunningDistance distance = adapter.loadDistance(ROOM_ID, userId);
 
-        // then -> 페이스만 비고 나머지는 그대로다. 다음 배치가 페이스를 채운다
-        assertThat(distance.meters()).isEqualTo(3000.25);
-        assertThat(distance.lastSequence()).isEqualTo(180L);
-        assertThat(distance.lastPaceSecondsPerKm()).isNull();
+        // then
+        assertThat(distance.anchorLatitude()).isNull();
+        assertThat(distance.anchorLongitude()).isNull();
     }
 
     @Test
     @DisplayName("페이스가 비어 있으면 null로 되살린다")
     void loadsNullPace() {
-        // given -> 단말이 페이스를 못 재면 마지막 칸이 null로 저장된다.
-        // split이 끝의 빈 칸을 버리면 필드 수가 모자라 처음부터 다시 세게 된다
-        given(valueOperations.get(anyString())).willReturn("3000.25|180|35.17955|129.07564|null");
+        // given -> 단말이 페이스를 못 재면 그 칸이 null로 저장된다
+        given(valueOperations.get(anyString()))
+                .willReturn("3000.25|180|0|35.17955|129.07564|null|null|null");
 
         // when
         RunningDistance distance = adapter.loadDistance(ROOM_ID, userId);
 
-        // then
+        // then -> split이 끝의 빈 칸을 버리면 필드 수가 모자라 처음부터 다시 세게 된다
         assertThat(distance.meters()).isEqualTo(3000.25);
         assertThat(distance.lastPaceSecondsPerKm()).isNull();
+    }
+
+    @Test
+    @DisplayName("일시정지 구간이 없는 옛 7필드 값은 받지 않고 처음부터 센다")
+    void rejectsValueWithoutPauseSegment() {
+        // given -> 옛 형식과 호환하지 않는다 — 마지막 번호를 모르면 줄어든 번호를 거를 수 없다
+        given(valueOperations.get(anyString()))
+                .willReturn("3000.25|180|35.17955|129.07564|345|35.17950|129.07560");
+
+        // when & then
+        assertThat(adapter.loadDistance(ROOM_ID, userId)).isEqualTo(RunningDistance.empty());
     }
 
     @Test
     @DisplayName("저장한 값을 그대로 다시 읽어 낸다")
     void savesAndLoadsBack() {
         // given
-        RunningDistance saved = new RunningDistance(3000.25, 180L, 35.17955, 129.07564, 345);
+        RunningDistance saved = new RunningDistance(3000.25, 180L, 2, 35.17955, 129.07564, 345, 35.17950, 129.07560);
 
         // when -> 쓰기 포맷과 읽기 파서가 어긋나면 러닝 중에만 드러난다
         adapter.saveDistance(ROOM_ID, userId, saved);
@@ -152,7 +174,7 @@ class RunningDistanceRedisAdapterTest {
     @DisplayName("숫자가 깨진 값은 형식 불일치처럼 처음부터 다시 센다")
     void restartsWhenNumberIsCorrupted() {
         // given
-        given(valueOperations.get(anyString())).willReturn("삼천|180|35.17955|129.07564");
+        given(valueOperations.get(anyString())).willReturn("삼천|180|0|35.17955|129.07564|345|null|null");
 
         // when & then
         assertThat(adapter.loadDistance(ROOM_ID, userId)).isEqualTo(RunningDistance.empty());
@@ -207,7 +229,7 @@ class RunningDistanceRedisAdapterTest {
     @DisplayName("숫자가 깨진 값은 처음부터 세고 값 손상으로 WARN을 남긴다")
     void logsCorruptedValueAsWarn() {
         // given
-        given(valueOperations.get(anyString())).willReturn("삼천|180|35.17955|129.07564");
+        given(valueOperations.get(anyString())).willReturn("삼천|180|0|35.17955|129.07564|345|null|null");
 
         // when
         adapter.loadDistance(ROOM_ID, userId);
@@ -215,5 +237,52 @@ class RunningDistanceRedisAdapterTest {
         // then
         assertThat(log.messages(Level.WARN))
                 .containsExactly("[러닝] 누적 거리 복원 건너뜀: 저장 값 손상 - roomId=" + ROOM_ID + ", userId=" + userId.value());
+    }
+
+    private Timer access(String operation, String result) {
+        return meterRegistry.get("runiverse.running.state.access")
+                .tag("store", "redis")
+                .tag("target", "distance")
+                .tag("phase", "running")
+                .tag("operation", operation)
+                .tag("result", result)
+                .timer();
+    }
+
+    @Test
+    @DisplayName("누적 거리 조회는 러닝 중 읽기 한 건으로 센다")
+    void measuresLoadAsRunningRead() {
+        // given
+        given(valueOperations.get(anyString())).willReturn("3000.25|180|0|35.17955|129.07564|345|null|null");
+
+        // when
+        adapter.loadDistance(ROOM_ID, userId);
+
+        // then
+        assertThat(access("read", "success").count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("누적 거리 저장은 러닝 중 쓰기 한 건으로 센다")
+    void measuresSaveAsRunningWrite() {
+        // when
+        adapter.saveDistance(ROOM_ID, userId, RunningDistance.empty());
+
+        // then
+        assertThat(access("write", "success").count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("누적 거리 조회가 실패하면 실패로 세고 예외는 그대로 던진다")
+    void measuresLoadFailure() {
+        // given
+        given(valueOperations.get(anyString())).willThrow(new RedisConnectionFailureException("redis down"));
+
+        // when
+        assertThatThrownBy(() -> adapter.loadDistance(ROOM_ID, userId))
+                .isInstanceOf(RedisConnectionFailureException.class);
+
+        // then
+        assertThat(access("read", "failure").count()).isEqualTo(1);
     }
 }

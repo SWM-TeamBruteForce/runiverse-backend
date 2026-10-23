@@ -38,9 +38,11 @@ import com.runiverse.running_service.domain.running.room.SessionDraft;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.Tuple;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -318,18 +320,40 @@ public class RunningPersistenceAdapter implements CreateRunningPlayerPort, Creat
 
     @Override
     public Optional<RunningResultRecord> loadRecord(RunningRoomId runningRoomId, UserId userId) {
-        // 엔티티를 통째로 읽지 않는다 — 응답에 필요한 컬럼만 가져온다
-        return entityManager.createQuery("""
-                        SELECT NEW com.runiverse.running_service.application.running.port.out.RunningResultRecord(
-                            record.routePolyline, record.startAt, record.endAt, record.totalDistance, record.totalElevationGain)
+        // 엔티티를 통째로 읽지 않는다 — 응답에 필요한 컬럼만 가져온다.
+        // uk_running_record_room_user(running_room_id, user_id)를 탄다
+        Optional<Tuple> found = entityManager.createQuery("""
+                        SELECT record.runningRecordId AS recordId, record.startAt AS startAt,
+                            record.endAt AS endAt, record.totalDistance AS totalDistance,
+                            record.totalElevationGain AS totalElevationGain
                         FROM RunningRecordJpaEntity record
                         WHERE record.room.runningRoomId = :roomId
                           AND record.userId = :userId
-                        """, RunningResultRecord.class)
+                        """, Tuple.class)
                 .setParameter("roomId", runningRoomId.value())
                 .setParameter("userId", userId.value())
                 .getResultStream()
                 .findFirst();
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        Tuple record = found.get();
+        // 조각은 몇 개뿐이라 한 번 더 읽는다 — JOIN하면 기록 컬럼이 조각 수만큼 되풀이된다.
+        // uk_running_segment_record_number(running_record_id, segment_number)가 정렬을 맡는다
+        List<String> segmentPolylines = entityManager.createQuery("""
+                        SELECT segment.routePolyline
+                        FROM RunningSegmentJpaEntity segment
+                        WHERE segment.record.runningRecordId = :recordId
+                        ORDER BY segment.segmentNumber
+                        """, String.class)
+                .setParameter("recordId", record.get("recordId", Long.class))
+                .getResultList();
+        return Optional.of(new RunningResultRecord(
+                segmentPolylines,
+                record.get("startAt", LocalDateTime.class),
+                record.get("endAt", LocalDateTime.class),
+                record.get("totalDistance", Integer.class),
+                record.get("totalElevationGain", Integer.class)));
     }
 
     @Override
@@ -340,9 +364,10 @@ public class RunningPersistenceAdapter implements CreateRunningPlayerPort, Creat
                         SELECT NEW com.runiverse.running_service.application.running.port.out.RunningSplitRow(
                             record.userId, split.splitNumber, split.distance, split.duration,
                             split.avgPace, split.avgCadence, split.elevationChange, split.calories,
-                            split.routeStartIndex, split.routeEndIndex)
+                            segment.segmentNumber, split.routeStartIndex, split.routeEndIndex)
                         FROM RunningSplitJpaEntity split
-                        JOIN split.record record
+                        JOIN split.segment segment
+                        JOIN segment.record record
                         WHERE record.room.runningRoomId = :roomId
                         ORDER BY split.splitNumber, record.userId
                         """, RunningSplitRow.class)

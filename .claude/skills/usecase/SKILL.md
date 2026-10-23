@@ -47,7 +47,7 @@ description: >-
 
 **4) 인프라** — JPA 엔티티는 `erd.md`의 제약을 그대로 반영한다. 도메인 ↔ 엔티티 변환은 어댑터가 맡는다. 같은 애그리거트·저장 기술의 포트는 기존 어댑터가 함께 구현할 수 있다.
 
-**5) 프레젠테이션** — 컨트롤러와 그 request·response는 API가 다루는 리소스의 도메인 `presentation/<도메인>/`에 둔다 — 경로가 아니라 리소스로 정한다(`architecture.md` presentation 규칙). 설정이 붙이므로 `@RequestMapping`에 `/api/v1`을 넣지 않는다. DTO 단위 접미사는 `api-convention.md` "물리량 단위"를 따른다. Bean Validation 메시지는 **`api-spec.md` 문구 그대로** 둔다.
+**5) 프레젠테이션** — 컨트롤러와 그 request·response는 API가 다루는 리소스의 도메인 `presentation/<도메인>/`에 둔다 — 경로가 아니라 리소스로 정한다(`architecture.md` presentation 규칙). 설정이 붙이므로 `@RequestMapping`에 `/api/v1`을 넣지 않는다. DTO 단위 접미사는 `api-convention.md` "물리량 단위"를 따른다. Bean Validation 메시지는 **`api-spec.md` 문구 그대로** 둔다. `인증: 불필요` 경로는 `infrastructure/security/SecurityConfig`의 `PUBLIC_ENDPOINTS`에 추가한다(경로 변수는 `/auth/oauth/**`처럼 와일드카드로). 와일드카드가 `/users/me/…` 같은 인증 경로까지 열게 되면 `profile-image`처럼 메서드와 `regexMatcher`로 좁힌다 — 정규식은 쿼리 문자열까지 비교한다.
 
 **6) 테스트** — `docs/code-convention.md`와 `UserVoTest`·`UserOnboardingTest`·`UserPersistenceAdapterTest`를 따른다. 도메인 예외의 타입·메시지, 핸들러의 성공·실패 경로와 실패 후 중단을 검증한다. 테스트는 세 층이다.
 

@@ -4,6 +4,11 @@ import com.runiverse.running_service.application.running.port.in.GetUserStatusUs
 import com.runiverse.running_service.application.running.query.status.GetUserStatusQuery;
 import com.runiverse.running_service.application.running.query.status.GetUserStatusResult;
 import com.runiverse.running_service.application.user.command.accountdeletion.DeleteAccountCommand;
+import com.runiverse.running_service.application.user.command.backgroundimage.ChangeBackgroundImageCommand;
+import com.runiverse.running_service.application.user.command.backgroundimage.ChangeBackgroundImageResult;
+import com.runiverse.running_service.application.user.command.backgroundimage.CreateBackgroundImageUploadUrlCommand;
+import com.runiverse.running_service.application.user.command.backgroundimage.CreateBackgroundImageUploadUrlResult;
+import com.runiverse.running_service.application.user.command.backgroundimage.DeleteBackgroundImageCommand;
 import com.runiverse.running_service.application.user.command.nickname.ChangeNicknameCommand;
 import com.runiverse.running_service.application.user.command.nickname.ChangeNicknameResult;
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingCommand;
@@ -18,6 +23,7 @@ import com.runiverse.running_service.application.user.command.profileimage.Creat
 import com.runiverse.running_service.application.user.command.profileimage.DeleteProfileImageCommand;
 import com.runiverse.running_service.application.user.command.settings.ChangeMySettingsCommand;
 import com.runiverse.running_service.application.user.command.settings.ChangeMySettingsResult;
+import com.runiverse.running_service.application.user.port.in.ChangeBackgroundImageUsecase;
 import com.runiverse.running_service.application.user.port.in.ChangeMyProfileUsecase;
 import com.runiverse.running_service.application.user.port.in.ChangeMySettingsUsecase;
 import com.runiverse.running_service.application.user.port.in.ChangeNicknameUsecase;
@@ -25,14 +31,19 @@ import com.runiverse.running_service.application.user.port.in.ChangePasswordUsec
 import com.runiverse.running_service.application.user.port.in.ChangeProfileImageUsecase;
 import com.runiverse.running_service.application.user.port.in.CheckNicknameAvailabilityUsecase;
 import com.runiverse.running_service.application.user.port.in.CompleteOnboardingUsecase;
+import com.runiverse.running_service.application.user.port.in.CreateBackgroundImageUploadUrlUsecase;
 import com.runiverse.running_service.application.user.port.in.CreateProfileImageUploadUrlUsecase;
 import com.runiverse.running_service.application.user.port.in.DeleteAccountUsecase;
+import com.runiverse.running_service.application.user.port.in.DeleteBackgroundImageUsecase;
 import com.runiverse.running_service.application.user.port.in.DeleteProfileImageUsecase;
+import com.runiverse.running_service.application.user.port.in.GetBackgroundImageUsecase;
 import com.runiverse.running_service.application.user.port.in.GetMyBasicInfoUsecase;
 import com.runiverse.running_service.application.user.port.in.GetMyProfileUsecase;
 import com.runiverse.running_service.application.user.port.in.GetMySettingsUsecase;
 import com.runiverse.running_service.application.user.port.in.GetProfileImageUsecase;
 import com.runiverse.running_service.application.user.port.in.GetUserProfileUsecase;
+import com.runiverse.running_service.application.user.query.backgroundimage.GetBackgroundImageUrlQuery;
+import com.runiverse.running_service.application.user.query.backgroundimage.GetBackgroundImageUrlResult;
 import com.runiverse.running_service.application.user.query.basicinfo.GetMyBasicInfoQuery;
 import com.runiverse.running_service.application.user.query.basicinfo.GetMyBasicInfoResult;
 import com.runiverse.running_service.application.user.query.nickname.CheckNicknameAvailabilityQuery;
@@ -45,14 +56,18 @@ import com.runiverse.running_service.application.user.query.profileimage.GetProf
 import com.runiverse.running_service.application.user.query.profileimage.GetProfileImageUrlResult;
 import com.runiverse.running_service.application.user.query.settings.GetMySettingsQuery;
 import com.runiverse.running_service.application.user.query.settings.GetMySettingsResult;
+import com.runiverse.running_service.presentation.user.request.BackgroundImageUpdateRequest;
+import com.runiverse.running_service.presentation.user.request.ImageUploadUrlRequest;
 import com.runiverse.running_service.presentation.user.request.NicknameAvailabilityRequest;
 import com.runiverse.running_service.presentation.user.request.NicknameUpdateRequest;
 import com.runiverse.running_service.presentation.user.request.OnboardingRequest;
 import com.runiverse.running_service.presentation.user.request.PasswordUpdateRequest;
 import com.runiverse.running_service.presentation.user.request.ProfileImageUpdateRequest;
-import com.runiverse.running_service.presentation.user.request.ProfileImageUploadUrlRequest;
 import com.runiverse.running_service.presentation.user.request.ProfileUpdateRequest;
 import com.runiverse.running_service.presentation.user.request.SettingsUpdateRequest;
+import com.runiverse.running_service.presentation.user.response.BackgroundImageUpdateResponse;
+import com.runiverse.running_service.presentation.user.response.BackgroundImageUploadUrlResponse;
+import com.runiverse.running_service.presentation.user.response.BackgroundImageUrlResponse;
 import com.runiverse.running_service.presentation.user.response.MyBasicInfoResponse;
 import com.runiverse.running_service.presentation.user.response.MyProfileResponse;
 import com.runiverse.running_service.presentation.user.response.MySettingsResponse;
@@ -66,6 +81,7 @@ import com.runiverse.running_service.presentation.user.response.ProfileUpdateRes
 import com.runiverse.running_service.presentation.user.response.UserProfileResponse;
 import com.runiverse.running_service.presentation.user.response.UserStatusResponse;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -87,6 +103,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UserController {
 
+    // UserId VO가 받는 UUIDv7만 — UUID 타입으로 받으면 1-1-1-1-1 같은 값도 변환된다
+    private static final String USER_ID_FORMAT =
+            "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
+
     private final CompleteOnboardingUsecase completeOnboardingUsecase;
     private final GetMyBasicInfoUsecase getMyBasicInfoUsecase;
     private final GetMyProfileUsecase getMyProfileUsecase;
@@ -96,6 +116,10 @@ public class UserController {
     private final ChangeProfileImageUsecase changeProfileImageUsecase;
     private final GetProfileImageUsecase getProfileImageUsecase;
     private final DeleteProfileImageUsecase deleteProfileImageUsecase;
+    private final CreateBackgroundImageUploadUrlUsecase createBackgroundImageUploadUrlUsecase;
+    private final ChangeBackgroundImageUsecase changeBackgroundImageUsecase;
+    private final GetBackgroundImageUsecase getBackgroundImageUsecase;
+    private final DeleteBackgroundImageUsecase deleteBackgroundImageUsecase;
     private final CheckNicknameAvailabilityUsecase checkNicknameAvailabilityUsecase;
     private final ChangeNicknameUsecase changeNicknameUsecase;
     private final ChangePasswordUsecase changePasswordUsecase;
@@ -138,11 +162,11 @@ public class UserController {
     @GetMapping("/{userId}")
     public ResponseEntity<UserProfileResponse> getUserProfile(
             @AuthenticationPrincipal Jwt jwt,
-            @PathVariable UUID userId
+            @PathVariable @Pattern(regexp = USER_ID_FORMAT, message = "입력값이 올바르지 않습니다.") String userId
     ) {
         UUID viewerId = UUID.fromString(jwt.getSubject());
         GetUserProfileResult result = getUserProfileUsecase.handle(
-                new GetUserProfileQuery(viewerId, userId));
+                new GetUserProfileQuery(viewerId, UUID.fromString(userId)));
         return ResponseEntity.ok(new UserProfileResponse(
                 result.userId(),
                 result.isMe(),
@@ -193,7 +217,7 @@ public class UserController {
     @PostMapping("/me/profile-image/presigned-url")
     public ResponseEntity<ProfileImageUploadUrlResponse> createProfileImageUploadUrl(
             @AuthenticationPrincipal Jwt jwt,
-            @Valid @RequestBody ProfileImageUploadUrlRequest request
+            @Valid @RequestBody ImageUploadUrlRequest request
     ) {
         UUID userId = UUID.fromString(jwt.getSubject());
         CreateProfileImageUploadUrlResult result = createProfileImageUploadUrlUsecase.handle(
@@ -215,9 +239,11 @@ public class UserController {
     }
 
     @GetMapping("/{userId}/profile-image")
-    public ResponseEntity<ProfileImageUrlResponse> getProfileImageUrl(@PathVariable UUID userId) {
+    public ResponseEntity<ProfileImageUrlResponse> getProfileImageUrl(
+            @PathVariable @Pattern(regexp = USER_ID_FORMAT, message = "입력값이 올바르지 않습니다.") String userId
+    ) {
         GetProfileImageUrlResult result = getProfileImageUsecase.handle(
-                new GetProfileImageUrlQuery(userId));
+                new GetProfileImageUrlQuery(UUID.fromString(userId)));
         return ResponseEntity.ok(new ProfileImageUrlResponse(result.profileImageUrl()));
     }
 
@@ -225,6 +251,46 @@ public class UserController {
     public ResponseEntity<Void> deleteProfileImage(@AuthenticationPrincipal Jwt jwt) {
         UUID userId = UUID.fromString(jwt.getSubject());
         deleteProfileImageUsecase.handle(new DeleteProfileImageCommand(userId));
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/me/background-image/presigned-url")
+    public ResponseEntity<BackgroundImageUploadUrlResponse> createBackgroundImageUploadUrl(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody ImageUploadUrlRequest request
+    ) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        CreateBackgroundImageUploadUrlResult result = createBackgroundImageUploadUrlUsecase.handle(
+                new CreateBackgroundImageUploadUrlCommand(userId, request.mimeType(), request.fileSizeBytes())
+        );
+        return ResponseEntity.ok(
+                new BackgroundImageUploadUrlResponse(result.backgroundImageKey(), result.uploadUrl()));
+    }
+
+    @PatchMapping("/me/background-image")
+    public ResponseEntity<BackgroundImageUpdateResponse> changeBackgroundImage(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody BackgroundImageUpdateRequest request
+    ) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        ChangeBackgroundImageResult result = changeBackgroundImageUsecase.handle(
+                new ChangeBackgroundImageCommand(userId, request.backgroundImageKey()));
+        return ResponseEntity.ok(new BackgroundImageUpdateResponse(result.backgroundImageKey()));
+    }
+
+    @GetMapping("/{userId}/background-image")
+    public ResponseEntity<BackgroundImageUrlResponse> getBackgroundImageUrl(
+            @PathVariable @Pattern(regexp = USER_ID_FORMAT, message = "입력값이 올바르지 않습니다.") String userId
+    ) {
+        GetBackgroundImageUrlResult result = getBackgroundImageUsecase.handle(
+                new GetBackgroundImageUrlQuery(UUID.fromString(userId)));
+        return ResponseEntity.ok(new BackgroundImageUrlResponse(result.backgroundImageUrl()));
+    }
+
+    @DeleteMapping("/me/background-image")
+    public ResponseEntity<Void> deleteBackgroundImage(@AuthenticationPrincipal Jwt jwt) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        deleteBackgroundImageUsecase.handle(new DeleteBackgroundImageCommand(userId));
         return ResponseEntity.noContent().build();
     }
 

@@ -5,6 +5,8 @@ import com.runiverse.running_service.application.common.port.out.LoadPlayerProfi
 import com.runiverse.running_service.application.common.port.out.PlayerProfile;
 import com.runiverse.running_service.application.running.command.combo.RunningComboReader;
 import com.runiverse.running_service.application.running.exception.RunningRoomNotFoundException;
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
+import com.runiverse.running_service.application.running.port.out.LoadLiveRunningStatusPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningDistancePort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningRoomPort;
 import com.runiverse.running_service.application.running.port.out.RunningComboPeer;
@@ -39,6 +41,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 // RUNNING_STARTED가 나르는 진입·재연결 화면 복구용 스냅샷을 조립한다(api-spec 5-C).
@@ -68,6 +72,10 @@ class GetRunningSnapshotHandlerTest {
     @Mock
     private LoadRunningDistancePort loadRunningDistancePort;
 
+    // 따로 정하지 않으면 목이 빈 값을 돌려준다 — 상태가 없는 참가자로 실린다
+    @Mock
+    private LoadLiveRunningStatusPort loadLiveRunningStatusPort;
+
     // 콤보 조립 규칙은 RunningComboEvaluatorTest가 본다 — 여기서는 실려 나가는지만 본다
     @Mock
     private RunningComboReader runningComboReader;
@@ -83,6 +91,8 @@ class GetRunningSnapshotHandlerTest {
         givenProfiles(profile(ME, "완두콩", "p/me.png"), profile(PEER, "강낭콩", null));
         givenDistance(ME, 1_520, 345);
         givenDistance(PEER, 1_480, 352);
+        givenStatus(ME, LiveRunningStatus.RUNNING);
+        givenStatus(PEER, LiveRunningStatus.PAUSED);
         given(generateViewUrlPort.generate("p/me.png")).willReturn("https://cdn.test/me.png");
         given(runningComboReader.read(anyLong(), any())).willReturn(List.of());
 
@@ -103,7 +113,63 @@ class GetRunningSnapshotHandlerTest {
         assertThat(me.profileImageUrl()).isEqualTo("https://cdn.test/me.png");
         assertThat(me.distanceMeters()).isEqualTo(1_520);
         assertThat(me.currentPaceSecondsPerKm()).isEqualTo(345);
-        assertThat(me.paused()).isFalse();
+        assertThat(me.status()).isEqualTo(LiveRunningStatus.RUNNING);
+        // 멈춘 채 재연결한 상대도 멈춤으로 복구돼야 한다 — 저장된 값이 그대로 실린다
+        assertThat(playerOf(result, PEER).status()).isEqualTo(LiveRunningStatus.PAUSED);
+    }
+
+    @Test
+    @DisplayName("상태가 없는 참가자는 DISCONNECTED로 담는다")
+    void playerWithoutStatusIsDisconnected() {
+        // given -> 매칭 방에 배정됐지만 RUNNING_START를 한 번도 보내지 않은 사람이다.
+        // 좌표 배치는 같은 '없음'을 RUNNING으로 보지만, 여기서는 연결됐다는 근거가 없다
+        givenRoom(connected(ME), connected(PEER));
+        givenProfiles(profile(ME, "완두콩", null), profile(PEER, "강낭콩", null));
+        givenDistance(ME, 1_520, 345);
+        givenDistance(PEER, 0, null);
+        givenStatus(ME, LiveRunningStatus.RUNNING);
+        given(loadLiveRunningStatusPort.load(ROOM_ID, new UserId(PEER))).willReturn(Optional.empty());
+        given(runningComboReader.read(anyLong(), any())).willReturn(List.of());
+
+        // when
+        GetRunningSnapshotResult result = handler.handle(new GetRunningSnapshotQuery(ME, ROOM_ID));
+
+        // then
+        assertThat(playerOf(result, PEER).status()).isEqualTo(LiveRunningStatus.DISCONNECTED);
+    }
+
+    @Test
+    @DisplayName("끊긴 참가자는 DISCONNECTED 그대로 담는다")
+    void keepsDisconnectedStatus() {
+        // given -> 연결만 끊긴 사람은 세션이 남아 목록에 실린다. 화면에 끊김으로 그려야 한다
+        givenRoom(connected(ME), connected(PEER));
+        givenProfiles(profile(ME, "완두콩", null), profile(PEER, "강낭콩", null));
+        givenDistance(ME, 1_520, 345);
+        givenDistance(PEER, 1_480, 352);
+        givenStatus(ME, LiveRunningStatus.RUNNING);
+        givenStatus(PEER, LiveRunningStatus.DISCONNECTED);
+        given(runningComboReader.read(anyLong(), any())).willReturn(List.of());
+
+        // when
+        GetRunningSnapshotResult result = handler.handle(new GetRunningSnapshotQuery(ME, ROOM_ID));
+
+        // then
+        assertThat(playerOf(result, PEER).status()).isEqualTo(LiveRunningStatus.DISCONNECTED);
+    }
+
+    @Test
+    @DisplayName("상태를 못 읽으면 기본값으로 위장하지 않고 그대로 던진다")
+    void throwsWhenStatusLoadFails() {
+        // given -> 누적 거리와 같은 취급이다. RUNNING_START는 멱등이라 재시도시키는 편이 낫다
+        givenRoom(connected(ME));
+        givenProfiles(profile(ME, "완두콩", null));
+        givenDistance(ME, 1_520, 345);
+        given(loadLiveRunningStatusPort.load(anyLong(), any()))
+                .willThrow(new RuntimeException("redis down"));
+
+        // when & then
+        assertThatThrownBy(() -> handler.handle(new GetRunningSnapshotQuery(ME, ROOM_ID)))
+                .isInstanceOf(RuntimeException.class);
     }
 
     @Test
@@ -313,6 +379,64 @@ class GetRunningSnapshotHandlerTest {
     }
 
     // 탈퇴자는 users 행이 지워져 결과에서 빠진다 — 없는 프로필을 넣지 않는 것이 곧 탈퇴다
+    @Test
+    @DisplayName("본인이 이어 쓸 순번과 일시정지 구간 번호를 담는다 -> 재설치한 앱이 서버가 받은 다음부터 이어 쓴다")
+    void carriesRequesterResumeNumbers() {
+        // given -> 순번 119까지 받았고 그 좌표의 번호가 2였다. 상대 값은 담지 않는다
+        givenRoom(connected(ME), connected(PEER));
+        givenProfiles(profile(ME, "완두콩", null), profile(PEER, "강낭콩", null));
+        given(loadRunningDistancePort.loadDistance(eq(ROOM_ID), eq(new UserId(ME))))
+                .willReturn(new RunningDistance(1_520, 119L, 2, 35.17955, 129.07564, 345, null, null));
+        given(loadRunningDistancePort.loadDistance(eq(ROOM_ID), eq(new UserId(PEER))))
+                .willReturn(new RunningDistance(1_480, 300L, 5, 35.17955, 129.07564, 352, null, null));
+        given(runningComboReader.read(anyLong(), any())).willReturn(List.of());
+
+        // when
+        GetRunningSnapshotResult result = handler.handle(new GetRunningSnapshotQuery(ME, ROOM_ID));
+
+        // then -> 일시정지 구간 번호 검사가 비교하는 값과 같아야 이어 써도 거부되지 않는다
+        assertThat(result.nextSequence()).isEqualTo(120L);
+        assertThat(result.pauseSegment()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("본인 누적 상태는 한 번만 읽는다 -> 이어 쓸 번호와 본인 진행이 같은 값을 쓴다")
+    void readsRequesterDistanceOnce() {
+        // given
+        givenRoom(connected(ME), connected(PEER));
+        givenProfiles(profile(ME, "완두콩", null), profile(PEER, "강낭콩", null));
+        givenDistance(ME, 1_520, 345);
+        givenDistance(PEER, 1_480, 352);
+        given(runningComboReader.read(anyLong(), any())).willReturn(List.of());
+
+        // when
+        GetRunningSnapshotResult result = handler.handle(new GetRunningSnapshotQuery(ME, ROOM_ID));
+
+        // then -> 본인은 번호를 내려고 읽은 값을 진행에도 다시 쓴다. 상대는 따로 읽는다
+        verify(loadRunningDistancePort, times(1)).loadDistance(ROOM_ID, new UserId(ME));
+        verify(loadRunningDistancePort, times(1)).loadDistance(ROOM_ID, new UserId(PEER));
+        assertThat(playerOf(result, ME).distanceMeters()).isEqualTo(1_520);
+        assertThat(playerOf(result, PEER).distanceMeters()).isEqualTo(1_480);
+    }
+
+    @Test
+    @DisplayName("받은 좌표가 없으면 순번 0, 일시정지 구간 0부터 이어 쓴다")
+    void startsResumeNumbersFromZeroWithoutPoints() {
+        // given -> 출발 직후 첫 배치를 보내기 전이다
+        givenRoom(connected(ME));
+        givenProfiles(profile(ME, "완두콩", null));
+        given(loadRunningDistancePort.loadDistance(eq(ROOM_ID), eq(new UserId(ME))))
+                .willReturn(RunningDistance.empty());
+        given(runningComboReader.read(anyLong(), any())).willReturn(List.of());
+
+        // when
+        GetRunningSnapshotResult result = handler.handle(new GetRunningSnapshotQuery(ME, ROOM_ID));
+
+        // then -> lastSequence가 -1이라 다음 순번은 0이다
+        assertThat(result.nextSequence()).isZero();
+        assertThat(result.pauseSegment()).isZero();
+    }
+
     private void givenProfiles(PlayerProfile... profiles) {
         given(loadPlayerProfilesPort.loadProfiles(any())).willReturn(
                 Arrays.stream(profiles)
@@ -323,9 +447,14 @@ class GetRunningSnapshotHandlerTest {
         return new PlayerProfile(userId, nickname, imageKey, null);
     }
 
+    private void givenStatus(UUID userId, LiveRunningStatus status) {
+        given(loadLiveRunningStatusPort.load(eq(ROOM_ID), eq(new UserId(userId))))
+                .willReturn(Optional.of(status));
+    }
+
     private void givenDistance(UUID userId, int meters, Integer pace) {
         given(loadRunningDistancePort.loadDistance(eq(ROOM_ID), eq(new UserId(userId))))
-                .willReturn(new RunningDistance(meters, 180L, 35.17955, 129.07564, pace));
+                .willReturn(new RunningDistance(meters, 180L, 0, 35.17955, 129.07564, pace, null, null));
     }
 
     private static GetRunningSnapshotResult.Player playerOf(

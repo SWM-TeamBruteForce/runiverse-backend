@@ -9,10 +9,12 @@ import com.runiverse.running_service.application.match.command.apply.MatchRoomAs
 import com.runiverse.running_service.application.match.command.broadcast.BroadMatchEventHandler;
 import com.runiverse.running_service.application.match.command.broadcast.BroadcastMatchEventCommand;
 import com.runiverse.running_service.application.match.common.MatchProperties;
+import com.runiverse.running_service.application.match.common.MatchSlotPolicy;
 import com.runiverse.running_service.application.match.common.MatchRoomChangedEvent;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
 import com.runiverse.running_service.application.match.exception.MatchAlreadyInProgressException;
 import com.runiverse.running_service.application.match.exception.MatchCooldownException;
+import com.runiverse.running_service.application.match.exception.InvalidMatchOptionException;
 import com.runiverse.running_service.application.match.exception.MatchSlotClosedException;
 import com.runiverse.running_service.application.match.port.out.MatchEventType;
 import com.runiverse.running_service.application.match.port.out.MatchStreamEvent;
@@ -49,6 +51,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -71,7 +74,8 @@ public class ApplyMatchIntegrationTest extends IntegrationTestSupport {
     private static final Duration FORCE_FINISH_OFFSET = Duration.ofHours(6);
     private static final Duration COOLDOWN = Duration.ofMinutes(20);
     private static final MatchProperties MATCH_PROPERTIES = new MatchProperties(
-            CLOSE_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET, 10, COOLDOWN);
+            CLOSE_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET, 10, COOLDOWN,
+            LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
 
     private SignUpHandler signUpHandler;
     private CompleteOnboardingHandler completeOnboardingHandler;
@@ -132,7 +136,7 @@ public class ApplyMatchIntegrationTest extends IntegrationTestSupport {
                 onboardingStore,     // LoadUserAvgPacePort
                 runningStore,        // CreateMatchApplicationPort
                 matchRoomAssigner,
-                MATCH_PROPERTIES,
+                new MatchSlotPolicy(MATCH_PROPERTIES),
                 roomInfoAssembler,
                 eventPublisher
         );
@@ -263,13 +267,30 @@ public class ApplyMatchIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("모집이 마감된 슬롯은 신청을 남기지 않고 막는다")
     void rejectsClosedSlot() {
-        // given -> 마감(시작 10분 전)이 이미 지났다
+        // given -> 고를 수 있는 슬롯이지만 마감(시작 10분 전)이 이미 지났다.
+        //          선택지 판정이 먼저라 now 기준 임의 시각은 400으로 빠진다 — 슬롯 간격에 맞는 어제 슬롯을 쓴다.
+        //          "시작 전인데 마감만 지난" 경계는 시계를 고정할 수 있는 ApplyMatchHandlerTest가 본다
         UUID userId = onboardedUser(330);
-        LocalDateTime closedSlot = LocalDateTime.now().plus(CLOSE_OFFSET).minusMinutes(1);
+        LocalDateTime closedSlot = SLOT.minusDays(2);
 
         // when & then
         assertThatThrownBy(() -> apply(userId, closedSlot, TARGET_DISTANCE))
                 .isInstanceOf(MatchSlotClosedException.class);
+        assertThat(runningStore.playerCount()).isZero();
+        assertThat(runningStore.roomCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("선택지 밖의 시각·거리는 신청을 남기지 않고 막는다")
+    void rejectsInvalidOption() {
+        // given -> 23:00은 범위 밖, 7000m는 목록 밖이다
+        UUID userId = onboardedUser(330);
+
+        // when & then -> 둘 다 어긋나 두 문장이 한 번에 나간다
+        assertThatThrownBy(() -> apply(userId, SLOT.withHour(23), 7_000))
+                .isInstanceOf(InvalidMatchOptionException.class)
+                .hasMessage("시작 시각은 18:00부터 22:00까지 30분 간격으로만 선택할 수 있습니다."
+                        + " 목표 거리는 3000, 5000, 10000 중 하나여야 합니다.");
         assertThat(runningStore.playerCount()).isZero();
         assertThat(runningStore.roomCount()).isZero();
     }

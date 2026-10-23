@@ -36,7 +36,7 @@ cd running-service
 
 - `BusinessException`·`ErrorCode`(sealed interface)·`UserErrorCode`가 domain(VO 검증)·application(유스케이스)에 같은 이름으로 존재 — import 시 레이어 확인.
 - application 에러 코드는 도메인별 `*ErrorCode` enum과 `GlobalExceptionHandler.toStatus()`에 반드시 반영한다. 400 외 상태로 공개할 코드는 `ErrorExposurePolicy.EXPOSED_CODES`에도 넣는다 — 빠지면 컴파일·테스트를 통과해도 런타임에 500으로 마스킹된다. 의도적 비노출은 근거와 테스트를 남긴다.
-- 도메인 예외는 500으로 응답한다 — 400으로 보여줄 검증은 Request DTO의 Bean Validation이 만든다.
+- 도메인 예외는 500으로 응답한다 — 400으로 보여줄 검증은 Request DTO·경로 변수의 Bean Validation이 만든다.
 - `.env` 등 시크릿 파일은 절대 커밋하지 않고, 키 값은 출력 시 마스킹한다.
 - 요청 없이 공개 API 계약(요청·응답 형식)이나 의존성(라이브러리)을 변경하지 않는다.
 - 문제를 우회하는 해결 금지 — 테스트 약화·빈 catch·기능 삭제로 오류를 없애지 않는다.

@@ -3,6 +3,7 @@ package com.runiverse.running_service.unit_test.presentation;
 import com.runiverse.running_service.application.common.exception.AuthErrorCode;
 import com.runiverse.running_service.application.common.exception.RunningErrorCode;
 import com.runiverse.running_service.application.common.exception.UserErrorCode;
+import com.runiverse.running_service.presentation.common.exception.CommonErrorCode;
 import com.runiverse.running_service.presentation.common.exception.ErrorExposurePolicy;
 import com.runiverse.running_service.presentation.common.exception.SecurityErrorCode;
 import org.junit.jupiter.api.DisplayName;
@@ -56,6 +57,14 @@ public class ErrorExposurePolicyTest {
     }
 
     @Test
+    @DisplayName("앱 업데이트 필요는 403 그대로 노출한다")
+    void appUpdateRequiredIsExposed() {
+        // 가려지면 500으로 바뀌어 클라가 업데이트 화면으로 보내지 못한다
+        assertThat(ErrorExposurePolicy.isExposed(
+                HttpStatus.FORBIDDEN, CommonErrorCode.APP_UPDATE_REQUIRED.getCode())).isTrue();
+    }
+
+    @Test
     @DisplayName("방 참가자가 아닌 조회 거부는 403 그대로 노출한다")
     void notRoomPlayerIsExposed() {
         // 6-1이 REST로 던지는 코드다 — 목록에서 빠지면 500으로 바뀌어 클라가 권한 문제인지 알 수 없다
@@ -80,6 +89,21 @@ public class ErrorExposurePolicyTest {
         assertThat(ErrorExposurePolicy.isExposed(
                 HttpStatus.CONFLICT,
                 UserErrorCode.ONBOARDING_NOT_COMPLETED.getCode())).isTrue();
+    }
+
+    @Test
+    @DisplayName("받지 않는 메서드는 405 그대로 노출한다")
+    void methodNotAllowedIsExposed() {
+        // 노출 목록에서 빠지면 클라 잘못이 500 서버 오류로 바뀐다
+        assertThat(ErrorExposurePolicy.isExposed(
+                HttpStatus.METHOD_NOT_ALLOWED, CommonErrorCode.METHOD_NOT_ALLOWED.getCode())).isTrue();
+    }
+
+    @Test
+    @DisplayName("받지 않는 본문 형식은 415 그대로 노출한다")
+    void unsupportedMediaTypeIsExposed() {
+        assertThat(ErrorExposurePolicy.isExposed(
+                HttpStatus.UNSUPPORTED_MEDIA_TYPE, CommonErrorCode.UNSUPPORTED_MEDIA_TYPE.getCode())).isTrue();
     }
 
     @Test

@@ -1,14 +1,14 @@
 package com.runiverse.running_service.application.user.query.profile;
 
+import com.runiverse.running_service.application.user.common.UserImageType;
+import com.runiverse.running_service.application.user.common.UserImageUrlResolver;
 import com.runiverse.running_service.application.user.exception.ProfileNotFoundException;
 import com.runiverse.running_service.application.user.port.in.GetUserProfileUsecase;
-import com.runiverse.running_service.application.user.port.out.GenerateViewUrlPort;
 import com.runiverse.running_service.application.user.port.out.LoadNicknamePort;
 import com.runiverse.running_service.application.user.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.user.User;
 import com.runiverse.running_service.domain.user.vo.Nickname;
-import com.runiverse.running_service.domain.user.vo.ProfileImageKey;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,7 +24,7 @@ public class GetUserProfileHandler implements GetUserProfileUsecase {
 
     private final LoadUserByIdPort loadUserByIdPort;
     private final LoadNicknamePort loadNicknamePort;
-    private final GenerateViewUrlPort generateViewUrlPort;
+    private final UserImageUrlResolver userImageUrlResolver;
 
     @Override
     public GetUserProfileResult handle(GetUserProfileQuery query) {
@@ -36,10 +36,7 @@ public class GetUserProfileHandler implements GetUserProfileUsecase {
         boolean isMe = query.viewerId().equals(query.targetUserId());
 
         // 2. 사진이 없으면 URL도 없다
-        String profileImageUrl = user.getProfileImageKey()
-                .map(ProfileImageKey::value)
-                .map(generateViewUrlPort::generate)
-                .orElse(null);
+        String profileImageUrl = userImageUrlResolver.resolve(UserImageType.PROFILE, user);
 
         // 3. 도메인의 빈 문자열을 조회 응답 규칙인 null로 되돌린다
         String introduction = user.getIntroduction().value();

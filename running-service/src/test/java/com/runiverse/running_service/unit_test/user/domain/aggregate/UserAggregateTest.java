@@ -1,12 +1,14 @@
 package com.runiverse.running_service.unit_test.user.domain.aggregate;
 
 import com.runiverse.running_service.domain.user.User;
+import com.runiverse.running_service.domain.user.exception.BackgroundImageKeyRequiredException;
 import com.runiverse.running_service.domain.user.exception.IntroductionTooLongException;
 import com.runiverse.running_service.domain.user.exception.InvalidEmailFormatException;
 import com.runiverse.running_service.domain.user.exception.InvalidPasswordHashFormatException;
 import com.runiverse.running_service.domain.common.exception.InvalidUserIdFormatException;
 import com.runiverse.running_service.domain.user.exception.ProfileImageKeyRequiredException;
 import com.runiverse.running_service.domain.user.exception.ProfileVisibilityRequiredException;
+import com.runiverse.running_service.domain.user.vo.BackgroundImageKey;
 import com.runiverse.running_service.domain.user.vo.ProfileImageKey;
 import com.runiverse.running_service.domain.user.vo.ProfileVisibility;
 import org.junit.jupiter.api.DisplayName;
@@ -27,6 +29,8 @@ public class UserAggregateTest {
                     + "c29tZXNhbHQ$"
                     + "c29tZWhhc2h2YWx1ZQ";
     private static final String PROFILE_IMAGE_KEY = "profiles/0190a5b4-3c2d-7e1f-8a2b-123456789abc/photo.jpg";
+    private static final String BACKGROUND_IMAGE_KEY =
+            "backgrounds/0190a5b4-3c2d-7e1f-8a2b-123456789abc/photo.jpg";
 
     @Nested
     @DisplayName("전체 생성자 테스트")
@@ -46,6 +50,7 @@ public class UserAggregateTest {
                     PASSWORD_HASH,
                     alertConsent,
                     PROFILE_IMAGE_KEY,
+                    BACKGROUND_IMAGE_KEY,
                     ProfileVisibility.FRIENDS,
                     introduction
             );
@@ -58,6 +63,10 @@ public class UserAggregateTest {
             assertThat(user.getProfileImageKey())
                     .map(ProfileImageKey::value)
                     .contains(PROFILE_IMAGE_KEY);
+            // 두 키가 모두 String 인자라 자리가 뒤바뀌어도 컴파일된다
+            assertThat(user.getBackgroundImageKey())
+                    .map(BackgroundImageKey::value)
+                    .contains(BACKGROUND_IMAGE_KEY);
             assertThat(user.getProfileVisibility()).isEqualTo(ProfileVisibility.FRIENDS);
             assertThat(user.getIntroduction().value()).isEqualTo(introduction);
         }
@@ -87,6 +96,7 @@ public class UserAggregateTest {
                 assertThat(user.isAlertConsent()).isTrue();
                 assertThat(user.getProfileVisibility()).isEqualTo(ProfileVisibility.PUBLIC);
                 assertThat(user.getProfileImageKey()).isEmpty();   // 신규 가입자는 프로필 사진이 없다
+                assertThat(user.getBackgroundImageKey()).isEmpty();   // 배경도 없다
                 assertThat(user.getIntroduction().value()).isEmpty();
             }
         }
@@ -108,6 +118,7 @@ public class UserAggregateTest {
                 assertThat(user.isAlertConsent()).isTrue();   // 거래성 알림뿐이라 기본 수신
                 assertThat(user.getProfileVisibility()).isEqualTo(ProfileVisibility.PUBLIC);
                 assertThat(user.getProfileImageKey()).isEmpty();   // 신규 가입자는 프로필 사진이 없다
+                assertThat(user.getBackgroundImageKey()).isEmpty();   // 배경도 없다
                 assertThat(user.getIntroduction().value()).isEmpty();
             }
         }
@@ -133,6 +144,7 @@ public class UserAggregateTest {
                 assertThat(user.isAlertConsent()).isTrue();   // 거래성 알림뿐이라 기본 수신
                 assertThat(user.getProfileVisibility()).isEqualTo(ProfileVisibility.PUBLIC);
                 assertThat(user.getProfileImageKey()).isEmpty();   // 신규 가입자는 프로필 사진이 없다
+                assertThat(user.getBackgroundImageKey()).isEmpty();   // 배경도 없다
                 assertThat(user.getIntroduction().value()).isEmpty();
             }
         }
@@ -207,6 +219,7 @@ public class UserAggregateTest {
                                 PASSWORD_HASH,
                                 false,
                                 null,
+                                null,
                                 ProfileVisibility.PUBLIC,
                                 longIntroduction
                         )
@@ -225,6 +238,7 @@ public class UserAggregateTest {
                                 EMAIL,
                                 PASSWORD_HASH,
                                 false,
+                                null,
                                 null,
                                 null,
                                 ""
@@ -248,11 +262,34 @@ public class UserAggregateTest {
                                 PASSWORD_HASH,
                                 false,
                                 blankKey,
+                                null,
                                 ProfileVisibility.PUBLIC,
                                 ""
                         )
                 )
                         .isInstanceOf(ProfileImageKeyRequiredException.class);
+            }
+
+            @Test
+            @DisplayName("배경 이미지 키가 비어 있으면 사용자 생성에 실패한다")
+            void createUserWithBlankBackgroundImageKeyFails() {
+                // given -> 배경 없음은 null로 표현하고, 빈 문자열은 잘못된 입력으로 본다
+                String blankKey = "   ";
+
+                // when & then
+                assertThatThrownBy(
+                        () -> new User(
+                                USER_ID,
+                                EMAIL,
+                                PASSWORD_HASH,
+                                false,
+                                null,
+                                blankKey,
+                                ProfileVisibility.PUBLIC,
+                                ""
+                        )
+                )
+                        .isInstanceOf(BackgroundImageKeyRequiredException.class);
             }
         }
     }

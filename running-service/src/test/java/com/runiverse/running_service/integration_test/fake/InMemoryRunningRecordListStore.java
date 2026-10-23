@@ -57,8 +57,7 @@ public class InMemoryRunningRecordListStore implements LoadMyRunningRecordsPort 
                 record.getTotalDistance().meters(),
                 record.getTotalDuration().seconds(),
                 record.getAvgPace().secondsPerKm(),
-                record.getTotalElevationGain().map(ElevationGain::meters).orElse(null),
-                record.getRoutePolyline().value());
+                record.getTotalElevationGain().map(ElevationGain::meters).orElse(null));
     }
 
     private long startedPlayerCount(RunningRoom room) {

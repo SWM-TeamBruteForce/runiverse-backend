@@ -14,6 +14,7 @@ import com.runiverse.running_service.application.user.exception.OnboardingNotCom
 import com.runiverse.running_service.application.user.exception.UserNotFoundException;
 import com.runiverse.running_service.application.user.port.out.AccountSnapshot;
 import com.runiverse.running_service.application.user.port.out.CheckNicknameDuplicatePort;
+import com.runiverse.running_service.application.user.port.out.ClearBackgroundImagePort;
 import com.runiverse.running_service.application.user.port.out.ClearProfileImagePort;
 import com.runiverse.running_service.application.user.port.out.DeleteUserPort;
 import com.runiverse.running_service.application.user.port.out.ExistsOnboardingPort;
@@ -27,6 +28,7 @@ import com.runiverse.running_service.application.user.port.out.OnboardingProfile
 import com.runiverse.running_service.application.user.port.out.RedactDeletedUserPort;
 import com.runiverse.running_service.application.user.port.out.SaveDeletedUserPort;
 import com.runiverse.running_service.application.user.port.out.SaveOnboardingPort;
+import com.runiverse.running_service.application.user.port.out.UpdateBackgroundImagePort;
 import com.runiverse.running_service.application.user.port.out.UpdateIntroductionPort;
 import com.runiverse.running_service.application.user.port.out.UpdateNicknamePort;
 import com.runiverse.running_service.application.user.port.out.UpdateOnboardingPort;
@@ -39,6 +41,7 @@ import com.runiverse.running_service.domain.user.DeletedUser;
 import com.runiverse.running_service.domain.user.User;
 import com.runiverse.running_service.domain.user.UserOnboarding;
 import com.runiverse.running_service.domain.user.vo.AvgPace;
+import com.runiverse.running_service.domain.user.vo.BackgroundImageKey;
 import com.runiverse.running_service.domain.user.vo.Birthday;
 import com.runiverse.running_service.domain.user.vo.Bmi;
 import com.runiverse.running_service.domain.user.vo.Gender;
@@ -69,7 +72,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUserPort, LoadUserByEmailPort,
         LoadUserByProviderPort, LoadUserByIdPort, ExistsOnboardingPort, CheckNicknameDuplicatePort, SaveOnboardingPort,
-        UpdateProfileImagePort, ClearProfileImagePort, LoadNicknamePort, UpdateNicknamePort,
+        UpdateProfileImagePort, ClearProfileImagePort, UpdateBackgroundImagePort, ClearBackgroundImagePort,
+        LoadNicknamePort, UpdateNicknamePort,
         UpdatePasswordPort, LoadUserAvgPacePort, UpdateIntroductionPort, UpdateOnboardingPort, LoadUserWeightPort,
         LoadOnboardingProfilePort, LoadPlayerProfilesPort, UpdateSettingsPort, LoadOauthProviderPort,
         LoadAccountSnapshotPort, SaveDeletedUserPort, DeleteUserPort,
@@ -98,6 +102,7 @@ public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUser
                 emptyToNull(user.getPasswordHash().value()),
                 user.isAlertConsent(),
                 user.getProfileImageKey().map(ProfileImageKey::value).orElse(null),
+                user.getBackgroundImageKey().map(BackgroundImageKey::value).orElse(null),
                 user.getProfileVisibility(),
                 emptyToNull(user.getIntroduction().value())
         );
@@ -153,6 +158,24 @@ public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUser
             throw new UserNotFoundException();
         }
         entity.changeProfileImageKey(null); // 변경 감지로 user.profile_image_key = null이 된다.
+    }
+
+    @Override
+    public void updateBackgroundImage(UserId userId, BackgroundImageKey backgroundImageKey) {
+        UserJpaEntity entity = entityManager.find(UserJpaEntity.class, userId.value());
+        if (entity == null) {
+            throw new UserNotFoundException();
+        }
+        entity.changeBackgroundImageKey(backgroundImageKey.value());
+    }
+
+    @Override
+    public void clearBackgroundImage(UserId userId) {
+        UserJpaEntity entity = entityManager.find(UserJpaEntity.class, userId.value());
+        if (entity == null) {
+            throw new UserNotFoundException();
+        }
+        entity.changeBackgroundImageKey(null); // 변경 감지로 user.background_image_key = null이 된다.
     }
 
     @Override
@@ -266,6 +289,7 @@ public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUser
                 Objects.requireNonNullElse(entity.getPasswordHash(), ""),
                 entity.isAlertConsent(),
                 entity.getProfileImageKey(),
+                entity.getBackgroundImageKey(),
                 entity.getProfileVisibility(),
                 Objects.requireNonNullElse(entity.getIntroduction(), "")
         );

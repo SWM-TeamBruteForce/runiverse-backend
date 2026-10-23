@@ -6,12 +6,15 @@ import java.time.Instant;
 
 // 참가자 두 명 사이의 콤보 상태. 콤보는 사람이 아니라 관계에 붙어서
 // A-B·A-C·B-C가 각각 독립적으로 쌓인다.
-// 현재 콤보 횟수는 담지 않는다 — 시작 시각에서 계산하는 값이라 저장하면 같은 사실이 두 벌이 된다
+// 현재 콤보 횟수는 담지 않는다 — 시작 시각과 쌓인 시각에서 계산하는 값이라 저장하면 같은 사실이 두 벌이 된다
 public record RunningComboPair(
         UserId first,
         UserId second,
         // 지금 이어지고 있는 콤보가 시작된 시각. 끊긴 관계는 null이다
         Instant startedAt,
+        // 쌓인 시각 — 겹쳤다고 판정된 때 두 참가자가 모두 움직였다고 확인된 마지막 순간.
+        // 유지 횟수와 구간의 끝(end_at)이 이 값에서 나온다. 끊긴 관계는 null이다
+        Instant accruedAt,
         int maxComboCount,
         // 남은 봐주기 횟수. 0인 채로 또 빗나가야 콤보가 끊긴다
         int missLeft
@@ -29,7 +32,7 @@ public record RunningComboPair(
 
     // 아직 한 번도 겹치지 않은 관계 — 저장된 것이 없을 때의 출발점이다
     public static RunningComboPair empty(UserId first, UserId second, int missAllowance) {
-        return new RunningComboPair(first, second, null, 0, missAllowance);
+        return new RunningComboPair(first, second, null, null, 0, missAllowance);
     }
 
     public boolean inCombo() {

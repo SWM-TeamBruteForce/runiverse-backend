@@ -4,7 +4,8 @@ import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.user.command.profileimage.CreateProfileImageUploadUrlCommand;
 import com.runiverse.running_service.application.user.command.profileimage.CreateProfileImageUploadUrlHandler;
 import com.runiverse.running_service.application.user.command.profileimage.CreateProfileImageUploadUrlResult;
-import com.runiverse.running_service.integration_test.fake.FakeProfileImageIdGenerator;
+import com.runiverse.running_service.application.user.common.ImageUploadUrlIssuer;
+import com.runiverse.running_service.integration_test.fake.FakeImageIdGenerator;
 import com.runiverse.running_service.integration_test.fake.FakeUploadUrlGenerator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -24,7 +25,7 @@ public class CreateProfileImageUploadUrlIntegrationTest {
     private static final long FILE_SIZE_BYTES = 20_480L;
 
     private UUID userId;
-    private FakeProfileImageIdGenerator profileImageIdGenerator;
+    private FakeImageIdGenerator imageIdGenerator;
     private FakeUploadUrlGenerator uploadUrlGenerator;
     private CreateProfileImageUploadUrlHandler handler;
 
@@ -32,11 +33,13 @@ public class CreateProfileImageUploadUrlIntegrationTest {
     void setUp() {
         // DB를 쓰지 않는 유스케이스라 저장소 fake 없이 포트 두 개만 엮는다
         userId = UuidCreator.getTimeOrderedEpoch();
-        profileImageIdGenerator = new FakeProfileImageIdGenerator();
+        imageIdGenerator = new FakeImageIdGenerator();
         uploadUrlGenerator = new FakeUploadUrlGenerator();
         handler = new CreateProfileImageUploadUrlHandler(
-                profileImageIdGenerator,  // GenerateProfileImageIdPort
-                uploadUrlGenerator        // GenerateUploadUrlPort
+                new ImageUploadUrlIssuer(
+                        imageIdGenerator,   // GenerateImageIdPort
+                        uploadUrlGenerator  // GenerateUploadUrlPort
+                )
         );
     }
 

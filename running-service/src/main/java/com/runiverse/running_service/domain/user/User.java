@@ -1,5 +1,6 @@
 package com.runiverse.running_service.domain.user;
 
+import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.user.exception.LastSignInMethodException;
 import com.runiverse.running_service.domain.user.exception.OauthAlreadyLinkedException;
 import com.runiverse.running_service.domain.user.exception.OauthNotLinkedException;
@@ -8,13 +9,13 @@ import com.runiverse.running_service.domain.user.exception.OnboardingNotComplete
 import com.runiverse.running_service.domain.user.exception.PasswordHashRequiredException;
 import com.runiverse.running_service.domain.user.exception.PasswordNotSetException;
 import com.runiverse.running_service.domain.user.exception.ProfileVisibilityRequiredException;
+import com.runiverse.running_service.domain.user.vo.BackgroundImageKey;
 import com.runiverse.running_service.domain.user.vo.Email;
 import com.runiverse.running_service.domain.user.vo.Introduction;
 import com.runiverse.running_service.domain.user.vo.PasswordHash;
 import com.runiverse.running_service.domain.user.vo.ProfileImageKey;
 import com.runiverse.running_service.domain.user.vo.ProfileVisibility;
 import com.runiverse.running_service.domain.user.vo.Provider;
-import com.runiverse.running_service.domain.common.vo.UserId;
 import lombok.Getter;
 
 import java.math.BigDecimal;
@@ -31,6 +32,7 @@ public class User {
     private final boolean alertConsent;
     private final ProfileVisibility profileVisibility;
     private final ProfileImageKey profileImageKey;
+    private final BackgroundImageKey backgroundImageKey;
     private final Introduction introduction;
 
     // 내부 저장
@@ -41,7 +43,7 @@ public class User {
 
     // 생성자 부분 작성
     public User(UUID userId, String email, String passwordHash, boolean alertConsent, String profileImageKey,
-                ProfileVisibility profileVisibility, String introduction) {
+                String backgroundImageKey, ProfileVisibility profileVisibility, String introduction) {
         this.userId = new UserId(userId);
         this.email = new Email(email);
         this.passwordHash = new PasswordHash(passwordHash);
@@ -50,18 +52,19 @@ public class User {
             throw new ProfileVisibilityRequiredException();
         }
         this.profileImageKey = profileImageKey == null ? null : new ProfileImageKey(profileImageKey);
+        this.backgroundImageKey = backgroundImageKey == null ? null : new BackgroundImageKey(backgroundImageKey);
         this.profileVisibility = profileVisibility;
         this.introduction = new Introduction(introduction);
     }
 
     // 로컬 회원가입 할때 사용하는 생성자
     public User(UUID userId, String email, String passwordHash, boolean alertConsent) {
-        this(userId, email, passwordHash, alertConsent, null, ProfileVisibility.PUBLIC, "");
+        this(userId, email, passwordHash, alertConsent, null, null, ProfileVisibility.PUBLIC, "");
     }
 
     // alertConsent, introduction이 없는 경우 — 알림은 기본 수신
     public User(UUID userId, String email, String passwordHash) {
-        this(userId, email, passwordHash, true, null, ProfileVisibility.PUBLIC, "");
+        this(userId, email, passwordHash, true, null, null, ProfileVisibility.PUBLIC, "");
     }
 
     // 로컬 로그인 비밀번호가 없는 계정인지 — OAuth 전용 계정은 빈 해시를 갖는다
@@ -83,11 +86,15 @@ public class User {
 
     // oauth로 회원가입 할때 사용하는 생성자
     public User(UUID userId, String email) {
-        this(userId, email, "", true, null, ProfileVisibility.PUBLIC, "");
+        this(userId, email, "", true, null, null, ProfileVisibility.PUBLIC, "");
     }
 
     public Optional<ProfileImageKey> getProfileImageKey() {
         return Optional.ofNullable(profileImageKey);
+    }
+
+    public Optional<BackgroundImageKey> getBackgroundImageKey() {
+        return Optional.ofNullable(backgroundImageKey);
     }
 
     // 소셜 회원가입: 유저 생성과 연결을 진행

@@ -5,14 +5,17 @@ import com.runiverse.running_service.application.auth.port.out.LoadUserByEmailPo
 import com.runiverse.running_service.application.auth.port.out.LoadUserByProviderPort;
 import com.runiverse.running_service.application.auth.port.out.SaveUserPort;
 import com.runiverse.running_service.application.user.exception.UserNotFoundException;
+import com.runiverse.running_service.application.user.port.out.ClearBackgroundImagePort;
 import com.runiverse.running_service.application.user.port.out.ClearProfileImagePort;
 import com.runiverse.running_service.application.user.port.out.LoadOauthProviderPort;
 import com.runiverse.running_service.application.user.port.out.LoadUserByIdPort;
+import com.runiverse.running_service.application.user.port.out.UpdateBackgroundImagePort;
 import com.runiverse.running_service.application.user.port.out.UpdateIntroductionPort;
 import com.runiverse.running_service.application.user.port.out.UpdatePasswordPort;
 import com.runiverse.running_service.application.user.port.out.UpdateProfileImagePort;
 import com.runiverse.running_service.application.user.port.out.UpdateSettingsPort;
 import com.runiverse.running_service.domain.user.User;
+import com.runiverse.running_service.domain.user.vo.BackgroundImageKey;
 import com.runiverse.running_service.domain.user.vo.Introduction;
 import com.runiverse.running_service.domain.user.vo.PasswordHash;
 import com.runiverse.running_service.domain.user.vo.ProfileImageKey;
@@ -27,7 +30,8 @@ import java.util.UUID;
 
 public class InMemoryUserStore implements SaveUserPort, CheckEmailDuplicatePort, LoadUserByEmailPort,
         LoadUserByProviderPort, LoadUserByIdPort, UpdatePasswordPort, UpdateIntroductionPort,
-        UpdateSettingsPort, LoadOauthProviderPort, UpdateProfileImagePort, ClearProfileImagePort {
+        UpdateSettingsPort, LoadOauthProviderPort, UpdateProfileImagePort, ClearProfileImagePort,
+        UpdateBackgroundImagePort, ClearBackgroundImagePort {
 
     private final Map<UUID, User> users = new LinkedHashMap<>();
     private final Map<UUID, PasswordHash> updatedPasswords = new LinkedHashMap<>();
@@ -98,6 +102,7 @@ public class InMemoryUserStore implements SaveUserPort, CheckEmailDuplicatePort,
                 user.getPasswordHash().value(),
                 user.isAlertConsent(),
                 user.getProfileImageKey().map(ProfileImageKey::value).orElse(null),
+                user.getBackgroundImageKey().map(BackgroundImageKey::value).orElse(null),
                 user.getProfileVisibility(),
                 introduction.value()
         );
@@ -120,6 +125,7 @@ public class InMemoryUserStore implements SaveUserPort, CheckEmailDuplicatePort,
                 user.getPasswordHash().value(),
                 alertConsent == null ? user.isAlertConsent() : alertConsent,
                 user.getProfileImageKey().map(ProfileImageKey::value).orElse(null),
+                user.getBackgroundImageKey().map(BackgroundImageKey::value).orElse(null),
                 profileVisibility == null ? user.getProfileVisibility() : profileVisibility,
                 user.getIntroduction().value()
         );
@@ -151,6 +157,38 @@ public class InMemoryUserStore implements SaveUserPort, CheckEmailDuplicatePort,
                 user.getPasswordHash().value(),
                 user.isAlertConsent(),
                 profileImageKey,
+                user.getBackgroundImageKey().map(BackgroundImageKey::value).orElse(null),
+                user.getProfileVisibility(),
+                user.getIntroduction().value()
+        );
+        user.getOauthUser().ifPresent(oauth ->
+                replaced.linkOauth(oauth.getProvider(), oauth.getProviderId().value()));
+        users.put(userId.value(), replaced);
+    }
+
+    @Override
+    public void updateBackgroundImage(UserId userId, BackgroundImageKey backgroundImageKey) {
+        replaceBackgroundImageKey(userId, backgroundImageKey.value());
+    }
+
+    @Override
+    public void clearBackgroundImage(UserId userId) {
+        replaceBackgroundImageKey(userId, null);
+    }
+
+    // backgroundImageKey도 final이라 같은 이유로 애그리거트를 갈아끼운다
+    private void replaceBackgroundImageKey(UserId userId, String backgroundImageKey) {
+        User user = users.get(userId.value());
+        if (user == null) {
+            throw new UserNotFoundException();
+        }
+        User replaced = new User(
+                user.getUserId().value(),
+                user.getEmail().value(),
+                user.getPasswordHash().value(),
+                user.isAlertConsent(),
+                user.getProfileImageKey().map(ProfileImageKey::value).orElse(null),
+                backgroundImageKey,
                 user.getProfileVisibility(),
                 user.getIntroduction().value()
         );

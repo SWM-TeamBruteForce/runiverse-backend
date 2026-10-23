@@ -3,7 +3,7 @@
 # 로컬과 GitHub Actions가 같은 경로를 타도록 양쪽 모두 이 스크립트만 부른다.
 set -Eeuo pipefail
 E2E_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_FILE="${E2E_DIR}/docker-compose.yml"
+COMPOSE_FILE="${E2E_DIR}/compose.yml"
 # 래퍼는 새로 만들지 않고 running-service 것을 빌려 쓴다
 GRADLEW="$(dirname "${E2E_DIR}")/running-service/gradlew"
 # compose의 ${E2E_IMAGE} 치환은 셸 환경변수만 읽는다 (.env.test는 컨테이너 안으로만 들어간다).
@@ -51,5 +51,10 @@ for attempt in $(seq 1 "${STARTUP_RETRIES}"); do
   fi
   sleep "${STARTUP_INTERVAL}"
 done
+# 운영처럼 앱 버전 행은 SQL로 넣는다 — 테이블은 앱이 기동하며 만든다.
+# 실패를 삼키면 테스트가 엉뚱한 500으로 깨지므로 SQL 오류에서 바로 멈춘다
+echo "===== 앱 버전 시드 ====="
+compose exec -T postgres psql --quiet --username=runiverse --dbname=runiverse_e2e \
+  --set ON_ERROR_STOP=1 --file=- < "${E2E_DIR}/sql/app-versions.sql"
 echo "===== E2E 테스트 실행 ====="
 "${GRADLEW}" --project-dir "${E2E_DIR}" test --no-daemon "$@"

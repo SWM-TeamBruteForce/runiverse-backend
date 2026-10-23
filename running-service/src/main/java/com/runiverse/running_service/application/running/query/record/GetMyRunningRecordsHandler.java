@@ -41,7 +41,6 @@ public class GetMyRunningRecordsHandler implements GetMyRunningRecordsUsecase {
                 row.totalDistanceMeters(),
                 row.totalDurationSeconds(),
                 row.averagePaceSecondsPerKm(),
-                row.totalElevationGainMeters(),
-                row.routePolyline());
+                row.totalElevationGainMeters());
     }
 }

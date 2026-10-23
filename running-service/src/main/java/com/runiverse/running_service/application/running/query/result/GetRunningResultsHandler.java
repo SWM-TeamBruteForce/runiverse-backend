@@ -69,16 +69,20 @@ public class GetRunningResultsHandler implements GetRunningResultsUsecase {
                 query.runningRoomId(),
                 record.map(RunningResultRecord::startedAt).orElse(null),
                 record.map(RunningResultRecord::finishedAt).orElse(null),
-                record.map(RunningResultRecord::routePolyline).map(this::routes).orElse(null),
+                record.map(RunningResultRecord::segmentPolylines).map(this::routes).orElse(null),
                 players.stream()
                         .map(player -> toPlayer(player, profiles, query.viewerId()))
                         .toList());
     }
 
+    // 조각마다 풀어 좌표 배열 하나로 내린다.
     // 빈 폴리라인이 저장될 일은 없지만, 빈 배열을 내려 "경로 있음"으로 오해하게 두지 않는다
-    private List<RoutePoint> routes(String routePolyline) {
-        List<RoutePoint> points = PolylineDecoder.decode(routePolyline);
-        return points.isEmpty() ? null : points;
+    private List<List<RoutePoint>> routes(List<String> segmentPolylines) {
+        List<List<RoutePoint>> segments = segmentPolylines.stream()
+                .map(PolylineDecoder::decode)
+                .filter(points -> !points.isEmpty())
+                .toList();
+        return segments.isEmpty() ? null : segments;
     }
 
     private GetRunningResultsResult.Player toPlayer(RunningResultPlayer player,

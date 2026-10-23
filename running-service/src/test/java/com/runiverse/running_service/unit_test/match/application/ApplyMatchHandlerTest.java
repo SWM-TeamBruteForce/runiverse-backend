@@ -9,6 +9,8 @@ import com.runiverse.running_service.application.match.command.apply.MatchRoomAs
 import com.runiverse.running_service.application.match.common.MatchRoomChangedEvent;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
 import com.runiverse.running_service.application.match.common.MatchProperties;
+import com.runiverse.running_service.application.match.common.MatchSlotPolicy;
+import com.runiverse.running_service.application.match.exception.InvalidMatchOptionException;
 import com.runiverse.running_service.application.match.exception.MatchAlreadyInProgressException;
 import com.runiverse.running_service.application.match.exception.MatchCooldownException;
 import com.runiverse.running_service.application.match.exception.MatchSlotClosedException;
@@ -37,7 +39,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -48,6 +52,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -87,6 +94,11 @@ class ApplyMatchHandlerTest {
     @Mock
     private MatchRoomAssigner matchRoomAssigner;
 
+    // 실제 정책을 감싼 spy — 마감(isOpen)은 실제 경계를 타고, 선택지(validate)만 막는다.
+    // now 기준으로 만든 마감 테스트의 시각이 슬롯 간격에 걸려 선택지 판정을 그대로 타면 400으로 빠진다.
+    // 선택지 판정 자체는 MatchSlotPolicyTest가 본다
+    private MatchSlotPolicy matchSlotPolicy;
+
     @Mock
     private RoomInfoAssembler roomInfoAssembler;
 
@@ -97,12 +109,15 @@ class ApplyMatchHandlerTest {
 
     @BeforeEach
     void setUp() {
+        matchSlotPolicy = spy(new MatchSlotPolicy(new MatchProperties(CLOSE_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET,
+                PACE_TIE_TOLERANCE, COOLDOWN,
+                LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000))));
+        // 선택지 위반을 일부러 던지는 테스트는 이 스텁을 덮어써 쓰지 않으므로 lenient다
+        lenient().doNothing().when(matchSlotPolicy).validate(any(), anyInt());
         applyMatchHandler = new ApplyMatchHandler(
                 matchCooldownPort, existsActiveApplicationPort, loadUserAvgPacePort,
-                createMatchApplicationPort,
-                matchRoomAssigner, new MatchProperties(CLOSE_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET,
-                        PACE_TIE_TOLERANCE, COOLDOWN),
-                roomInfoAssembler, eventPublisher);
+                createMatchApplicationPort, matchRoomAssigner,
+                matchSlotPolicy, roomInfoAssembler, eventPublisher);
     }
 
     @Test
@@ -153,6 +168,48 @@ class ApplyMatchHandlerTest {
     }
 
     @Test
+    @DisplayName("신청한 시각·거리를 그대로 선택지 판정에 넘긴다")
+    void validatesRequestedOption() {
+        // given
+        givenApplicable();
+        LocalDateTime startAt = slotAfter(Duration.ofHours(2));
+
+        // when
+        applyMatchHandler.handle(command(startAt));
+
+        // then
+        verify(matchSlotPolicy).validate(startAt, TARGET_DISTANCE);
+    }
+
+    @Test
+    @DisplayName("선택지 밖이면 신청하지 못하고 쿨다운·DB까지 가지 않는다")
+    void rejectsInvalidOptionFirst() {
+        // given
+        ApplyMatchCommand command = command(slotAfter(Duration.ofHours(2)));
+        willThrow(new InvalidMatchOptionException("선택지 밖입니다."))
+                .given(matchSlotPolicy).validate(command.scheduledStartAt(), TARGET_DISTANCE);
+
+        // when & then
+        assertThatThrownBy(() -> applyMatchHandler.handle(command))
+                .isInstanceOf(InvalidMatchOptionException.class);
+        verifyNoInteractions(matchCooldownPort, existsActiveApplicationPort, loadUserAvgPacePort,
+                createMatchApplicationPort, matchRoomAssigner);
+    }
+
+    @Test
+    @DisplayName("애초에 없는 슬롯은 이미 지났어도 마감(409)이 아니라 선택지 위반(400)이다")
+    void invalidOptionWinsOverClosedSlot() {
+        // given -> 어제 03:00은 마감도 지났지만, 그보다 먼저 고를 수 없는 시각이다
+        ApplyMatchCommand command = command(LocalDate.now().minusDays(1).atTime(3, 0));
+        willThrow(new InvalidMatchOptionException("선택지 밖입니다."))
+                .given(matchSlotPolicy).validate(command.scheduledStartAt(), TARGET_DISTANCE);
+
+        // when & then
+        assertThatThrownBy(() -> applyMatchHandler.handle(command))
+                .isInstanceOf(InvalidMatchOptionException.class);
+    }
+
+    @Test
     @DisplayName("모집이 마감된 슬롯은 신청하지 못한다")
     void rejectsClosedSlot() {
         // given -> 시작까지 5분 남았지만 마감(start_at - 15분)은 10분 전에 지났다.
@@ -162,7 +219,7 @@ class ApplyMatchHandlerTest {
         // when & then
         assertThatThrownBy(() -> applyMatchHandler.handle(command))
                 .isInstanceOf(MatchSlotClosedException.class);
-        // DB를 안 타는 검사라 제일 먼저 본다 — 뒤 조회가 아예 나가지 않아야 한다
+        // DB를 안 타는 검사라 앞쪽에서 본다 — 뒤 조회가 아예 나가지 않아야 한다
         verifyNoInteractions(existsActiveApplicationPort, loadUserAvgPacePort,
                 createMatchApplicationPort, matchRoomAssigner);
     }

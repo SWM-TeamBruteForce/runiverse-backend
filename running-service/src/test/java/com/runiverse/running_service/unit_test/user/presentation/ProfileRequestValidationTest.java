@@ -14,6 +14,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,8 +48,8 @@ public class ProfileRequestValidationTest {
         return new ProfileUpdateRequest(introduction, null, null, null, null);
     }
 
-    private String firstMessage(Set<ConstraintViolation<ProfileUpdateRequest>> violations) {
-        return violations.iterator().next().getMessage();
+    private List<String> messages(Set<ConstraintViolation<ProfileUpdateRequest>> violations) {
+        return violations.stream().map(ConstraintViolation::getMessage).toList();
     }
 
     @Test
@@ -70,8 +71,8 @@ public class ProfileRequestValidationTest {
     void checksIntroductionLength() {
         // when & then
         assertThat(validate(introductionOf("가".repeat(INTRODUCTION_MAX)))).isEmpty();
-        assertThat(firstMessage(validate(introductionOf("가".repeat(INTRODUCTION_MAX + 1)))))
-                .isEqualTo("소개글은 100자 이하여야 합니다.");
+        assertThat(messages(validate(introductionOf("가".repeat(INTRODUCTION_MAX + 1)))))
+                .containsExactly("소개글은 100자 이하여야 합니다.");
     }
 
     @ParameterizedTest
@@ -86,8 +87,8 @@ public class ProfileRequestValidationTest {
     @DisplayName("정해진 값이 아닌 성별은 명세 문구로 거부한다")
     void rejectsUnknownGender() {
         // when & then
-        assertThat(firstMessage(validate(new ProfileUpdateRequest(null, "OTHER", null, null, null))))
-                .isEqualTo("성별은 MALE 또는 FEMALE이어야 합니다.");
+        assertThat(messages(validate(new ProfileUpdateRequest(null, "OTHER", null, null, null))))
+                .containsExactly("성별은 MALE 또는 FEMALE이어야 합니다.");
     }
 
     @Test
@@ -96,9 +97,7 @@ public class ProfileRequestValidationTest {
         // when & then -> 나이 검증까지 겹쳐 걸리면 메시지 순서가 흔들려 테스트가 깨진다
         ProfileUpdateRequest request =
                 new ProfileUpdateRequest(null, null, LocalDate.now().plusDays(1), null, null);
-        Set<ConstraintViolation<ProfileUpdateRequest>> violations = validate(request);
-        assertThat(violations).hasSize(1);
-        assertThat(firstMessage(violations)).isEqualTo("생년월일은 미래일 수 없습니다.");
+        assertThat(messages(validate(request))).containsExactly("생년월일은 미래일 수 없습니다.");
     }
 
     @Test
@@ -107,8 +106,8 @@ public class ProfileRequestValidationTest {
         // when & then -> Birthday VO의 하한을 DTO가 함께 들고 있어야 400이 된다
         ProfileUpdateRequest request =
                 new ProfileUpdateRequest(null, null, LocalDate.of(1899, 12, 31), null, null);
-        assertThat(firstMessage(validate(request)))
-                .isEqualTo("생년월일은 1900년 1월 1일 이후여야 합니다.");
+        assertThat(messages(validate(request)))
+                .containsExactly("생년월일은 1900년 1월 1일 이후여야 합니다.");
     }
 
     @Test
@@ -120,9 +119,9 @@ public class ProfileRequestValidationTest {
         // when & then
         assertThat(validate(new ProfileUpdateRequest(null, null, turnsFourteenToday, null, null)))
                 .isEmpty();
-        assertThat(firstMessage(validate(
+        assertThat(messages(validate(
                 new ProfileUpdateRequest(null, null, turnsFourteenToday.plusDays(1), null, null))))
-                .isEqualTo("만 14세 미만은 서비스를 이용할 수 없습니다.");
+                .containsExactly("만 14세 미만은 서비스를 이용할 수 없습니다.");
     }
 
     @Test
@@ -131,12 +130,12 @@ public class ProfileRequestValidationTest {
         // when & then
         assertThat(validate(new ProfileUpdateRequest(null, null, null, new BigDecimal("20.0"), null)))
                 .isEmpty();
-        assertThat(firstMessage(validate(
+        assertThat(messages(validate(
                 new ProfileUpdateRequest(null, null, null, new BigDecimal("19.9"), null))))
-                .isEqualTo("몸무게는 20kg 이상이어야 합니다.");
-        assertThat(firstMessage(validate(
+                .containsExactly("몸무게는 20kg 이상이어야 합니다.");
+        assertThat(messages(validate(
                 new ProfileUpdateRequest(null, null, null, new BigDecimal("300.1"), null))))
-                .isEqualTo("몸무게는 300kg 이하여야 합니다.");
+                .containsExactly("몸무게는 300kg 이하여야 합니다.");
     }
 
     @Test
@@ -145,11 +144,11 @@ public class ProfileRequestValidationTest {
         // when & then
         assertThat(validate(new ProfileUpdateRequest(null, null, null, null, new BigDecimal("300.0"))))
                 .isEmpty();
-        assertThat(firstMessage(validate(
+        assertThat(messages(validate(
                 new ProfileUpdateRequest(null, null, null, null, new BigDecimal("19.9")))))
-                .isEqualTo("키는 20cm 이상이어야 합니다.");
-        assertThat(firstMessage(validate(
+                .containsExactly("키는 20cm 이상이어야 합니다.");
+        assertThat(messages(validate(
                 new ProfileUpdateRequest(null, null, null, null, new BigDecimal("300.1")))))
-                .isEqualTo("키는 300cm 이하여야 합니다.");
+                .containsExactly("키는 300cm 이하여야 합니다.");
     }
 }

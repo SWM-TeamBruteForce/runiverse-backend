@@ -1,6 +1,8 @@
 package com.runiverse.running_service.unit_test.user.domain.aggregate;
 
 
+import com.runiverse.running_service.domain.user.exception.BackgroundImageKeyRequiredException;
+import com.runiverse.running_service.domain.user.exception.BackgroundImageKeyTooLongException;
 import com.runiverse.running_service.domain.user.exception.EmailRequiredException;
 import com.runiverse.running_service.domain.user.exception.EmailTooLongException;
 import com.runiverse.running_service.domain.user.exception.IntroductionRequiredException;
@@ -14,6 +16,7 @@ import com.runiverse.running_service.domain.user.exception.ProfileImageKeyTooLon
 import com.runiverse.running_service.domain.user.exception.ProfileVisibilityRequiredException;
 import com.runiverse.running_service.domain.user.exception.UnsupportedProfileVisibilityException;
 import com.runiverse.running_service.domain.common.exception.UserIdRequiredException;
+import com.runiverse.running_service.domain.user.vo.BackgroundImageKey;
 import com.runiverse.running_service.domain.user.vo.Email;
 import com.runiverse.running_service.domain.user.vo.Introduction;
 import com.runiverse.running_service.domain.user.vo.PasswordHash;
@@ -474,6 +477,107 @@ public class UserVoTest {
             // given
             ProfileImageKey first = new ProfileImageKey(KEY);
             ProfileImageKey second = new ProfileImageKey(KEY);
+
+            // then
+            assertThat(first)
+                    .isEqualTo(second)
+                    .hasSameHashCodeAs(second);
+
+            assertThat(first).isNotSameAs(second);
+        }
+    }
+
+    // BackgroundImageKey 테스트
+    @Nested
+    @DisplayName("BackgroundImageKey 테스트")
+    class BackgroundImageKeyTest {
+
+        private static final String KEY = "backgrounds/0190a5b4-3c2d-7e1f-8a2b-123456789abc/photo.jpg";
+
+        @Test
+        @DisplayName("255자 이하의 키는 생성할 수 있다")
+        void createBackgroundImageKeySuccess() {
+            // when
+            BackgroundImageKey key = new BackgroundImageKey(KEY);
+
+            // then
+            assertThat(key.value()).isEqualTo(KEY);
+        }
+
+        @Test
+        @DisplayName("앞뒤 공백은 제거된다")
+        void createBackgroundImageKeyTrimsWhitespace() {
+            // when
+            BackgroundImageKey key = new BackgroundImageKey("  " + KEY + "  ");
+
+            // then
+            assertThat(key.value()).isEqualTo(KEY);
+        }
+
+        @Test
+        @DisplayName("키가 정확히 255자이면 생성할 수 있다")
+        void createBackgroundImageKeyWithMaxLengthSuccess() {
+            // given
+            String value = "a".repeat(255);
+
+            // when
+            BackgroundImageKey key = new BackgroundImageKey(value);
+
+            // then
+            assertThat(key.value()).hasSize(255);
+        }
+
+        @Test
+        @DisplayName("키가 255자를 초과하면 예외가 발생한다")
+        void createBackgroundImageKeyOverMaxLengthFails() {
+            // given
+            String value = "a".repeat(256);
+
+            // when & then
+            assertThatThrownBy(() -> new BackgroundImageKey(value))
+                    .isInstanceOf(BackgroundImageKeyTooLongException.class)
+                    .hasMessage("배경 이미지 키는 255자를 초과할 수 없습니다.");
+        }
+
+        @Test
+        @DisplayName("공백을 제거한 뒤 길이를 잰다")
+        void createBackgroundImageKeyMeasuresLengthAfterTrim() {
+            // given -> 공백 포함 257자지만 trim 뒤 255자다
+            String value = " " + "a".repeat(255) + " ";
+
+            // when
+            BackgroundImageKey key = new BackgroundImageKey(value);
+
+            // then
+            assertThat(key.value()).hasSize(255);
+        }
+
+        @Test
+        @DisplayName("키가 null이면 예외가 발생한다")
+        void createBackgroundImageKeyWithNullFails() {
+            // when & then -> 배경 없음은 VO가 아니라 null 필드로 표현한다
+            assertThatThrownBy(() -> new BackgroundImageKey(null))
+                    .isInstanceOf(BackgroundImageKeyRequiredException.class)
+                    .hasMessage("배경 이미지 키는 null일 수 없습니다.");
+        }
+
+        @Test
+        @DisplayName("키가 빈 문자열이거나 공백뿐이면 예외가 발생한다")
+        void createBackgroundImageKeyWithBlankFails() {
+            // when & then
+            assertThatThrownBy(() -> new BackgroundImageKey(""))
+                    .isInstanceOf(BackgroundImageKeyRequiredException.class);
+
+            assertThatThrownBy(() -> new BackgroundImageKey("   "))
+                    .isInstanceOf(BackgroundImageKeyRequiredException.class);
+        }
+
+        @Test
+        @DisplayName("같은 키를 가진 BackgroundImageKey는 같은 값 객체이다")
+        void backgroundImageKeyEqualsTest() {
+            // given
+            BackgroundImageKey first = new BackgroundImageKey(KEY);
+            BackgroundImageKey second = new BackgroundImageKey(KEY);
 
             // then
             assertThat(first)

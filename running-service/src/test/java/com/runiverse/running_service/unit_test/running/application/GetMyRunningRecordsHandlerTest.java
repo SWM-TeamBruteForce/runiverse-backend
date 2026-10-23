@@ -84,7 +84,7 @@ class GetMyRunningRecordsHandlerTest {
         given(loadMyRunningRecordsPort.loadByPeriod(ME, FROM_START, AFTER_TO_START))
                 .willReturn(List.of(new RunningRecordRow(
                         501L, 125L, RunningRoomType.MATCH, 3L, startedAt,
-                        5020, 1800, 359, 42, "u{~vFvyys@fS]pT_@")));
+                        5020, 1800, 359, 42)));
 
         // when
         GetMyRunningRecordsResult result = handler.handle(new GetMyRunningRecordsQuery(USER_ID, FROM, TO));
@@ -100,7 +100,6 @@ class GetMyRunningRecordsHandlerTest {
         assertThat(record.totalDurationSeconds()).isEqualTo(1800);
         assertThat(record.averagePaceSecondsPerKm()).isEqualTo(359);
         assertThat(record.totalElevationGainMeters()).isEqualTo(42);
-        assertThat(record.routePolyline()).isEqualTo("u{~vFvyys@fS]pT_@");
     }
 
     @Test
@@ -110,7 +109,7 @@ class GetMyRunningRecordsHandlerTest {
         given(loadMyRunningRecordsPort.loadByPeriod(ME, FROM_START, AFTER_TO_START))
                 .willReturn(List.of(new RunningRecordRow(
                         501L, 125L, RunningRoomType.SOLO, 1L, LocalDateTime.of(2026, 9, 28, 19, 0),
-                        5020, 1800, 359, null, "u{~vF")));
+                        5020, 1800, 359, null)));
 
         // when
         GetMyRunningRecordsResult result = handler.handle(new GetMyRunningRecordsQuery(USER_ID, FROM, TO));
@@ -155,6 +154,6 @@ class GetMyRunningRecordsHandlerTest {
     private static RunningRecordRow row(long runningRecordId, LocalDateTime startedAt) {
         return new RunningRecordRow(
                 runningRecordId, 125L, RunningRoomType.SOLO, 1L, startedAt,
-                5020, 1800, 359, 42, "u{~vF");
+                5020, 1800, 359, 42);
     }
 }

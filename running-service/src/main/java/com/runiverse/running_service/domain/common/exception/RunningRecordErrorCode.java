@@ -13,13 +13,20 @@ public enum RunningRecordErrorCode implements ErrorCode {
     GPS_TRACK_KEY_REQUIRED("GPS_TRACK_KEY_REQUIRED", "GPS 트랙 키는 필수입니다."),
     GPS_TRACK_KEY_TOO_LONG("GPS_TRACK_KEY_TOO_LONG", "GPS 트랙 키는 255자를 초과할 수 없습니다."),
     INVALID_ROUTE_RANGE("INVALID_ROUTE_RANGE", "구간 경로 범위가 올바르지 않습니다."),
+    // segment 관련 에러 코드
+    INVALID_SEGMENT_NUMBER("INVALID_SEGMENT_NUMBER", "경로 조각 번호는 1 이상이어야 합니다."),
+    SEGMENTS_REQUIRED("SEGMENTS_REQUIRED", "러닝 기록에는 경로 조각이 최소 하나 필요합니다."),
+    SEGMENT_NUMBER_NOT_SEQUENTIAL("SEGMENT_NUMBER_NOT_SEQUENTIAL", "경로 조각 번호는 1부터 빠짐없이 이어져야 합니다."),
     // split 관련 에러 코드
     SPLITS_REQUIRED("SPLITS_REQUIRED", "러닝 기록에는 구간이 최소 하나 필요합니다."),
     SPLIT_NUMBER_NOT_SEQUENTIAL("SPLIT_NUMBER_NOT_SEQUENTIAL", "구간 번호는 1부터 빠짐없이 이어져야 합니다."),
     SPLIT_PERIOD_OUT_OF_RECORD("SPLIT_PERIOD_OUT_OF_RECORD", "구간 시각이 러닝 기록 시각을 벗어났습니다."),
     SPLIT_ROUTE_NOT_STARTING_AT_ORIGIN("SPLIT_ROUTE_NOT_STARTING_AT_ORIGIN", "첫 구간의 경로는 0번 좌표에서 시작해야 합니다."),
     SPLIT_ROUTE_NOT_CONNECTED("SPLIT_ROUTE_NOT_CONNECTED", "구간 경로가 이어지지 않습니다."),
-    SPLIT_PERIOD_NOT_SEQUENTIAL("SPLIT_PERIOD_NOT_SEQUENTIAL", "구간 시각이 순서대로 이어지지 않습니다.");
+    SPLIT_PERIOD_NOT_SEQUENTIAL("SPLIT_PERIOD_NOT_SEQUENTIAL", "구간 시각이 순서대로 이어지지 않습니다."),
+    SPLIT_SEGMENT_NOT_FOUND("SPLIT_SEGMENT_NOT_FOUND", "구간이 속한 경로 조각이 기록에 없습니다."),
+    SPLIT_SEGMENT_NOT_SEQUENTIAL("SPLIT_SEGMENT_NOT_SEQUENTIAL", "구간의 경로 조각 번호는 줄어들 수 없습니다."),
+    SPLIT_ROUTE_NOT_STARTING_AT_SEGMENT("SPLIT_ROUTE_NOT_STARTING_AT_SEGMENT", "끊긴 곳에 걸친 구간은 조각의 0번 좌표 하나만 가리켜야 합니다.");
     private final String code;
     private final String message;
 }

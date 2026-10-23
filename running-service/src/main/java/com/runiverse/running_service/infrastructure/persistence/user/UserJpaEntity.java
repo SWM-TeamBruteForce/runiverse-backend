@@ -27,7 +27,7 @@ import java.util.UUID;
         )
 )
 @Check(name = "ck_users_profile_visibility", constraints = "profile_visibility in ('PUBLIC', 'FRIENDS')")
-// 소개글·프로필 사진·비밀번호가 이 행에 각각 쓴다. 전체 컬럼을 실으면 서로의 변경을 옛 값으로 덮는다
+// 소개글·프로필 사진·배경 사진·비밀번호가 이 행에 각각 쓴다. 전체 컬럼을 실으면 서로의 변경을 옛 값으로 덮는다
 @DynamicUpdate
 @NoArgsConstructor(access = AccessLevel.PROTECTED) // 다른 객체에서 생성되지 않도록 하는 속성
 public class UserJpaEntity extends BaseTimeEntity {
@@ -52,6 +52,9 @@ public class UserJpaEntity extends BaseTimeEntity {
     @Column(name = "profile_image_key", length = 255)
     private String profileImageKey;
 
+    @Column(name = "background_image_key", length = 255)
+    private String backgroundImageKey;
+
     @Column(name = "introduction", length = 100)
     private String introduction;
 
@@ -61,6 +64,7 @@ public class UserJpaEntity extends BaseTimeEntity {
             String passwordHash,
             boolean alertConsent,
             String profileImageKey,
+            String backgroundImageKey,
             ProfileVisibility profileVisibility,
             String introduction
     ) {
@@ -69,6 +73,7 @@ public class UserJpaEntity extends BaseTimeEntity {
         this.passwordHash = passwordHash;
         this.alertConsent = alertConsent;
         this.profileImageKey = profileImageKey;
+        this.backgroundImageKey = backgroundImageKey;
         this.profileVisibility = profileVisibility;
         this.introduction = introduction;
     }
@@ -79,6 +84,7 @@ public class UserJpaEntity extends BaseTimeEntity {
             String passwordHash,
             boolean alertConsent,
             String profileImageKey,
+            String backgroundImageKey,
             ProfileVisibility profileVisibility,
             String introduction
     ) {
@@ -88,6 +94,7 @@ public class UserJpaEntity extends BaseTimeEntity {
                 passwordHash,
                 alertConsent,
                 profileImageKey,
+                backgroundImageKey,
                 profileVisibility,
                 introduction
         );
@@ -95,6 +102,10 @@ public class UserJpaEntity extends BaseTimeEntity {
 
     public void changeProfileImageKey(String profileImageKey) {
         this.profileImageKey = profileImageKey;
+    }
+
+    public void changeBackgroundImageKey(String backgroundImageKey) {
+        this.backgroundImageKey = backgroundImageKey;
     }
 
     public void changeIntroduction(String introduction) {

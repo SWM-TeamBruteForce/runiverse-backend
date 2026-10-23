@@ -13,7 +13,10 @@ public enum MatchErrorCode implements ErrorCode {
     // 모집 마감(start_at - 오프셋)이 지난 슬롯 — 신청 시각으로 판정한다
     MATCH_SLOT_CLOSED("MATCH_SLOT_CLOSED", "이미 모집이 마감된 시간대입니다."),
     // 러닝이 시작된 뒤에는 이 버튼을 쓰지 않는다 — 종료는 WS RUNNING_FINISH가 맡는다
-    MATCH_ALREADY_STARTED("MATCH_ALREADY_STARTED", "이미 시작된 러닝은 취소할 수 없습니다.");
+    MATCH_ALREADY_STARTED("MATCH_ALREADY_STARTED", "이미 시작된 러닝은 취소할 수 없습니다."),
+    // 선택지(시각·거리)가 운영값이라 Request DTO가 못 보고 유스케이스가 본다 —
+    // 클라에게는 요청 검증 실패와 같은 코드로 보인다. 실제 문구는 예외가 운영값으로 만든다
+    INVALID_MATCH_OPTION("INVALID_REQUEST", "신청할 수 없는 시작 시각 또는 목표 거리입니다.");
     private final String code;
     private final String message;
 }

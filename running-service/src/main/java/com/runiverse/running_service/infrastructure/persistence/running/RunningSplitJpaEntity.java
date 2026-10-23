@@ -26,9 +26,9 @@ import java.time.LocalDateTime;
 @Entity
 @Table(
         name = "running_splits",
-        // 기록당 구간 번호 중복 방지. 구간 조회가 이 순서로 훑으므로 진입 인덱스도 겸한다
-        uniqueConstraints = @UniqueConstraint(name = "uk_running_split_record_number",
-                columnNames = {"running_record_id", "split_number"})
+        // 조각 안에서 구간 번호 중복 방지. 기록 안의 중복은 도메인 검증이 막는다(번호를 1부터 이어 매긴다)
+        uniqueConstraints = @UniqueConstraint(name = "uk_running_split_segment_number",
+                columnNames = {"running_segment_id", "split_number"})
 )
 @Check(name = "ck_running_split_number", constraints = "split_number >= 1")
 // 구간 페이스는 기록 전체 평균과 범위가 다르다 — 짧은 구간에서는 신호 대기·GPS 튐이
@@ -54,12 +54,12 @@ public class RunningSplitJpaEntity extends BaseCreatedAtEntity {
     @SequenceGenerator(name = "running_split_seq", sequenceName = "running_split_seq", allocationSize = 100)
     @Column(name = "running_split_id", nullable = false, updatable = false)
     private Long runningSplitId;
-    // 기록과 같은 애그리거트라 객체로 참조한다. 기록이 지워지면 구간도 함께 사라진다
+    // 끝 경계점이 있는 조각에 속한다. 기록은 조각을 거쳐 찾는다 — 조각이 지워지면 구간도 함께 사라진다
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "running_record_id", nullable = false, updatable = false,
-            foreignKey = @ForeignKey(name = "fk_running_split_record"))
+    @JoinColumn(name = "running_segment_id", nullable = false, updatable = false,
+            foreignKey = @ForeignKey(name = "fk_running_split_segment"))
     @OnDelete(action = OnDeleteAction.CASCADE)
-    private RunningRecordJpaEntity record;
+    private RunningSegmentJpaEntity segment;
     @Column(name = "split_number", nullable = false, updatable = false)
     private int splitNumber;
     @Column(name = "avg_pace", nullable = false, updatable = false)
@@ -76,7 +76,8 @@ public class RunningSplitJpaEntity extends BaseCreatedAtEntity {
     private Integer elevationChange;
     @Column(name = "calories", nullable = false, updatable = false)
     private int calories;
-    // route_polyline 배열에서의 위치. 구간 N의 끝점은 N+1의 시작점과 같아 하나 겹친다
+    // 소속 조각 route_polyline에서의 위치. 같은 조각 안에서 구간 N의 끝점은 N+1의 시작점과 같아 하나 겹친다.
+    // 끊긴 곳에 걸친 구간은 그 조각의 0번 점 하나다([0, 0])
     @Column(name = "route_start_index", nullable = false, updatable = false)
     private int routeStartIndex;
     @Column(name = "route_end_index", nullable = false, updatable = false)
@@ -86,11 +87,11 @@ public class RunningSplitJpaEntity extends BaseCreatedAtEntity {
     @Column(name = "end_at", nullable = false, updatable = false)
     private LocalDateTime endAt;
 
-    private RunningSplitJpaEntity(RunningRecordJpaEntity record, int splitNumber, int avgPace,
+    private RunningSplitJpaEntity(RunningSegmentJpaEntity segment, int splitNumber, int avgPace,
                                   int distance, int duration, Integer avgCadence,
                                   Integer elevationChange, int calories, int routeStartIndex,
                                   int routeEndIndex, LocalDateTime startAt, LocalDateTime endAt) {
-        this.record = record;
+        this.segment = segment;
         this.splitNumber = splitNumber;
         this.avgPace = avgPace;
         this.distance = distance;
@@ -104,13 +105,13 @@ public class RunningSplitJpaEntity extends BaseCreatedAtEntity {
         this.endAt = endAt;
     }
 
-    public static RunningSplitJpaEntity create(RunningRecordJpaEntity record, int splitNumber,
+    public static RunningSplitJpaEntity create(RunningSegmentJpaEntity segment, int splitNumber,
                                                int avgPace, int distance, int duration,
                                                Integer avgCadence, Integer elevationChange,
                                                int calories, int routeStartIndex,
                                                int routeEndIndex, LocalDateTime startAt,
                                                LocalDateTime endAt) {
-        return new RunningSplitJpaEntity(record, splitNumber, avgPace, distance, duration,
+        return new RunningSplitJpaEntity(segment, splitNumber, avgPace, distance, duration,
                 avgCadence, elevationChange, calories, routeStartIndex, routeEndIndex,
                 startAt, endAt);
     }

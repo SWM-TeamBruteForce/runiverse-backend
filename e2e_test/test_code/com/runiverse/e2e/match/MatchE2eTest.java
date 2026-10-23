@@ -180,9 +180,51 @@ class MatchE2eTest extends E2eTestSupport {
         assertThat(closed.text("code")).isEqualTo("MATCH_SLOT_CLOSED");
         assertThat(offSlot.status()).isEqualTo(400);
         assertThat(offSlot.text("code")).isEqualTo("INVALID_REQUEST");
+        // 선택지 검증이 DTO에서 유스케이스로 옮겨 가도 문구는 명세 그대로다(설정값으로 만든다)
+        assertThat(offSlot.text("message")).isEqualTo("시작 시각은 18:00부터 22:00까지 30분 간격으로만 선택할 수 있습니다.");
         assertThat(offDistance.status()).isEqualTo(400);
         assertThat(offDistance.text("code")).isEqualTo("INVALID_REQUEST");
         assertThat(get("/users/me/status", user.accessToken()).text("status")).isEqualTo("IDLE");
+    }
+
+    @Test
+    @DisplayName("슬롯 조회는 그날 모집 중인 대기 인원을 슬롯별로 세고, 선택지 밖 값은 400으로 걸린다")
+    void slotsCountWaitingPlayers() {
+        // given - 다른 테스트의 내일 3000m 슬롯과 섞이지 않게 모레 10000m를 쓴다
+        LocalDate slotDate = TOMORROW.plusDays(1);
+        int slotDistance = 10000;
+        TestUser first = signUpAndOnboard();
+        TestUser second = signUpAndOnboard();
+        assertThat(apply(first, slotDate.atTime(20, 0), slotDistance).status()).isEqualTo(201);
+        assertThat(apply(second, slotDate.atTime(20, 0), slotDistance).status()).isEqualTo(201);
+
+        // when
+        Response slots = get("/running-matches/slots?date=" + slotDate + "&targetDistanceMeters=" + slotDistance,
+                first.accessToken());
+        Response offDistance = get("/running-matches/slots?targetDistanceMeters=7000", first.accessToken());
+        Response malformed = get("/running-matches/slots?targetDistanceMeters=abc", first.accessToken());
+        Response pastDate = get("/running-matches/slots?date=" + LocalDate.now(APP_ZONE).minusDays(1)
+                + "&targetDistanceMeters=" + slotDistance, first.accessToken());
+
+        // then - 9개 슬롯이 오름차순이고 같은 방에 모인 두 명이 20:00에 잡힌다(JPQL 집계가 실제 DB에서 돈다)
+        assertThat(slots.status()).isEqualTo(200);
+        List<Map<String, Object>> slotList = slots.objects("slots");
+        assertThat(slotList).extracting(slot -> LocalDateTime.parse((String) slot.get("scheduledStartAt")))
+                .containsExactly(
+                        slotDate.atTime(18, 0), slotDate.atTime(18, 30), slotDate.atTime(19, 0),
+                        slotDate.atTime(19, 30), slotDate.atTime(20, 0), slotDate.atTime(20, 30),
+                        slotDate.atTime(21, 0), slotDate.atTime(21, 30), slotDate.atTime(22, 0));
+        assertThat(slotList).extracting(slot -> slot.get("waitingCount"))
+                .containsExactly(0, 0, 0, 0, 2, 0, 0, 0, 0);
+        assertThat(slotList).extracting(slot -> slot.get("selectable")).containsOnly(true);
+
+        assertThat(offDistance.status()).isEqualTo(400);
+        assertThat(offDistance.text("code")).isEqualTo("INVALID_REQUEST");
+        assertThat(offDistance.text("message")).isEqualTo("목표 거리는 3000, 5000, 10000 중 하나여야 합니다.");
+        assertThat(malformed.status()).isEqualTo(400);
+        assertThat(malformed.text("message")).isEqualTo("입력값이 올바르지 않습니다.");
+        assertThat(pastDate.status()).isEqualTo(400);
+        assertThat(pastDate.text("message")).isEqualTo("조회 날짜는 오늘 이전일 수 없습니다.");
     }
 
     @Test

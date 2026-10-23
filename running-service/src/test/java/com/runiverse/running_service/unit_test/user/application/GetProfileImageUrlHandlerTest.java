@@ -1,6 +1,7 @@
 package com.runiverse.running_service.unit_test.user.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.user.common.UserImageUrlResolver;
 import com.runiverse.running_service.application.user.exception.ProfileNotFoundException;
 import com.runiverse.running_service.application.user.port.out.GenerateViewUrlPort;
 import com.runiverse.running_service.application.user.port.out.LoadUserByIdPort;
@@ -10,10 +11,10 @@ import com.runiverse.running_service.application.user.query.profileimage.GetProf
 import com.runiverse.running_service.domain.user.User;
 import com.runiverse.running_service.domain.user.vo.ProfileVisibility;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -43,12 +44,17 @@ public class GetProfileImageUrlHandlerTest {
     @Mock
     private GenerateViewUrlPort generateViewUrlPort;
 
-    @InjectMocks
     private GetProfileImageUrlHandler handler;
+
+    // URL 변환은 공유 컴포넌트가 맡는다 — 실물을 끼워 서명 포트와의 상호작용까지 그대로 본다
+    @BeforeEach
+    void setUp() {
+        handler = new GetProfileImageUrlHandler(loadUserByIdPort, new UserImageUrlResolver(generateViewUrlPort));
+    }
 
     private static User userWith(UUID userId, String profileImageKey) {
         return new User(userId, "runner@runiverse.com", PASSWORD_HASH, true,
-                profileImageKey, ProfileVisibility.PUBLIC, "");
+                profileImageKey, null, ProfileVisibility.PUBLIC, "");
     }
 
     private static String keyOf(UUID userId) {
@@ -88,6 +94,23 @@ public class GetProfileImageUrlHandlerTest {
 
         // then
         assertThat(result.profileImageUrl()).isEqualTo(VIEW_URL);
+    }
+
+    @Test
+    @DisplayName("배경 사진만 있으면 프로필 URL은 없다")
+    void ignoresBackgroundImageKey() {
+        // given -> 배경 key가 프로필 자리로 새지 않아야 한다
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        User user = new User(userId, "runner@runiverse.com", PASSWORD_HASH, true,
+                null, "backgrounds/" + userId + "/bg.jpg", ProfileVisibility.PUBLIC, "");
+        when(loadUserByIdPort.loadById(new UserId(userId))).thenReturn(Optional.of(user));
+
+        // when
+        GetProfileImageUrlResult result = handler.handle(new GetProfileImageUrlQuery(userId));
+
+        // then
+        assertThat(result.profileImageUrl()).isNull();
+        verifyNoInteractions(generateViewUrlPort);
     }
 
     @Test

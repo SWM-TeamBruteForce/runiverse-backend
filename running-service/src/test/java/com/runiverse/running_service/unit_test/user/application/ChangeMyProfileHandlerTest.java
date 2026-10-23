@@ -65,7 +65,7 @@ public class ChangeMyProfileHandlerTest {
 
     private static User userOf(UUID userId) {
         return new User(userId, "runner@runiverse.com", PASSWORD_HASH, true,
-                null, ProfileVisibility.PUBLIC, "");
+                null, null, ProfileVisibility.PUBLIC, "");
     }
 
     private void givenUser(UUID userId) {

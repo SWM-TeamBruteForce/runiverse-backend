@@ -12,6 +12,9 @@ public record RunningStartedPayload(
         Long runningRoomId,
         LocalDateTime startedAt,
         Integer targetDistanceMeters,
+        // 본인 기준 — 로컬 트랙을 잃은 앱은 로컬 값과 비교해 큰 쪽으로 이어 쓴다
+        long nextSequence,
+        int pauseSegment,
         List<Player> players,
         // RUNNING_COMBO_UPDATED의 peers와 같은 모양이다 —
         // 모양을 맞춰야 클라가 한 벌의 코드로 스냅샷과 갱신을 다 그린다
@@ -24,7 +27,8 @@ public record RunningStartedPayload(
             String profileImageUrl,
             int distanceMeters,
             Integer currentPaceSecondsPerKm,
-            boolean paused
+            // RUNNING | PAUSED | DISCONNECTED | FINISHED — RUNNING_PROGRESS_UPDATED와 같은 값이다
+            String status
     ) {
 
     }
@@ -34,6 +38,8 @@ public record RunningStartedPayload(
                 snapshot.runningRoomId(),
                 snapshot.startedAt(),
                 snapshot.targetDistanceMeters(),
+                snapshot.nextSequence(),
+                snapshot.pauseSegment(),
                 snapshot.players().stream()
                         .map(player -> new Player(
                                 player.userId().toString(),
@@ -41,7 +47,7 @@ public record RunningStartedPayload(
                                 player.profileImageUrl(),
                                 player.distanceMeters(),
                                 player.currentPaceSecondsPerKm(),
-                                player.paused()))
+                                player.status().name()))
                         .toList(),
                 // 갱신 통지가 쓰는 변환을 그대로 빌린다 — 두 벌로 나뉘면 모양이 갈라진다
                 RunningComboUpdatedPayload.from(snapshot.comboPeers()).peers());

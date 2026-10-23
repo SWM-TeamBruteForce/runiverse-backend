@@ -1,6 +1,7 @@
 package com.runiverse.running_service.unit_test.infrastructure.redis;
 
 import ch.qos.logback.classic.Level;
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
 import com.runiverse.running_service.application.running.port.out.RunningProgress;
 import com.runiverse.running_service.infrastructure.redis.running.RunningProgressRedisAdapter;
 import com.runiverse.running_service.support.LogCapture;
@@ -55,7 +56,7 @@ class RunningProgressRedisAdapterTest {
                 .given(redisTemplate).convertAndSend(anyString(), any());
 
         // when -> 남의 화면 표시일 뿐이고 다음 배치가 최신값을 다시 나른다
-        assertThatCode(() -> adapter.publish(ROOM_ID, new RunningProgress(USER_ID, 1200, 5000, 345, false)))
+        assertThatCode(() -> adapter.publish(ROOM_ID, new RunningProgress(USER_ID, 1200, 5000, 345, LiveRunningStatus.RUNNING)))
                 .doesNotThrowAnyException();
 
         // then

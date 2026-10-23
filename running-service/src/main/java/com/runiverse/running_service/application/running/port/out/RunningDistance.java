@@ -6,17 +6,24 @@ package com.runiverse.running_service.application.running.port.out;
 public record RunningDistance(
         double meters,
         long lastSequence,
+        // 마지막으로 반영한 좌표의 일시정지 구간 번호 — 다음 배치의 번호가 이보다 작으면 거부한다
+        int lastPauseSegment,
         Double lastLatitude,
         Double lastLongitude,
         // 마지막으로 반영한 좌표의 페이스. 발행만 하고 흘려보내면
         // 재연결한 클라의 RUNNING_STARTED 스냅샷이 남의 페이스를 복구할 길이 없다.
         // 단말이 못 재면 null이고, null인 채로 저장해야 스냅샷도 null을 그대로 싣는다
-        Integer lastPaceSecondsPerKm
+        Integer lastPaceSecondsPerKm,
+        // 의심점 — 참가자가 머물고 있다고 의심하는 기준 좌표. 반경 밖 좌표가 오면 옮겨진다.
+        // 콤보가 서 있는 사람과 달리는 사람을 가르는 근거다. 관측한 좌표가 없으면 null이다
+        Double anchorLatitude,
+        Double anchorLongitude
 ) {
 
-    // 좌표를 한 번도 못 받은 상태 — lastSequence가 -1이라 순번 0도 새 좌표로 잡힌다
+    // 좌표를 한 번도 못 받은 상태 — lastSequence가 -1이라 순번 0도 새 좌표로 잡힌다.
+    // 러닝은 일시정지 구간 0에서 시작한다
     public static RunningDistance empty() {
-        return new RunningDistance(0, -1, null, null, null);
+        return new RunningDistance(0, -1, 0, null, null, null, null, null);
     }
 
     public boolean hasLastPoint() {

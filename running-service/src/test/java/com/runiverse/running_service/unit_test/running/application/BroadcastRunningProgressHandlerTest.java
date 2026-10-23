@@ -5,6 +5,7 @@ import com.runiverse.running_service.application.running.command.progress.Broadc
 import com.runiverse.running_service.application.running.command.progress.BroadcastRunningProgressHandler;
 import com.runiverse.running_service.application.running.port.out.LoadRunningRoomMembersPort;
 import com.runiverse.running_service.application.running.port.out.RunningConnection;
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
 import com.runiverse.running_service.application.running.port.out.RunningProgress;
 import com.runiverse.running_service.application.running.port.out.RunningSessionPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
@@ -54,7 +55,7 @@ class BroadcastRunningProgressHandlerTest {
     private BroadcastRunningProgressHandler broadcastRunningProgressHandler;
 
     private static final RunningProgress PROGRESS =
-            new RunningProgress(SENDER_ID, 1_520, 5_000, 345, false);
+            new RunningProgress(SENDER_ID, 1_520, 5_000, 345, LiveRunningStatus.RUNNING);
 
     private void handle() {
         broadcastRunningProgressHandler.handle(

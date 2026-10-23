@@ -1,6 +1,9 @@
 package com.runiverse.running_service.application.running.common;
 
+import com.runiverse.running_service.application.running.port.out.RoutePoint;
+
 import java.util.List;
+import java.util.function.ToDoubleFunction;
 
 public final class PolylineEncoder {
 
@@ -13,13 +16,23 @@ public final class PolylineEncoder {
     }
 
     public static String encode(List<BoundaryPoint> points) {
+        return encode(points, BoundaryPoint::latitude, BoundaryPoint::longitude);
+    }
+
+    // 경계점이 아닌 좌표 목록 — 경로에서 골라낸 콤보 달성 위치를 경로와 같은 형식으로 담을 때 쓴다
+    public static String encodePoints(List<RoutePoint> points) {
+        return encode(points, RoutePoint::latitude, RoutePoint::longitude);
+    }
+
+    private static <T> String encode(List<T> points, ToDoubleFunction<T> latitudeOf,
+                                     ToDoubleFunction<T> longitudeOf) {
         StringBuilder encoded = new StringBuilder();
         long previousLatitude = 0;
         long previousLongitude = 0;
-        for (BoundaryPoint point : points) {
+        for (T point : points) {
             // 먼저 반올림하고 그다음 차분을 낸다 — 순서가 바뀌면 점마다 오차가 쌓인다
-            long latitude = Math.round(point.latitude() * FACTOR);
-            long longitude = Math.round(point.longitude() * FACTOR);
+            long latitude = Math.round(latitudeOf.applyAsDouble(point) * FACTOR);
+            long longitude = Math.round(longitudeOf.applyAsDouble(point) * FACTOR);
             appendSigned(latitude - previousLatitude, encoded);
             appendSigned(longitude - previousLongitude, encoded);
             previousLatitude = latitude;

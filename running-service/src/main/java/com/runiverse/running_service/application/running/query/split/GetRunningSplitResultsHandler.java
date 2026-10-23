@@ -77,10 +77,11 @@ public class GetRunningSplitResultsHandler implements GetRunningSplitResultsUsec
                 players.stream().map(RunningResultPlayer::userId).toList());
         Optional<RunningResultRecord> record =
                 loadRunningResultRecordPort.loadRecord(roomId, viewerId);
-        // 4. 폴리라인은 한 번만 푼다 — 구간마다 풀면 500번 디코딩한다
-        List<RoutePoint> decoded = record
-                .map(RunningResultRecord::routePolyline)
-                .map(PolylineDecoder::decode)
+        // 4. 조각마다 한 번만 푼다 — 구간마다 풀면 500번 디코딩한다. 조각 번호 순이라 번호 - 1이 위치다
+        List<List<RoutePoint>> decoded = record
+                .map(found -> found.segmentPolylines().stream()
+                        .map(PolylineDecoder::decode)
+                        .toList())
                 .orElse(List.of());
 
         return new GetRunningSplitResultsResult(
@@ -100,7 +101,7 @@ public class GetRunningSplitResultsHandler implements GetRunningSplitResultsUsec
     // splitNumber가 곧 같은 거리 구간이다 — 그걸로 묶으면 그대로 참가자 비교표가 된다.
     // TreeMap이라 응답의 splits가 구간 번호 오름차순으로 나간다
     private List<GetRunningSplitResultsResult.Split> toSplits(List<RunningSplitRow> splitRows,
-                                                              List<RoutePoint> decoded,
+                                                              List<List<RoutePoint>> decoded,
                                                               UUID viewerId) {
         Map<Integer, List<RunningSplitRow>> byNumber = splitRows.stream()
                 .collect(Collectors.groupingBy(
@@ -112,7 +113,7 @@ public class GetRunningSplitResultsHandler implements GetRunningSplitResultsUsec
 
     private GetRunningSplitResultsResult.Split toSplit(int splitNumber,
                                                        List<RunningSplitRow> rows,
-                                                       List<RoutePoint> decoded,
+                                                       List<List<RoutePoint>> decoded,
                                                        UUID viewerId) {
         // 경로는 본인 것만이다 — route_start_index는 각자 자기 폴리라인을 가리킨다
         Optional<RunningSplitRow> mine = rows.stream()
@@ -132,14 +133,21 @@ public class GetRunningSplitResultsHandler implements GetRunningSplitResultsUsec
                 rows.stream().map(this::toSplitPlayer).toList());
     }
 
+    // 구간은 끝 경계점이 있는 조각에 속한다 — 그 조각에서만 자른다.
+    // 끊긴 곳에 걸친 구간은 [0, 0]이라 점 하나만 실려 선을 긋지 않는다.
     // route_end_index는 포함인데 subList의 끝은 배타적이다 —
     // +1을 빼먹으면 구간마다 끝점이 하나씩 잘려 경계가 어긋난다
-    private List<RoutePoint> routes(List<RoutePoint> decoded, RunningSplitRow row) {
-        int end = Math.min(row.routeEndIndex() + 1, decoded.size());
+    private List<RoutePoint> routes(List<List<RoutePoint>> decoded, RunningSplitRow row) {
+        int segmentIndex = row.segmentNumber() - 1;
+        if (segmentIndex >= decoded.size()) {
+            return null;
+        }
+        List<RoutePoint> segment = decoded.get(segmentIndex);
+        int end = Math.min(row.routeEndIndex() + 1, segment.size());
         if (row.routeStartIndex() >= end) {
             return null;
         }
-        return List.copyOf(decoded.subList(row.routeStartIndex(), end));
+        return List.copyOf(segment.subList(row.routeStartIndex(), end));
     }
 
     private GetRunningSplitResultsResult.SplitPlayer toSplitPlayer(RunningSplitRow row) {

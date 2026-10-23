@@ -24,6 +24,7 @@ public class UserJpaEntityTest {
                 "hashed-password",
                 false,
                 "profiles/" + userId + "/photo.jpg",
+                null,
                 ProfileVisibility.PUBLIC,
                 "러닝을 종료합니다"
         );

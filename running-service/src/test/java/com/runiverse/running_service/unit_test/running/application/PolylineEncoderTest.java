@@ -1,7 +1,9 @@
 package com.runiverse.running_service.unit_test.running.application;
 
 import com.runiverse.running_service.application.running.common.BoundaryPoint;
+import com.runiverse.running_service.application.running.common.PolylineDecoder;
 import com.runiverse.running_service.application.running.common.PolylineEncoder;
+import com.runiverse.running_service.application.running.port.out.RoutePoint;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -21,7 +23,7 @@ public class PolylineEncoderTest {
     // 폴리라인은 경계점 목록에서 나온다 — sequence 자리에 경계 거리가 들어간다
     private static BoundaryPoint point(int distanceMeters, double latitude, double longitude) {
         return new BoundaryPoint(distanceMeters, latitude, longitude,
-                AT.plusSeconds(distanceMeters), 0);
+                AT.plusSeconds(distanceMeters), distanceMeters, 0);
     }
 
     // 인코더와 반대 방향으로 독립 구현해 왕복을 검증한다 — 같은 코드를 두 번 쓰면 검증이 아니다
@@ -145,5 +147,23 @@ public class PolylineEncoderTest {
         assertThat(decoded).hasSize(500);
         assertThat(decoded.get(499)[0]).isCloseTo(points.get(499).latitude(), within(PRECISION));
         assertThat(decoded.get(499)[1]).isCloseTo(points.get(499).longitude(), within(PRECISION));
+    }
+
+    @Test
+    @DisplayName("좌표 목록도 경계점과 같은 형식으로 담는다 — 콤보 달성 위치를 기록 경로와 같은 디코더로 읽는다")
+    void encodesCoordinatesInSameFormat() {
+        // given
+        List<BoundaryPoint> boundaries = List.of(
+                point(0, 38.5, -120.2), point(10, 40.7, -120.95), point(20, 43.252, -126.453));
+        List<RoutePoint> coordinates = boundaries.stream()
+                .map(boundary -> new RoutePoint(boundary.latitude(), boundary.longitude()))
+                .toList();
+
+        // when
+        String encoded = PolylineEncoder.encodePoints(coordinates);
+
+        // then
+        assertThat(encoded).isEqualTo(PolylineEncoder.encode(boundaries));
+        assertThat(PolylineDecoder.decode(encoded)).hasSize(3);
     }
 }

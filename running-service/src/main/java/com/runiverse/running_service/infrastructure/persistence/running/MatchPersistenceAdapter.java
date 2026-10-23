@@ -1,5 +1,6 @@
 package com.runiverse.running_service.infrastructure.persistence.running;
 
+import com.runiverse.running_service.application.match.port.out.CountWaitingPlayersPort;
 import com.runiverse.running_service.application.match.port.out.LoadMatchCandidatesPort;
 import com.runiverse.running_service.application.match.port.out.LoadMatchPlayersPort;
 import com.runiverse.running_service.application.match.port.out.LoadMatchRoomPort;
@@ -13,14 +14,18 @@ import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 // 매칭 단계의 조회만 담는다 — 방·참가자 애그리거트의 저장은 RunningPersistenceAdapter 몫이다
 @Component
 @RequiredArgsConstructor
-public class MatchPersistenceAdapter implements LoadMatchRoomPort, LoadMatchPlayersPort, LoadMatchCandidatesPort {
+public class MatchPersistenceAdapter implements LoadMatchRoomPort, LoadMatchPlayersPort, LoadMatchCandidatesPort,
+        CountWaitingPlayersPort {
 
     private final EntityManager entityManager;
 
@@ -81,6 +86,32 @@ public class MatchPersistenceAdapter implements LoadMatchRoomPort, LoadMatchPlay
                 // 집계(GROUP BY·SUM)가 필요 없다
                 .setParameter("userId", userId.value())
                 .getResultList();
+    }
+
+    @Override
+    public Map<LocalDateTime, Integer> countWaitingPlayers(LocalDate date, int targetDistanceMeters) {
+        List<Object[]> rows = entityManager.createQuery("""
+                        SELECT r.startAt, SUM(r.currentPlayerCount)
+                        FROM RunningRoomJpaEntity r
+                        WHERE r.deletedAt IS NULL
+                          AND r.type = :type
+                          AND r.status = :status
+                          AND r.startAt >= :startInclusive
+                          AND r.startAt < :endExclusive
+                          AND r.targetDistance = :targetDistance
+                        GROUP BY r.startAt
+                        """, Object[].class)
+                // 확정된 방(MATCHED)은 들어갈 수 없는 자리라, 솔로 방은 모집 중인 자리가 아니라 뺀다
+                .setParameter("type", RunningRoomType.MATCH)
+                .setParameter("status", RunningRoomStatus.MATCHING)
+                .setParameter("startInclusive", date.atStartOfDay())
+                .setParameter("endExclusive", date.plusDays(1).atStartOfDay())
+                .setParameter("targetDistance", targetDistanceMeters)
+                .getResultList();
+        // JPQL의 SUM(int)는 Long이다
+        return rows.stream().collect(Collectors.toMap(
+                row -> (LocalDateTime) row[0],
+                row -> ((Long) row[1]).intValue()));
     }
 
 }

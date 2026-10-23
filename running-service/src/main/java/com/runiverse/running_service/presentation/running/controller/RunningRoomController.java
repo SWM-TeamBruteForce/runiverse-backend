@@ -12,6 +12,7 @@ import com.runiverse.running_service.application.running.query.split.GetRunningS
 import com.runiverse.running_service.presentation.running.response.RunningResultsResponse;
 import com.runiverse.running_service.presentation.running.response.RunningSplitResultsResponse;
 import com.runiverse.running_service.presentation.running.response.SoloRunningStartResponse;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -46,7 +47,7 @@ public class RunningRoomController {
     @GetMapping("/{runningRoomId}/results")
     public ResponseEntity<RunningResultsResponse> getResults(
             @AuthenticationPrincipal Jwt jwt,
-            @PathVariable Long runningRoomId
+            @PathVariable @Min(value = 1, message = "입력값이 올바르지 않습니다.") Long runningRoomId
     ) {
         // 조회자는 토큰에서만 온다 — 클라가 보낸 값이면 남의 결과를 볼 수 있다
         UUID userId = UUID.fromString(jwt.getSubject());
@@ -58,7 +59,7 @@ public class RunningRoomController {
     @GetMapping("/{runningRoomId}/split-results")
     public ResponseEntity<RunningSplitResultsResponse> getSplitResults(
             @AuthenticationPrincipal Jwt jwt,
-            @PathVariable Long runningRoomId
+            @PathVariable @Min(value = 1, message = "입력값이 올바르지 않습니다.") Long runningRoomId
     ) {
         UUID userId = UUID.fromString(jwt.getSubject());
         GetRunningSplitResultsResult result = getRunningSplitResultsUsecase.handle(

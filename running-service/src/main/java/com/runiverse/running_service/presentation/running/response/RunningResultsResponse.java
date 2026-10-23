@@ -11,7 +11,7 @@ public record RunningResultsResponse(
         Long runningRoomId,
         LocalDateTime startedAt,
         LocalDateTime finishedAt,
-        List<double[]> routes,
+        List<List<double[]>> routes,
         List<PlayerResponse> players
 ) {
 
@@ -24,13 +24,15 @@ public record RunningResultsResponse(
                 result.players().stream().map(PlayerResponse::from).toList());
     }
 
-    // [위도, 경도] 두 칸 배열로 내린다 — 점마다 키 이름을 반복하지 않는다.
+    // 조각마다 [위도, 경도] 두 칸 배열의 목록으로 내린다 — 점마다 키 이름을 반복하지 않는다.
     // GeoJSON은 경도가 먼저라 반대이므로 뒤집지 않는다
-    private static List<double[]> routes(List<RoutePoint> points) {
-        return points == null
+    private static List<List<double[]>> routes(List<List<RoutePoint>> segments) {
+        return segments == null
                 ? null
-                : points.stream()
-                .map(point -> new double[]{point.latitude(), point.longitude()})
+                : segments.stream()
+                .map(segment -> segment.stream()
+                        .map(point -> new double[]{point.latitude(), point.longitude()})
+                        .toList())
                 .toList();
     }
 

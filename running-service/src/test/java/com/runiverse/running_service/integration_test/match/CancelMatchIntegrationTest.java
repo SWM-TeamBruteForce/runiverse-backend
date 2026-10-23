@@ -10,6 +10,7 @@ import com.runiverse.running_service.application.match.command.broadcast.Broadca
 import com.runiverse.running_service.application.match.command.cancel.CancelMatchCommand;
 import com.runiverse.running_service.application.match.command.cancel.CancelMatchHandler;
 import com.runiverse.running_service.application.match.common.MatchProperties;
+import com.runiverse.running_service.application.match.common.MatchSlotPolicy;
 import com.runiverse.running_service.application.match.common.MatchRoomChangedEvent;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
 import com.runiverse.running_service.application.match.exception.ActiveMatchNotFoundException;
@@ -22,6 +23,7 @@ import com.runiverse.running_service.application.scheduling.command.schedule.Sch
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingCommand;
 import com.runiverse.running_service.application.user.command.onboarding.CompleteOnboardingHandler;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.domain.running.metric.vo.Pace;
 import com.runiverse.running_service.domain.running.player.RunningPlayer;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerId;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerStatus;
@@ -48,6 +50,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -67,7 +70,8 @@ public class CancelMatchIntegrationTest extends IntegrationTestSupport {
     private static final Duration CLOSE_OFFSET = Duration.ofMinutes(10);
     private static final Duration COOLDOWN = Duration.ofMinutes(20);
     private static final MatchProperties MATCH_PROPERTIES = new MatchProperties(
-            CLOSE_OFFSET, Duration.ofSeconds(10), Duration.ofHours(6), 10, COOLDOWN);
+            CLOSE_OFFSET, Duration.ofSeconds(10), Duration.ofHours(6), 10, COOLDOWN,
+            LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
 
     private SignUpHandler signUpHandler;
     private CompleteOnboardingHandler completeOnboardingHandler;
@@ -127,7 +131,7 @@ public class CancelMatchIntegrationTest extends IntegrationTestSupport {
                 onboardingStore,     // LoadUserAvgPacePort
                 runningStore,        // CreateMatchApplicationPort
                 matchRoomAssigner,
-                MATCH_PROPERTIES,
+                new MatchSlotPolicy(MATCH_PROPERTIES),
                 roomInfoAssembler,
                 eventPublisher
         );
@@ -135,6 +139,7 @@ public class CancelMatchIntegrationTest extends IntegrationTestSupport {
                 runningStore,        // LockMatchApplicationPort
                 matchStore,          // LoadMatchRoomPort
                 runningStore,        // LockMatchRoomPort
+                matchStore,          // LoadMatchPlayersPort
                 runningStore,        // UpdateMatchApplicationPort
                 runningStore,        // UpdateMatchRoomPort
                 matchCooldownStore,  // MatchCooldownPort
@@ -169,6 +174,25 @@ public class CancelMatchIntegrationTest extends IntegrationTestSupport {
         assertThat(lastRoomOf(stayerConnection).players())
                 .extracting(RoomInfo.RoomPlayer::userId)
                 .containsExactly(stayerId);
+    }
+
+    @Test
+    @DisplayName("나간 사람의 페이스를 빼고 방 평균을 다시 내 남은 참가자에게 알린다")
+    void recalculatesAvgPaceWithoutLeaver() {
+        // given -> 300·600이 한 방이라 평균은 450이다
+        UUID stayerId = onboardedUser(300);
+        UUID leaverId = onboardedUser(600);
+        Long runningRoomId = apply(stayerId);
+        apply(leaverId);
+        RecordingMatchStreamConnection stayerConnection = connect(stayerId, runningRoomId);
+
+        // when
+        cancel(leaverId);
+
+        // then -> 후보 순위와 남은 사람 화면이 같은 평균을 본다
+        RunningRoom room = runningStore.findRoom(runningRoomId).orElseThrow();
+        assertThat(room.getAvgPace()).map(Pace::secondsPerKm).contains(300);
+        assertThat(lastRoomOf(stayerConnection).teamAveragePaceSecondsPerKm()).isEqualTo(300);
     }
 
     @Test
@@ -218,6 +242,7 @@ public class CancelMatchIntegrationTest extends IntegrationTestSupport {
         assertThat(room.getStatus()).isEqualTo(RunningRoomStatus.CANCELLED);
         assertThat(room.getPlayerCount().current()).isZero();
         assertThat(room.getCloseAt()).isPresent();
+        assertThat(room.getAvgPace()).isEmpty();
         assertThat(connection.received()).isEmpty();
     }
 
@@ -304,12 +329,16 @@ public class CancelMatchIntegrationTest extends IntegrationTestSupport {
     }
 
     private UUID onboardedUser() {
+        return onboardedUser(AVG_PACE);
+    }
+
+    private UUID onboardedUser(int avgPace) {
         userSequence++;
         UUID userId = signUpHandler.handle(new SignUpCommand(
                 issueVerificationTicket("runner" + userSequence + "@runiverse.com"), PASSWORD)).userId();
         completeOnboardingHandler.handle(new CompleteOnboardingCommand(
                 userId, "러너" + userSequence, "MALE", LocalDate.of(1998, 5, 20),
-                AVG_PACE, new BigDecimal("70.0"), new BigDecimal("175.0")));
+                avgPace, new BigDecimal("70.0"), new BigDecimal("175.0")));
         return userId;
     }
 

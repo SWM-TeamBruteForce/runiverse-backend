@@ -60,6 +60,10 @@ trim_trailing_whitespace = false
 ij_markdown_wrap_text_if_long = false
 ij_markdown_format_tables = false
 
+[*.html]
+indent_style = space
+indent_size = 2
+
 [*.py]
 indent_style = space
 indent_size = 4
@@ -67,3 +71,15 @@ indent_size = 4
 [*.sh]
 indent_style = space
 indent_size = 2
+
+[*.js]
+indent_style = space
+indent_size = 2
+
+[*.sql]
+indent_style = space
+indent_size = 4
+
+[*.lua]
+indent_style = space
+indent_size = 4

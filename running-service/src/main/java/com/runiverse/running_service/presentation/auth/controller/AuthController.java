@@ -19,6 +19,7 @@ import com.runiverse.running_service.application.auth.port.in.RefreshUsecase;
 import com.runiverse.running_service.application.auth.port.in.SendEmailVerificationUsecase;
 import com.runiverse.running_service.application.auth.port.in.SignUpUsecase;
 import com.runiverse.running_service.application.auth.port.in.VerifyEmailCodeUsecase;
+import com.runiverse.running_service.presentation.auth.request.AppleLoginRequest;
 import com.runiverse.running_service.presentation.auth.request.EmailVerificationRequest;
 import com.runiverse.running_service.presentation.auth.request.GoogleLoginRequest;
 import com.runiverse.running_service.presentation.auth.request.KakaoLoginRequest;
@@ -140,6 +141,7 @@ public class AuthController {
                 "google",
                 request.idToken(),
                 null,
+                null,
                 null
         ));
     }
@@ -151,18 +153,32 @@ public class AuthController {
         return oauthLogin(new OauthLoginCommand(
                 "kakao",
                 null,
+                null,
                 request.authorizationCode(),
                 request.codeVerifier()
         ));
     }
 
-    // 목록에 없는 provider — 고정 경로가 더 구체적이라 먼저 매칭되므로 google·kakao는 여기로 오지 않는다.
+    @PostMapping("/oauth/apple")
+    public ResponseEntity<OauthLoginResponse> appleLogin(
+            @Valid @RequestBody AppleLoginRequest request
+    ) {
+        return oauthLogin(new OauthLoginCommand(
+                "apple",
+                request.idToken(),
+                request.nonce(),
+                null,
+                null
+        ));
+    }
+
+    // 목록에 없는 provider — 고정 경로가 더 구체적이라 먼저 매칭되므로 google·kakao·apple은 여기로 오지 않는다.
     // 본문은 읽지 않는다: provider마다 본문 모양이 달라 검증할 기준이 없다
     @PostMapping("/oauth/{provider}")
     public ResponseEntity<OauthLoginResponse> unsupportedOauthLogin(
             @PathVariable String provider
     ) {
-        return oauthLogin(new OauthLoginCommand(provider, null, null, null));
+        return oauthLogin(new OauthLoginCommand(provider, null, null, null, null));
     }
 
     private ResponseEntity<OauthLoginResponse> oauthLogin(OauthLoginCommand command) {

@@ -10,6 +10,7 @@ import com.runiverse.running_service.domain.running.metric.vo.RunningPeriod;
 import com.runiverse.running_service.domain.running.metric.vo.SplitPace;
 import com.runiverse.running_service.domain.running.record.vo.RouteRange;
 import com.runiverse.running_service.domain.running.record.vo.RunningSplitId;
+import com.runiverse.running_service.domain.running.record.vo.SegmentNumber;
 import com.runiverse.running_service.domain.running.record.vo.SplitNumber;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -23,6 +24,8 @@ public class RunningSplit {
 
     private final RunningSplitId runningSplitId;
     private final SplitNumber splitNumber;
+    // 끝 경계점이 있는 조각 — routeRange는 이 조각 안의 점 번호다
+    private final SegmentNumber segmentNumber;
     private final SplitPace avgPace;
     private final Distance distance;
     private final ElapsedTime duration;
@@ -34,13 +37,15 @@ public class RunningSplit {
     private final ElevationChange elevationChange;
 
     @Builder(access = AccessLevel.PRIVATE)
-    private RunningSplit(Long runningSplitId, int splitNumber, int avgPace, int distance, int duration,
+    private RunningSplit(Long runningSplitId, int splitNumber, int segmentNumber, int avgPace,
+                         int distance, int duration,
                          int routeStartIndex, int routeEndIndex,
                          LocalDateTime startAt, LocalDateTime endAt,
                          Integer calories, // calories만 0이 나올가능성이 가장 크다
                          Integer avgCadence, Integer elevationChange) {
         this.runningSplitId = runningSplitId == null ? null : new RunningSplitId(runningSplitId);
         this.splitNumber = new SplitNumber(splitNumber);
+        this.segmentNumber = new SegmentNumber(segmentNumber);
         this.avgPace = new SplitPace(avgPace);
         this.distance = new Distance(distance);
         this.duration = new ElapsedTime(duration);
@@ -59,6 +64,7 @@ public class RunningSplit {
         return RunningSplit.builder()
                 .runningSplitId(draft.runningSplitId())
                 .splitNumber(draft.splitNumber())
+                .segmentNumber(draft.segmentNumber())
                 .avgPace(draft.avgPace())
                 .distance(draft.distance())
                 .duration(draft.duration())

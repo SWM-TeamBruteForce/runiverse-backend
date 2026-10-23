@@ -11,9 +11,9 @@ public record GetRunningResultsResult(
         // 아래 셋은 조회하는 본인 기록 기준이다 — 본인 기록이 없으면 null
         LocalDateTime startedAt,
         LocalDateTime finishedAt,
-        // 저장은 encoded polyline이지만 응답은 좌표 배열이다.
-        // 시작·끝 지점은 이 목록의 첫 원소·끝 원소라 따로 싣지 않는다
-        List<RoutePoint> routes,
+        // 저장은 조각별 encoded polyline이지만 응답은 조각마다 좌표 배열 하나다 — 조각 사이는 잇지 않는다.
+        // 시작·끝 지점은 첫 조각의 첫 원소·끝 조각의 끝 원소라 따로 싣지 않는다
+        List<List<RoutePoint>> routes,
         List<Player> players
 ) {
 

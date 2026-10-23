@@ -6,6 +6,7 @@ import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
 import com.runiverse.running_service.application.match.exception.ActiveMatchNotFoundException;
 import com.runiverse.running_service.application.match.exception.MatchAlreadyStartedException;
 import com.runiverse.running_service.application.match.port.in.CancelMatchUsecase;
+import com.runiverse.running_service.application.match.port.out.LoadMatchPlayersPort;
 import com.runiverse.running_service.application.match.port.out.LoadMatchRoomPort;
 import com.runiverse.running_service.application.match.port.out.LockMatchApplicationPort;
 import com.runiverse.running_service.application.match.port.out.LockMatchRoomPort;
@@ -14,6 +15,7 @@ import com.runiverse.running_service.application.match.port.out.MatchStreamEvent
 import com.runiverse.running_service.application.match.port.out.UpdateMatchApplicationPort;
 import com.runiverse.running_service.application.match.port.out.UpdateMatchRoomPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.domain.running.metric.vo.Pace;
 import com.runiverse.running_service.domain.running.player.RunningPlayer;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerStatus;
 import com.runiverse.running_service.domain.running.room.RunningRoom;
@@ -25,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -37,6 +40,7 @@ public class CancelMatchHandler implements CancelMatchUsecase {
     private final LockMatchApplicationPort lockMatchApplicationPort;
     private final LoadMatchRoomPort loadMatchRoomPort;
     private final LockMatchRoomPort lockMatchRoomPort;
+    private final LoadMatchPlayersPort loadMatchPlayersPort;
     private final UpdateMatchApplicationPort updateMatchApplicationPort;
     private final UpdateMatchRoomPort updateMatchRoomPort;
     private final MatchCooldownPort matchCooldownPort;
@@ -73,7 +77,12 @@ public class CancelMatchHandler implements CancelMatchUsecase {
             // 근거는 status에 남고, "지금 막혀 있나"는 Redis TTL이 답한다
             matchCooldownPort.start(userId, matchProperties.cooldown());
         }
-        // 6. 세션을 끊고 인원을 줄인다. 0이 되면 방이 CANCELLED로 닫힌다
+        // 6. 세션을 끊고 인원을 줄인다. 0이 되면 방이 CANCELLED로 닫힌다.
+        //    평균은 시작 전에만 남은 참가자로 다시 낸다(0명이면 지운다) — 시작 후에는 뛴 방의 평균으로 남긴다.
+        //    나가면 방이 닫혀 상태가 바뀌므로 나가기 전에 본다
+        if (room.getStatus().isBeforeStart()) {
+            room.recalculateAvgPace(pacesAfterLeave(roomId, userId));
+        }
         room.leave(userId, now);
 
         updateMatchApplicationPort.update(player);
@@ -84,6 +93,14 @@ public class CancelMatchHandler implements CancelMatchUsecase {
             eventPublisher.publishEvent(new MatchRoomChangedEvent(
                     MatchStreamEvent.updated(roomInfoAssembler.assemble(room))));
         }
+    }
+
+    // 나가는 사람의 세션은 아직 저장 전이라 조회에 잡힌다 — 기존 참가자에서 나가는 사람을 빼고 계산한다
+    private List<Pace> pacesAfterLeave(RunningRoomId roomId, UserId leaver) {
+        return loadMatchPlayersPort.loadPlayers(roomId).stream()
+                .filter(player -> !player.userId().equals(leaver.value()))
+                .map(player -> new Pace(player.avgPaceSecondsPerKm()))
+                .toList();
     }
 
     // 마감·인원·방 종류가 함께 걸린다 — 혼자 남은 방을 나가는 데는 손해를 보는 상대가 없고,

@@ -138,9 +138,31 @@ public class GetRunningResultHandlerTest {
         assertThat(result.runningRoomId()).isEqualTo(ROOM_ID);
         assertThat(result.startedAt()).isEqualTo(STARTED_AT);
         assertThat(result.finishedAt()).isEqualTo(FINISHED_AT);
+        assertThat(result.routes()).hasSize(1);
+        assertThat(result.routes().get(0)).hasSize(2);
+        assertThat(result.routes().get(0).get(0).latitude()).isCloseTo(35.1795543, within(PRECISION));
+        assertThat(result.routes().get(0).get(1).longitude()).isCloseTo(129.0757104, within(PRECISION));
+    }
+
+    @Test
+    @DisplayName("경로는 조각마다 좌표 배열 하나로 나간다 -> 클라가 조각 사이를 잇지 않는다")
+    void 조각마다_좌표_배열_하나다() {
+        // given -> 일시정지로 두 조각에 나뉜 기록이다
+        givenRoomExists();
+        givenPlayers(finished(ME, RunningPlayerStatus.COMPLETED));
+        when(loadRunningResultRecordPort.loadRecord(any(), any())).thenReturn(Optional.of(
+                new RunningResultRecord(List.of(polyline(), resumedPolyline()),
+                        STARTED_AT, FINISHED_AT, 5020, 42)));
+        givenProfiles(profile(ME, "동완러너", null));
+
+        // when
+        GetRunningResultsResult result = handler.handle(new GetRunningResultsQuery(ROOM_ID, ME));
+
+        // then -> 조각 번호 순 그대로, 점을 섞지 않는다
         assertThat(result.routes()).hasSize(2);
-        assertThat(result.routes().get(0).latitude()).isCloseTo(35.1795543, within(PRECISION));
-        assertThat(result.routes().get(1).longitude()).isCloseTo(129.0757104, within(PRECISION));
+        assertThat(result.routes().get(0)).hasSize(2);
+        assertThat(result.routes().get(1)).hasSize(1);
+        assertThat(result.routes().get(1).get(0).latitude()).isCloseTo(35.1801230, within(PRECISION));
     }
 
     @Test
@@ -285,13 +307,19 @@ public class GetRunningResultHandlerTest {
 
     // 6-2가 쓰는 두 값까지 채운다 — 6-1은 앞의 셋만 읽는다
     private RunningResultRecord record() {
-        return new RunningResultRecord(polyline(), STARTED_AT, FINISHED_AT, 5020, 42);
+        return new RunningResultRecord(List.of(polyline()), STARTED_AT, FINISHED_AT, 5020, 42);
     }
 
     private String polyline() {
         return PolylineEncoder.encode(List.of(
-                new BoundaryPoint(0, 35.1795543, 129.0756416, STARTED_AT, 0),
-                new BoundaryPoint(10, 35.1796012, 129.0757104, STARTED_AT, 1)));
+                new BoundaryPoint(0, 35.1795543, 129.0756416, STARTED_AT, 0, 0),
+                new BoundaryPoint(10, 35.1796012, 129.0757104, STARTED_AT, 0, 1)));
+    }
+
+    // 재개 뒤 조각 — 점 하나뿐이다(끊긴 곳에 걸친 구간만 가리킨다)
+    private String resumedPolyline() {
+        return PolylineEncoder.encode(List.of(
+                new BoundaryPoint(20, 35.1801230, 129.0762011, FINISHED_AT, 0, 2)));
     }
 
     private GetRunningResultsResult.Player playerOf(GetRunningResultsResult result, UUID userId) {

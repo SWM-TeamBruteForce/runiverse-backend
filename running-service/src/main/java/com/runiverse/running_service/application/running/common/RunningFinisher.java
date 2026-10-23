@@ -10,13 +10,16 @@ import com.runiverse.running_service.application.running.port.out.DeleteRunningT
 import com.runiverse.running_service.application.running.port.out.ExistsRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.ExistsRunningRecordPort;
 import com.runiverse.running_service.application.running.port.out.GpsTrackUpload;
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
 import com.runiverse.running_service.application.running.port.out.LoadRecentRunningPacesPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.LoadUserWeightPort;
 import com.runiverse.running_service.application.running.port.out.LoadWeatherPort;
 import com.runiverse.running_service.application.running.port.out.LockRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.LockRunningRoomPort;
+import com.runiverse.running_service.application.running.port.out.MarkRunningComboFinishedPort;
 import com.runiverse.running_service.application.running.port.out.RecentRunningPace;
+import com.runiverse.running_service.application.running.port.out.RecordRunningMetricPort;
 import com.runiverse.running_service.application.running.port.out.RunningTrack;
 import com.runiverse.running_service.application.running.port.out.SaveGpsTrackPort;
 import com.runiverse.running_service.application.running.port.out.StartMatchCooldownPort;
@@ -37,6 +40,7 @@ import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
 import com.runiverse.running_service.domain.user.vo.AvgPace;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,12 +48,14 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 // 참가자 한 명의 러닝을 확정한다 — RUNNING_FINISH와 목표 도달 자동 종료가 같은 규칙으로 끝나도록 한곳에 둔다
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class RunningFinisher {
@@ -69,8 +75,13 @@ public class RunningFinisher {
     private final ExistsRunningRecordPort existsRunningRecordPort;
     private final LoadRecentRunningPacesPort loadRecentRunningPacesPort;
     private final UpdateUserAvgPacePort updateUserAvgPacePort;
+    private final LiveRunningStatusChanger liveRunningStatusChanger;
+    private final RunningComboArchiver runningComboArchiver;
+    private final MarkRunningComboFinishedPort markRunningComboFinishedPort;
     private final ApplicationEventPublisher eventPublisher;
-    private final RunningFinishProperties properties;
+    private final RunningFinishProperties runningFinishProperties;
+    private final TrackFilterProperties trackFilterProperties;
+    private final RecordRunningMetricPort recordRunningMetricPort;
     // 1인 방에서 혼자 뛰다 그만두는 것은 제재하지 않는다 — 곤란해지는 상대가 없다.
     // 시작 전 이탈(CancelMatchHandler)의 면제와 같은 기준이다.
     // 시작 후 인원은 확정 인원에서 취소·탈퇴한 미출석자만 뺀 값이다
@@ -80,9 +91,29 @@ public class RunningFinisher {
     private static final int AVG_PACE_SAMPLE_SIZE = 5;
 
     // 트랜잭션 경계는 여기다 — 위치 배치는 트랜잭션 없이 들어오므로 경계가 Handler에만 있으면
-    // 자동 종료가 기록·상태·방을 따로 커밋하고, 트랙도 커밋을 기다리지 않고 바로 지운다
+    // 자동 종료가 기록·상태·방을 따로 커밋하고, 트랙도 커밋을 기다리지 않고 바로 지운다.
+    // forced=false는 사용자가 다 뛰었다고 보고 누른 종료다 — 확정 거리가 모자라면 확정하지 않고
+    // 남은 거리를 돌려준다. 그대로 확정하면 화면으로는 다 뛴 사용자의 러닝이 조기 종료로 남는다.
+    // forced=true(조기 종료를 고른 종료·강제 종료 시각)는 그 시점 거리로 바로 확정한다
     @Transactional
-    public void finish(Long runningRoomId, UUID userIdValue) {
+    public GoalCheck finish(Long runningRoomId, UUID userIdValue, boolean forced) {
+        return confirm(runningRoomId, userIdValue, false, !forced);
+    }
+
+    // 목표 도달 자동 종료 — 확정 거리도 목표에 닿았을 때만 끝낸다.
+    // 러닝 중 누적과 확정 거리는 어긋날 수 있다 — 누적만 보고 끝내면 확정 거리가 목표 직전으로 나와
+    // 서버가 끊은 러닝이 조기 종료로 남는다. 못 미치면 아무것도 바꾸지 않는다
+    @Transactional
+    public GoalCheck finishOnGoal(Long runningRoomId, UUID userIdValue) {
+        return confirm(runningRoomId, userIdValue, true, true);
+    }
+
+    // deferIfShort — 확정 거리가 목표에 못 미치면 확정하지 않고 남은 거리를 돌려준다.
+    // 자동 종료와, 사용자가 다 뛰었다고 보고 누른 종료(forced=false)만 미룬다.
+    // 이미 끝나 있었던 경우도 reached다 — RUNNING_FINISHED를 다시 보내 클라가 로컬 트랙을 지우게 한다.
+    // 트랜잭션은 위 두 메서드가 연다 — 여기를 밖에서 바로 부르면 트랜잭션 없이 돈다
+    private GoalCheck confirm(Long runningRoomId, UUID userIdValue, boolean onGoal,
+                              boolean deferIfShort) {
         RunningRoomId roomId = new RunningRoomId(runningRoomId);
         UserId userId = new UserId(userIdValue);
         // 1. 활성 신청이 아니라 이 방의 참가자를 찾는다 — 이미 끝난 참가자도 찾아야 멱등이 된다.
@@ -93,7 +124,7 @@ public class RunningFinisher {
         // 이미 확정된 참가자 - 기록을 덮어쓰지 않고 트랙만 정리한 뒤 ack를 다시 보낸다
         if (!player.isActive()) {
             deleteTrackAfterCommit(runningRoomId, userId);
-            return;
+            return GoalCheck.reached();
         }
         // RUNNING_START를 거치지 않은 참가자는 확정할 러닝이 없다.
         // 도메인 예외가 아니라 여기서 거른다 — 도메인 예외는 500으로 마스킹된다
@@ -107,12 +138,32 @@ public class RunningFinisher {
         // 온보딩에서 몸무게는 필수다 — 비어 있으면 러닝을 시작할 수 없었어야 할 사용자다
         BigDecimal weightKg = loadUserWeightPort.loadWeightKg(userId)
                 .orElseThrow(OnboardingNotCompletedException::new);
-
-        // 3. 마지막 수신 좌표까지로 지표를 낸다.
+        // 3. 마지막 수신 좌표까지로 지표를 낸다. 멈춘 동안의 흔들림·GPS 튐·관측 못 한 이동은 먼저 걸러낸다.
         //    산출할 수 없는 트랙이면 실제 거리를 0으로 보고 상태만 확정한다
         RunningTrack track = loadRunningTrackPort.load(runningRoomId, userId);
+        FilteredTrack filtered = TrackFilter.apply(track.points(), trackFilterProperties);
+        // 유저 종료면 마지막 좌표가 얼마나 묵었는지 본다 — 길면 클라가 남은 좌표를 먼저 보내지 않은 것이다
+        Long lastPointLagSec = onGoal ? null : lastPointLagSeconds(track);
+        if (deferIfShort) {
+            int remaining = remainingToGoal(runningRoomId, userIdValue, room, filtered, onGoal,
+                    lastPointLagSec);
+            if (remaining > 0) {
+                if (onGoal) {
+                    recordRunningMetricPort.autoFinishChecked(false);
+                } else {
+                    recordRunningMetricPort.userFinishDeferred(remaining);
+                }
+                return GoalCheck.pending(remaining);
+            }
+        }
+        if (onGoal) {
+            recordRunningMetricPort.autoFinishChecked(true);
+        }
+        logFilter(runningRoomId, userIdValue, onGoal, lastPointLagSec, filtered.summary());
+        recordRunningMetricPort.trackFiltered(filtered.summary());
+
         Optional<TrackAnalysis> analysis = TrackAnalyzer.analyze(
-                track.points(), analysisTargetMeters(room), weightKg, properties);
+                filtered, analysisTargetMeters(room), weightKg, runningFinishProperties);
         // 4. 기록은 만들 수 있을 때만 남긴다 — 상태 확정과 기록 생성은 별개다.
         //    기록이 없으면 표본이 그대로라 평균 페이스도 다시 낼 것이 없다
         analysis.ifPresent(result -> {
@@ -130,6 +181,15 @@ public class RunningFinisher {
         //    참가자 갱신을 먼저 반영해야 방금 끝낸 자신이 RUNNING으로 세어지지 않는다
         closeRoomIfLastPlayer(room);
         deleteTrackAfterCommit(runningRoomId, userId);
+        // 8. 상대 화면에 종료를 알린다 — 이후로는 끊김·늦은 좌표가 와도 FINISHED 그대로다
+        finishLiveStatusAfterCommit(runningRoomId, userId,
+                room.getTargetDistance().map(Distance::meters).orElse(null));
+        // 9. 남은 참가자와의 콤보를 끊는다 — 안 끊으면 방이 닫힐 때까지 남는다.
+        //    방이 닫혔으면 콤보 상태가 지워지므로 건너뛴다
+        if (room.getStatus() == RunningRoomStatus.STARTED) {
+            markComboFinishedAfterCommit(runningRoomId, userId);
+        }
+        return GoalCheck.reached();
     }
 
     // 솔로 방은 목표 거리가 없다 — 상한을 넘겨 실측 트랙을 자르지 않고 그대로 분석한다
@@ -139,6 +199,7 @@ public class RunningFinisher {
 
     private void createRecord(Long runningRoomId, UUID userId, RunningTrack track,
                               TrackAnalysis analysis, BigDecimal weightKg) {
+        // TODO: 방 잠금을 쥔 채 S3 업로드·날씨 조회를 기다린다 — 날씨는 러닝 시작 때 미리 받아 두고, 업로드는 잠금 밖으로 옮긴다
         // 원본 트랙은 목표 이후 좌표까지 그대로 올린다 — 끊는 것은 기록뿐이다.
         // 키가 러닝 시작 시각으로 정해져 재시도해도 같은 객체를 덮어쓴다
         String gpsTrackKey = saveGpsTrackPort.save(new GpsTrackUpload(
@@ -158,7 +219,7 @@ public class RunningFinisher {
                 .totalCalories(CalorieCalculator.kcal(
                         analysis.avgPaceSecondsPerKm(), analysis.totalDurationSeconds(), weightKg))
                 .gpsTrackKey(gpsTrackKey)
-                .routePolyline(analysis.routePolyline())
+                .segments(analysis.segments())
                 .startAt(analysis.startAt())
                 .endAt(analysis.endAt())
                 .weatherCode(weather.code())
@@ -195,12 +256,12 @@ public class RunningFinisher {
             return;
         }
         double ratio = (double) totalDistanceMeters / target.get().meters();
-        boolean penalty = ratio < properties.penaltyDistanceRatio()
+        boolean penalty = ratio < runningFinishProperties.penaltyDistanceRatio()
                 && room.getPlayerCount().current() >= PENALTY_MIN_PLAYER_COUNT;
         player.leave(penalty, finishedAt);
         if (penalty) {
             // 근거는 status(RUNNING_LEFT_PENALTY)에 남고, "지금 막혀 있나"는 Redis TTL이 답한다
-            startMatchCooldownPort.start(player.getUserId(), properties.cooldown());
+            startMatchCooldownPort.start(player.getUserId(), runningFinishProperties.cooldown());
         }
     }
 
@@ -217,8 +278,11 @@ public class RunningFinisher {
             // terminal이라 FINISHED에 못 가고 결과 조회 경로가 함께 끊긴다
             if (existsRunningRecordPort.existsInRoom(roomId)) {
                 room.finish(closedAt);
+                // 콤보는 방 닫힘이 커밋된 뒤 별도 트랜잭션으로 남긴다 — 실패해도 이 종료는 지킨다
+                runningComboArchiver.archiveAfterCommit(roomId.value());
             } else {
                 room.cancel(closedAt);
+                runningComboArchiver.discardAfterCommit(roomId.value());
             }
             // 한 번도 붙지 않은 참가자가 남았다 — 커밋 뒤 강제 종료가 바로 닫는다
             if (room.getSessions().stream().anyMatch(RoomSession::isConnected)) {
@@ -228,6 +292,7 @@ public class RunningFinisher {
         // 방을 닫지 않아도 세션 변경(is_connected)은 저장돼야 한다
         updateRunningRoomPort.update(room);
     }
+
 
     // 커밋이 실패하면 재시도가 같은 트랙으로 다시 확정해야 한다 — 삭제는 커밋 뒤로 미룬다.
     // 동기화가 없으면(트랜잭션 없이 페이크로 조립하는 테스트) 바로 지운다 —
@@ -243,6 +308,49 @@ public class RunningFinisher {
             return;
         }
         deleteRunningTrackPort.delete(runningRoomId, userId);
+    }
+
+    // 롤백된 종료를 FINISHED로 알리면 되돌릴 길이 없다 — 커밋 뒤에 알린다.
+    // afterCommit은 finish()가 돌아가기 전에 끝나므로 ack(RUNNING_FINISHED)보다 먼저다 —
+    // ack를 받고 클라가 닫는 연결은 FINISHED를 덮지 못한다
+    private void finishLiveStatusAfterCommit(Long runningRoomId, UserId userId,
+                                             Integer targetDistanceMeters) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    liveRunningStatusChanger.change(runningRoomId, userId, targetDistanceMeters,
+                            LiveRunningStatus.FINISHED);
+                }
+            });
+            return;
+        }
+        liveRunningStatusChanger.change(runningRoomId, userId, targetDistanceMeters,
+                LiveRunningStatus.FINISHED);
+    }
+
+    // 끝낸 사람은 상대의 다음 배치에서 끊기고, 늦은 좌표가 와도 다시 붙지 않는다
+    private void markComboFinishedAfterCommit(Long runningRoomId, UserId userId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    markComboFinished(runningRoomId, userId);
+                }
+            });
+            return;
+        }
+        markComboFinished(runningRoomId, userId);
+    }
+
+    private void markComboFinished(Long runningRoomId, UserId userId) {
+        try {
+            markRunningComboFinishedPort.markFinished(runningRoomId, userId);
+        } catch (RuntimeException e) {
+            // 콤보는 곁가지다 — 종료를 실패로 만들지 않는다
+            log.error("[러닝] 종료 참가자 콤보 끊기 실패: 처리하지 못한 예외 - roomId={}, userId={}",
+                    runningRoomId, userId.value(), e);
+        }
     }
 
     // 최근 N건의 거리 합·시간 합으로 다시 낸다. 기록별 avg_pace의 산술 평균은
@@ -263,5 +371,63 @@ public class RunningFinisher {
         }
         // total_distance는 1 이상이 보장돼(ck_running_record_total_distance) 0으로 나눌 일이 없다
         updateUserAvgPacePort.updateAvgPace(userId, AvgPace.clamped((int) (seconds * 1000 / meters)));
+    }
+
+    // 10m 경계로 자르기 전의 거리로 잰다 — 자른 값으로 재면 남은 거리가 최대 10m 부풀려진다.
+    // 목표에 닿았으면 0이다. 목표 없는 솔로 방도 0이라 바로 확정된다
+    private int remainingToGoal(Long runningRoomId, UUID userId, RunningRoom room,
+                                FilteredTrack filtered, boolean onGoal, Long lastPointLagSec) {
+        int target = room.getTargetDistance().map(Distance::meters).orElse(0);
+        double remaining = target - filtered.totalMeters();
+        if (remaining <= 0) {
+            return 0;
+        }
+        // 화면은 목표 도달인데 서버가 미루는 원인이 일시정지인지 가른다 — 클라 로컬 거리가 경계 칸을 더했을 수 있다
+        log.info("[러닝] 종료 건너뜀: 확정 거리 목표 미달 - roomId={}, userId={}, trigger={}, "
+                        + "confirmedDistanceM={}, targetDistanceM={}, lastPointLagSec={}, "
+                        + "pauseBoundaryCount={}, pauseRemovedDistanceM={}",
+                runningRoomId, userId, onGoal ? "GOAL" : "FINISH",
+                Math.round(filtered.totalMeters()), target, lastPointLagSec,
+                filtered.summary().pauseBoundaryCount(),
+                Math.round(filtered.summary().pauseRemovedMeters()));
+        // 0.3m만 모자라도 1m로 알린다 — 0으로 알리면 클라가 끝난 줄 안다
+        return (int) Math.ceil(remaining);
+    }
+
+    // 판정값을 실제 트랙으로 조정하려고 남긴다 — 원본 좌표는 남기지 않고, 들여다볼 러닝은
+    // roomId·userId로 원본 트랙을 찾는다. 위치 메시지 경로라 MDC에 userId가 없어 직접 싣는다
+    private void logFilter(Long runningRoomId, UUID userId, boolean onGoal, Long lastPointLagSec,
+                           TrackFilterSummary summary) {
+        log.info("[러닝] 트랙 필터 성공 - roomId={}, userId={}, trigger={}, lastPointLagSec={}, "
+                        + "rawDistanceM={}, filteredDistanceM={}, pauseBoundaryCount={}, "
+                        + "pauseRemovedDistanceM={}, accuracyDroppedCount={}, "
+                        + "accuracyRemovedDistanceM={}, spikePointCount={}, "
+                        + "jumpEdgeCount={}, spikeRemovedDistanceM={}, "
+                        + "gapEdgeCount={}, gapAcceptedCount={}, gapRejectedCount={}, "
+                        + "gapRejectedDistanceM={}, maxGapEdgeM={}, maxGapEdgeSec={}, stopCount={}, "
+                        + "stopSec={}, stopRemovedDistanceM={}, maxStopSec={}, "
+                        + "maxStopDisplacementM={}, radiusClampedCount={}",
+                runningRoomId, userId, onGoal ? "GOAL" : "FINISH", lastPointLagSec,
+                Math.round(summary.rawMeters()), Math.round(summary.filteredMeters()),
+                summary.pauseBoundaryCount(), Math.round(summary.pauseRemovedMeters()),
+                summary.accuracyDroppedCount(), Math.round(summary.accuracyRemovedMeters()),
+                summary.spikePointCount(),
+                summary.jumpEdgeCount(), Math.round(summary.spikeRemovedMeters()),
+                summary.gapEdgeCount(), summary.gapAcceptedCount(), summary.gapRejectedCount(),
+                Math.round(summary.gapRejectedMeters()), Math.round(summary.maxGapEdgeMeters()),
+                Math.round(summary.maxGapEdgeSeconds()), summary.stopCount(),
+                Math.round(summary.stopSeconds()), Math.round(summary.stopRemovedMeters()),
+                Math.round(summary.maxStopSeconds()), Math.round(summary.maxStopDisplacementMeters()),
+                summary.radiusClampedCount());
+    }
+
+    // 마지막으로 받은 좌표의 측정 시각이 지금보다 얼마나 앞서는지. 클라가 종료 전에 남은 좌표를 먼저 보냈으면
+    // 1~2초, 안 보냈으면 배치 주기(10초)에 가깝다. 측정 시각은 단말 시계라 시계가 어긋난 단말은 값이 틀어진다
+    private static Long lastPointLagSeconds(RunningTrack track) {
+        if (track.isEmpty()) {
+            return null;
+        }
+        LocalDateTime lastRecordedAt = track.points().get(track.points().size() - 1).recordedAt();
+        return Duration.between(lastRecordedAt, LocalDateTime.now()).toSeconds();
     }
 }

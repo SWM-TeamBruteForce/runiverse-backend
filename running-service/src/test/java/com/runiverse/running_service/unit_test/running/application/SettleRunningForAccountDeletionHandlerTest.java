@@ -5,8 +5,10 @@ import com.runiverse.running_service.application.match.command.stream.MatchStrea
 import com.runiverse.running_service.application.match.common.MatchProperties;
 import com.runiverse.running_service.application.match.common.MatchRoomChangedEvent;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
+import com.runiverse.running_service.application.match.port.out.LoadMatchPlayersPort;
 import com.runiverse.running_service.application.match.port.out.LoadMatchRoomPort;
 import com.runiverse.running_service.application.match.port.out.LockMatchApplicationPort;
+import com.runiverse.running_service.application.match.port.out.MatchPlayer;
 import com.runiverse.running_service.application.match.port.out.MatchStreamEvent;
 import com.runiverse.running_service.application.match.port.out.RoomInfo;
 import com.runiverse.running_service.application.match.port.out.UpdateMatchRoomPort;
@@ -19,6 +21,7 @@ import com.runiverse.running_service.application.running.port.out.LockRunningRoo
 import com.runiverse.running_service.application.running.port.out.StartMatchCooldownPort;
 import com.runiverse.running_service.application.running.port.out.UpdateRunningPlayerPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.domain.running.metric.vo.Pace;
 import com.runiverse.running_service.domain.running.player.RunningPlayer;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerId;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerStatus;
@@ -40,6 +43,7 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -66,7 +70,8 @@ class SettleRunningForAccountDeletionHandlerTest {
     // 탈퇴는 오프셋을 보지 않는다 — 쿨다운 길이만 쓴다
     private static final MatchProperties MATCH_PROPERTIES = new MatchProperties(
             Duration.ofMinutes(10), Duration.ofSeconds(10), Duration.ofHours(6),
-            10, MATCH_COOLDOWN);
+            10, MATCH_COOLDOWN,
+            LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
     // 조립 결과는 이 테스트의 주제가 아니다 — 발행 여부만 본다
     private static final RoomInfo ROOM_INFO = new RoomInfo(
             ROOM_ID, RunningRoomStatus.MATCHING, LocalDateTime.now().plusHours(2),
@@ -78,6 +83,8 @@ class SettleRunningForAccountDeletionHandlerTest {
     private LoadMatchRoomPort loadMatchRoomPort;
     @Mock
     private LockRunningRoomPort lockRunningRoomPort;
+    @Mock
+    private LoadMatchPlayersPort loadMatchPlayersPort;
     @Mock
     private UpdateMatchRoomPort updateMatchRoomPort;
     @Mock
@@ -97,7 +104,7 @@ class SettleRunningForAccountDeletionHandlerTest {
     void setUp() {
         handler = new SettleRunningForAccountDeletionHandler(
                 lockMatchApplicationPort, loadMatchRoomPort, lockRunningRoomPort,
-                updateMatchRoomPort, updateRunningPlayerPort,
+                loadMatchPlayersPort, updateMatchRoomPort, updateRunningPlayerPort,
                 startMatchCooldownPort, finishRunningUsecase, roomInfoAssembler,
                 MATCH_PROPERTIES, eventPublisher);
     }
@@ -181,6 +188,38 @@ class SettleRunningForAccountDeletionHandlerTest {
         RunningRoom updated = updatedRoom();
         assertThat(updated.getPlayerCount().current()).isZero();
         assertThat(updated.getStatus()).isEqualTo(RunningRoomStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("시작 전 방에서 나가면 남은 참가자의 페이스로 방 평균을 다시 낸다")
+    void recalculatesAvgPaceWhenLeavingBeforeStart() {
+        // given -> 600인 내가 나가면 300인 상대만 남는다
+        givenActiveApplication(room(RunningRoomStatus.MATCHING, 2));
+        given(loadMatchPlayersPort.loadPlayers(new RunningRoomId(ROOM_ID))).willReturn(List.of(
+                new MatchPlayer(USER_ID, 600),
+                new MatchPlayer(UuidCreator.getTimeOrderedEpoch(), 300)));
+        given(roomInfoAssembler.assemble(any(RunningRoom.class))).willReturn(ROOM_INFO);
+
+        // when
+        handler.handle(new SettleRunningForAccountDeletionCommand(USER_ID));
+
+        // then
+        assertThat(updatedRoom().getAvgPace()).map(Pace::secondsPerKm).contains(300);
+    }
+
+    @Test
+    @DisplayName("시작된 방에서 미출석자가 나가면 방 평균을 그대로 둔다")
+    void keepsAvgPaceWhenLeavingAfterStart() {
+        // given -> 다시 내면 세션이 끊긴 완주자가 빠진다 — 뛴 방의 평균으로 남긴다
+        givenActiveApplication(room(RunningRoomStatus.STARTED, 2));
+        given(roomInfoAssembler.assemble(any(RunningRoom.class))).willReturn(ROOM_INFO);
+
+        // when
+        handler.handle(new SettleRunningForAccountDeletionCommand(USER_ID));
+
+        // then
+        assertThat(updatedRoom().getAvgPace()).map(Pace::secondsPerKm).contains(AVG_PACE);
+        verifyNoInteractions(loadMatchPlayersPort);
     }
 
     @Test

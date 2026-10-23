@@ -147,6 +147,8 @@ class UserAccountE2eTest extends E2eTestSupport {
         point.put("longitude", 126.9780);
         point.put("accuracyMeters", 5.0);
         point.put("cadenceSpm", 170);
+        // 일시정지 없이 달린다 — 필수 값이라 빠지면 배치 전체가 INVALID_REQUEST로 거부된다
+        point.put("pauseSegment", 0);
         point.put("recordedAt", LocalDateTime.now(APP_ZONE).minusSeconds(10 - sequence)
                 .format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         return point;

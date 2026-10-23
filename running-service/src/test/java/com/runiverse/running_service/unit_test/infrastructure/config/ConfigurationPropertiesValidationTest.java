@@ -1,5 +1,6 @@
 package com.runiverse.running_service.unit_test.infrastructure.config;
 
+import com.runiverse.running_service.infrastructure.oauth.apple.AppleOauthProperties;
 import com.runiverse.running_service.infrastructure.oauth.google.GoogleOauthProperties;
 import com.runiverse.running_service.infrastructure.oauth.kakao.KakaoOauthProperties;
 import com.runiverse.running_service.infrastructure.security.CorsProperties;
@@ -101,6 +102,19 @@ class ConfigurationPropertiesValidationTest {
 
         // when
         Set<ConstraintViolation<GoogleOauthProperties>> violations = validator.validate(properties);
+
+        // then
+        assertThat(paths(violations)).containsExactly("clientId");
+    }
+
+    @Test
+    @DisplayName("애플 client id가 비면 위반이다")
+    void appleRejectsBlankClientId() {
+        // given -> ID 토큰의 aud로 검증하는 값이라 비면 모든 애플 로그인이 거절된다
+        AppleOauthProperties properties = new AppleOauthProperties("", "jwk-set-uri");
+
+        // when
+        Set<ConstraintViolation<AppleOauthProperties>> violations = validator.validate(properties);
 
         // then
         assertThat(paths(violations)).containsExactly("clientId");

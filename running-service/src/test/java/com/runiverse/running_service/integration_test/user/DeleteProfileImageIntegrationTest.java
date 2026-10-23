@@ -5,8 +5,9 @@ import com.runiverse.running_service.application.user.command.profileimage.Chang
 import com.runiverse.running_service.application.user.command.profileimage.ChangeProfileImageHandler;
 import com.runiverse.running_service.application.user.command.profileimage.DeleteProfileImageCommand;
 import com.runiverse.running_service.application.user.command.profileimage.DeleteProfileImageHandler;
-import com.runiverse.running_service.application.user.command.profileimage.ProfileImageContentType;
-import com.runiverse.running_service.application.user.command.profileimage.ProfileImageKeyPolicy;
+import com.runiverse.running_service.application.user.common.ImageContentType;
+import com.runiverse.running_service.application.user.common.UploadedImageVerifier;
+import com.runiverse.running_service.application.user.common.UserImageType;
 import com.runiverse.running_service.integration_test.fake.FakeUploadedImageStore;
 import com.runiverse.running_service.integration_test.fake.InMemoryProfileImageStore;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,7 +37,7 @@ public class DeleteProfileImageIntegrationTest {
         uploadedImageStore = new FakeUploadedImageStore();
         profileImageStore = new InMemoryProfileImageStore();
         changeHandler = new ChangeProfileImageHandler(
-                uploadedImageStore,  // LoadUploadedImagePort
+                new UploadedImageVerifier(uploadedImageStore),  // LoadUploadedImagePort
                 profileImageStore    // UpdateProfileImagePort
         );
         deleteHandler = new DeleteProfileImageHandler(
@@ -45,8 +46,8 @@ public class DeleteProfileImageIntegrationTest {
     }
 
     private static String keyOf(UUID owner) {
-        return ProfileImageKeyPolicy.create(
-                owner, UuidCreator.getTimeOrderedEpoch(), ProfileImageContentType.JPEG).value();
+        return UserImageType.PROFILE.createKey(
+                owner, UuidCreator.getTimeOrderedEpoch(), ImageContentType.JPEG);
     }
 
     // 업로드 확정까지 마친 상태를 만든다

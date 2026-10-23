@@ -14,7 +14,9 @@ public enum RunningErrorCode implements ErrorCode {
     // 외부 저장소 장애로 세션을 등록하지 못한 경우 — 클라는 잠시 뒤 RUNNING_START를 재시도한다
     RUNNING_SESSION_UNAVAILABLE("RUNNING_SESSION_UNAVAILABLE", "일시적인 오류로 러닝을 시작하지 못했습니다."),
     // 좌표를 저장하지 못한 경우 — 러닝은 계속된다. 클라는 로컬 트랙을 지우지 않고 재연결로 복구한다
-    RUNNING_TRACK_UNAVAILABLE("RUNNING_TRACK_UNAVAILABLE", "위치 정보를 저장하지 못했습니다.");
+    RUNNING_TRACK_UNAVAILABLE("RUNNING_TRACK_UNAVAILABLE", "위치 정보를 저장하지 못했습니다."),
+    // 클라 로컬 트랙이 깨졌다 — 같은 배치를 다시 보내도 계속 거부된다. WS ERROR로 나간다
+    PAUSE_SEGMENT_DECREASED("PAUSE_SEGMENT_DECREASED", "일시정지 구간 번호가 줄어들 수 없습니다.");
     private final String code;
     private final String message;
 }

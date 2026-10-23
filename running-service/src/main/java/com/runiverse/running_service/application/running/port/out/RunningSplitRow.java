@@ -11,6 +11,8 @@ public record RunningSplitRow(
         Integer averageCadenceSpm,
         Integer elevationChangeMeters,
         int caloriesKcal,
+        // 끝 경계점이 있는 조각 — 경로 범위는 이 조각 안의 점 번호다
+        int segmentNumber,
         int routeStartIndex,
         int routeEndIndex
 ) {

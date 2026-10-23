@@ -2,6 +2,7 @@ package com.runiverse.running_service.application.running.command.forcefinish;
 
 import com.runiverse.running_service.application.match.common.MatchProperties;
 import com.runiverse.running_service.application.running.command.finish.FinishRunningCommand;
+import com.runiverse.running_service.application.running.common.RunningComboArchiver;
 import com.runiverse.running_service.application.running.port.in.FinishRunningUsecase;
 import com.runiverse.running_service.application.running.port.in.ForceFinishRunningRoomUsecase;
 import com.runiverse.running_service.application.running.port.out.ExistsRunningRecordPort;
@@ -51,6 +52,7 @@ public class ForceFinishRunningRoomHandler implements ForceFinishRunningRoomUsec
     private final ExistsRunningRecordPort existsRunningRecordPort;
     private final FinishRunningUsecase finishRunningUsecase;
     private final MatchProperties matchProperties;
+    private final RunningComboArchiver runningComboArchiver;
 
     @Override
     public void handle(ForceFinishRunningRoomCommand command) {
@@ -115,20 +117,22 @@ public class ForceFinishRunningRoomHandler implements ForceFinishRunningRoomUsec
             startMatchCooldownPort.start(player.getUserId(), matchProperties.cooldown());
         }
     }
-    
+
     // 위에서 들고 있던 방은 러닝 종료가 다시 읽어 고쳤을 수 있다 — 반드시 새로 읽는다.
     // 그 인스턴스로 update를 부르면 방금 닫힌 상태를 되돌린다
     private void closeRoomIfStillOpen(RunningRoomId roomId) {
         RunningRoom room = loadRunningRoomPort.loadById(roomId).orElseThrow();
         if (room.getStatus().isTerminal()) {
-            return;   // 마지막 참가자의 러닝 종료가 이미 닫았다
+            return;   // 마지막 참가자의 러닝 종료가 이미 닫았다 — 콤보 정리도 거기서 걸었다
         }
         LocalDateTime closedAt = LocalDateTime.now();
         // 러닝 종료와 같은 규칙이다 — 남길 기록이 있으면 FINISHED, 없으면 CANCELLED
         if (existsRunningRecordPort.existsInRoom(roomId)) {
             room.finish(closedAt);
+            runningComboArchiver.archiveAfterCommit(roomId.value());
         } else {
             room.cancel(closedAt);
+            runningComboArchiver.discardAfterCommit(roomId.value());
         }
         updateRunningRoomPort.update(room);
     }

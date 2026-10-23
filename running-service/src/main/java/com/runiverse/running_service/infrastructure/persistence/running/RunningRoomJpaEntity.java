@@ -65,7 +65,7 @@ public class RunningRoomJpaEntity extends BaseTimeEntity {
     // 방의 목표 거리(미터). 매칭 조건이라 정해진 뒤에는 바뀌지 않는다 — 목표 없는 솔로는 null
     @Column(name = "target_distance")
     private Integer targetDistance;
-    // 참가자 평균 페이스(초/km). 참가·이탈마다 갱신
+    // 참가자 평균 페이스(초/km). 시작 전까지 참가·이탈마다 갱신하고 시작 후에는 고정
     @Column(name = "avg_pace")
     private Integer avgPace;
     // 자리 수 — 매칭 4, 솔로 1. 생성 시 정해지고 갱신하지 않는다

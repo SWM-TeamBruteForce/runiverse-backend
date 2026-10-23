@@ -7,7 +7,8 @@ public record RunningProgressPayload(
         int distanceMeters,
         Integer targetDistanceMeters,
         Integer currentPaceSecondsPerKm,
-        boolean paused
+        // RUNNING | PAUSED | DISCONNECTED | FINISHED
+        String status
 ) {
 
     public static RunningProgressPayload from(RunningProgress progress) {
@@ -16,6 +17,7 @@ public record RunningProgressPayload(
                 progress.distanceMeters(),
                 progress.targetDistanceMeters(),
                 progress.currentPaceSecondsPerKm(),
-                progress.paused());
+                progress.status().name());
     }
 }
+

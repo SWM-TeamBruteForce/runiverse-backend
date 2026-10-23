@@ -38,13 +38,15 @@ public final class MatchStream implements AutoCloseable {
         this.received = received;
     }
 
-    static MatchStream open(HttpClient httpClient, String url, String accessToken) {
-        HttpRequest request = HttpRequest.newBuilder()
+    static MatchStream open(HttpClient httpClient, String url, String accessToken,
+                            Map<String, String> headers) {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Accept", "text/event-stream")
                 .header("Authorization", "Bearer " + accessToken)
-                .GET()
-                .build();
+                .GET();
+        headers.forEach(builder::header);
+        HttpRequest request = builder.build();
         // 본문이 계속 흘러오는 연결이라 요청 timeout 대신 헤더 수신까지만 기다린다
         HttpResponse<Stream<String>> response = awaitHeaders(
                 httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofLines()));

@@ -5,8 +5,13 @@ import com.runiverse.running_service.application.match.command.apply.ApplyMatchR
 import com.runiverse.running_service.application.match.command.cancel.CancelMatchCommand;
 import com.runiverse.running_service.application.match.port.in.ApplyMatchUsecase;
 import com.runiverse.running_service.application.match.port.in.CancelMatchUsecase;
+import com.runiverse.running_service.application.match.port.in.GetMatchSlotsUsecase;
+import com.runiverse.running_service.application.match.query.slot.GetMatchSlotsQuery;
+import com.runiverse.running_service.application.match.query.slot.GetMatchSlotsResult;
 import com.runiverse.running_service.presentation.match.request.ApplyMatchRequest;
+import com.runiverse.running_service.presentation.match.request.MatchSlotsRequest;
 import com.runiverse.running_service.presentation.match.response.ApplyMatchResponse;
+import com.runiverse.running_service.presentation.match.response.MatchSlotsResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -14,6 +19,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,8 +35,17 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class RunningMatchController {
 
+    private final GetMatchSlotsUsecase getMatchSlotsUsecase;
     private final ApplyMatchUsecase applyMatchUsecase;
     private final CancelMatchUsecase cancelMatchUsecase;
+
+    // 누가 보든 같은 목록이라 사용자를 넘기지 않는다 — 인증은 SecurityConfig가 요구한다
+    @GetMapping("slots")
+    public ResponseEntity<MatchSlotsResponse> getSlots(@Valid @ModelAttribute MatchSlotsRequest request) {
+        GetMatchSlotsResult result = getMatchSlotsUsecase.handle(
+                new GetMatchSlotsQuery(request.dateOrToday(), request.distanceMeters()));
+        return ResponseEntity.ok(MatchSlotsResponse.from(result));
+    }
 
     @PostMapping
     public ResponseEntity<ApplyMatchResponse> apply(

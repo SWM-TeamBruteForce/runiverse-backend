@@ -49,7 +49,9 @@ public class InMemoryRunningResultStore
     public Optional<RunningResultRecord> loadRecord(RunningRoomId runningRoomId, UserId userId) {
         return recordStore.find(runningRoomId.value(), userId)
                 .map(record -> new RunningResultRecord(
-                        record.getRoutePolyline().value(),
+                        record.getSegments().stream()
+                                .map(segment -> segment.getRoutePolyline().value())
+                                .toList(),
                         record.getPeriod().startAt(),
                         record.getPeriod().endAt(),
                         record.getTotalDistance().meters(),
@@ -84,6 +86,7 @@ public class InMemoryRunningResultStore
                 split.getAvgCadence().map(Cadence::stepsPerMinute).orElse(null),
                 split.getElevationChange().map(ElevationChange::meters).orElse(null),
                 split.getCalories().kcal(),
+                split.getSegmentNumber().value(),
                 split.getRouteRange().startIndex(),
                 split.getRouteRange().endIndex());
     }

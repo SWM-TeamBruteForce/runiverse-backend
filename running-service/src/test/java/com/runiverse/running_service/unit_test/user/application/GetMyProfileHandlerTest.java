@@ -55,7 +55,7 @@ public class GetMyProfileHandlerTest {
 
     private static User userWith(UUID userId, String introduction) {
         return new User(userId, "runner@runiverse.com", PASSWORD_HASH, true,
-                null, ProfileVisibility.PUBLIC, introduction);
+                null, null, ProfileVisibility.PUBLIC, introduction);
     }
 
     private static OnboardingProfile onboardingProfile() {

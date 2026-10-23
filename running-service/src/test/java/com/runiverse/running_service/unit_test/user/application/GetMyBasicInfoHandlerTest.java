@@ -52,7 +52,7 @@ public class GetMyBasicInfoHandlerTest {
 
     private static User userOf(UUID userId) {
         return new User(userId, EMAIL, PASSWORD_HASH, true,
-                null, ProfileVisibility.PUBLIC, "즐겁게 달려요");
+                null, null, ProfileVisibility.PUBLIC, "즐겁게 달려요");
     }
 
     private void givenUser(UUID userId) {

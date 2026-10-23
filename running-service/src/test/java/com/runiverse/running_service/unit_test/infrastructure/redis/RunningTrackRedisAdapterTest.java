@@ -5,10 +5,14 @@ import com.runiverse.running_service.application.running.exception.RunningTrackU
 import com.runiverse.running_service.application.running.port.out.RunningTrack;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.infrastructure.metrics.running.RunningStateMeter;
+import com.runiverse.running_service.infrastructure.metrics.running.RunningStateMeterProperties;
 import com.runiverse.running_service.infrastructure.redis.running.RunningTrackProperties;
 import com.runiverse.running_service.infrastructure.redis.running.RunningTrackRedisAdapter;
 import com.runiverse.running_service.support.LogCapture;
 import ch.qos.logback.classic.Level;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -58,10 +62,15 @@ class RunningTrackRedisAdapterTest {
     private UserId userId;
 
     private LogCapture log;
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @BeforeEach
     void setUp() {
-        adapter = new RunningTrackRedisAdapter(redisTemplate, new RunningTrackProperties(TTL));
+        // 계측은 실제 구현을 쓴다 — 어댑터가 어느 접근을 어떤 태그로 넘기는지가 검증 대상이다.
+        // 문턱을 크게 잡아 지연 로그가 어댑터 로그 검증에 섞이지 않게 한다
+        RunningStateMeter stateMeter = new RunningStateMeter(
+                meterRegistry, new RunningStateMeterProperties(Duration.ofHours(1)));
+        adapter = new RunningTrackRedisAdapter(redisTemplate, new RunningTrackProperties(TTL), stateMeter);
         userId = new UserId(UuidCreator.getTimeOrderedEpoch());
         log = LogCapture.of(RunningTrackRedisAdapter.class);
     }
@@ -71,16 +80,20 @@ class RunningTrackRedisAdapterTest {
         log.stop();
     }
 
-    // 단말이 모두 측정한 좌표 — 인자 순서는 [순번,위도,경도,고도,정확도,속도,방위,케이던스,페이스,시각]
+    // 단말이 모두 측정한 좌표 — 인자 순서는 [순번,위도,경도,고도,정확도,속도,방위,케이던스,페이스,시각,일시정지 구간]
     private static TrackPoint point(long sequence) {
+        return point(sequence, 0);
+    }
+
+    private static TrackPoint point(long sequence, int pauseSegment) {
         return new TrackPoint(
-                sequence, 35.17955, 129.07564, 18.4, 6.2, 2.8, 85.3, 165, 345, RECORDED_AT);
+                sequence, 35.17955, 129.07564, 18.4, 6.2, 2.8, 85.3, 165, 345, RECORDED_AT, pauseSegment);
     }
 
     // 고도·속도·방위·케이던스·페이스를 못 잰 좌표 — Location.isValid()가 막지 않는 조합이다
     private static TrackPoint pointWithoutOptionalFields(long sequence) {
         return new TrackPoint(
-                sequence, 35.17955, 129.07564, null, 6.2, null, null, null, null, RECORDED_AT);
+                sequence, 35.17955, 129.07564, null, 6.2, null, null, null, null, RECORDED_AT, 0);
     }
 
     // execute(script, keys, args...)는 가변 인자라 매처로 잡기 까다롭다 — 실제 호출을 직접 읽는다
@@ -141,10 +154,10 @@ class RunningTrackRedisAdapterTest {
         // when
         adapter.append(ROOM_ID, userId, List.of(point(7)));
 
-        // then -> [순번,위도,경도,고도,정확도,속도,방위,케이던스,페이스,시각]
+        // then -> [순번,위도,경도,고도,정확도,속도,방위,케이던스,페이스,시각,일시정지 구간]
         assertThat(scriptArgs()[2]).isEqualTo("7");
         assertThat(scriptArgs()[3]).isEqualTo(
-                "[7,35.17955,129.07564,18.4,6.2,2.80,85.3,165,345,%d]".formatted(EPOCH_SECOND));
+                "[7,35.17955,129.07564,18.4,6.2,2.80,85.3,165,345,%d,0]".formatted(EPOCH_SECOND));
     }
 
     @Test
@@ -158,7 +171,7 @@ class RunningTrackRedisAdapterTest {
 
         // then -> 값이 없다는 사실이 남아야 읽는 쪽이 표본에서 제외할 수 있다
         assertThat(scriptArgs()[3]).isEqualTo(
-                "[0,35.17955,129.07564,null,6.2,null,null,null,null,%d]".formatted(EPOCH_SECOND));
+                "[0,35.17955,129.07564,null,6.2,null,null,null,null,%d,0]".formatted(EPOCH_SECOND));
     }
 
     @Test
@@ -299,6 +312,32 @@ class RunningTrackRedisAdapterTest {
     }
 
     @Test
+    @DisplayName("일시정지 구간 번호를 맨 끝 칸에 적는다")
+    void writesPauseSegmentLast() {
+        // when
+        adapter.append(ROOM_ID, userId, List.of(point(7, 3)));
+
+        // then -> 맨 끝에 붙여야 앞 열 칸의 자리가 옛 형식과 같다
+        assertThat(scriptArgs()[3]).isEqualTo(
+                "[7,35.17955,129.07564,18.4,6.2,2.80,85.3,165,345,%d,3]".formatted(EPOCH_SECOND));
+    }
+
+    @Test
+    @DisplayName("일시정지 구간 번호를 값 그대로 되읽는다")
+    void roundTripsPauseSegment() {
+        // given -> 0이 아닌 값이어야 자리가 어긋나거나 0으로 메워진 것을 가린다
+        TrackPoint original = point(7, 3);
+        givenStoredBatches("[" + compacted(original) + "]");
+
+        // when
+        TrackPoint restored = adapter.load(ROOM_ID, userId).points().getFirst();
+
+        // then
+        assertThat(restored).isEqualTo(original);
+        assertThat(restored.pauseSegment()).isEqualTo(3);
+    }
+
+    @Test
     @DisplayName("단말이 못 잰 값은 null로 되살린다")
     void restoresMissingValuesAsNull() {
         // given
@@ -353,5 +392,76 @@ class RunningTrackRedisAdapterTest {
 
         // then
         assertThat(appended).isZero();
+    }
+
+    private Timer access(String phase, String operation, String result) {
+        return meterRegistry.get("runiverse.running.state.access")
+                .tag("store", "redis")
+                .tag("target", "track")
+                .tag("phase", phase)
+                .tag("operation", operation)
+                .tag("result", result)
+                .timer();
+    }
+
+    @Test
+    @DisplayName("좌표 저장은 러닝 중 쓰기 한 건으로 센다")
+    void measuresAppendAsRunningWrite() {
+        // when
+        adapter.append(ROOM_ID, userId, List.of(point(0), point(1)));
+
+        // then -> 좌표가 몇 개든 포트 호출 한 번이 한 건이다
+        assertThat(access("running", "write", "success").count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("트랙 조회는 종료 읽기로 세고 되살린 좌표 수를 함께 남긴다")
+    void measuresLoadAsFinishReadWithPointCount() {
+        // given -> 배치 두 개에 좌표 세 개
+        adapter.append(ROOM_ID, userId, List.of(point(0), point(1), point(2)));
+        Object[] args = scriptArgs();
+        String first = (String) args[3];
+        String second = (String) args[5];
+        String third = (String) args[7];
+        givenStoredBatches("[" + first + "," + second + "]", "[" + third + "]");
+
+        // when
+        adapter.load(ROOM_ID, userId);
+
+        // then -> 배치(stream 엔트리) 수가 아니라 좌표 수다 — DB 버전의 행 단위와 맞춰 비교한다
+        assertThat(access("finish", "read", "success").count()).isEqualTo(1);
+        assertThat(meterRegistry.get("runiverse.running.state.loaded")
+                .tag("store", "redis")
+                .tag("target", "track")
+                .summary()
+                .totalAmount()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("트랙 조회가 실패하면 종료 읽기 실패로 센다")
+    void measuresLoadFailure() {
+        // given
+        StreamOperations<String, Object, Object> streamOperations = mock(StreamOperations.class);
+        given(redisTemplate.<Object, Object>opsForStream()).willReturn(streamOperations);
+        given(streamOperations.range(anyString(), any()))
+                .willThrow(new RedisConnectionFailureException("redis down"));
+
+        // when
+        assertThatThrownBy(() -> adapter.load(ROOM_ID, userId))
+                .isInstanceOf(RunningTrackUnavailableException.class);
+
+        // then -> 갈아끼운 예외도 계측을 지나므로 실패로 잡힌다. 읽은 양은 남지 않는다
+        assertThat(access("finish", "read", "failure").count()).isEqualTo(1);
+        assertThat(meterRegistry.find("runiverse.running.state.loaded").summary()).isNull();
+    }
+
+    @Test
+    @DisplayName("트랙 삭제는 종료 쓰기로 센다")
+    void measuresDeleteAsFinishWrite() {
+        // when
+        adapter.delete(ROOM_ID, userId);
+
+        // then
+        assertThat(access("finish", "write", "success").count()).isEqualTo(1);
     }
 }

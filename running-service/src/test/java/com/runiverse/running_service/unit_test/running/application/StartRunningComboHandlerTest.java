@@ -2,11 +2,14 @@ package com.runiverse.running_service.unit_test.running.application;
 
 import ch.qos.logback.classic.Level;
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.running.command.combo.RunningComboSignal;
 import com.runiverse.running_service.application.running.command.combo.StartRunningComboCommand;
 import com.runiverse.running_service.application.running.command.combo.StartRunningComboHandler;
 import com.runiverse.running_service.application.running.command.combo.UpdateRunningComboJudge;
 import com.runiverse.running_service.application.running.port.out.LoadRunningComboSnapshotsPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningDistancePort;
+import com.runiverse.running_service.application.running.port.out.RunningDistance;
+import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.support.LogCapture;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,7 +23,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("러닝 콤보 시작 판정 단위 테스트")
@@ -68,5 +73,19 @@ class StartRunningComboHandlerTest {
         assertThat(log.messages(Level.ERROR)).containsExactly(
                 "[러닝] 콤보 시작 판정 실패: 처리하지 못한 예외 - roomId=" + ROOM_ID + ", userId=" + USER_ID);
         assertThat(log.events(Level.ERROR).getFirst().getThrowableProxy()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("첫 진입은 관측도 이동도 아닌 기준만 세운다 — 출발선에서 콤보가 붙지 않는다")
+    void judgesBaselineWithoutObservation() {
+        // given -> 처음 들어온 참가자. 저장된 누적이 없으니 0이다
+        given(loadRunningDistancePort.loadDistance(ROOM_ID, new UserId(USER_ID)))
+                .willReturn(RunningDistance.empty());
+
+        // when
+        handler.handle(new StartRunningComboCommand(ROOM_ID, USER_ID));
+
+        // then -> 관측으로 넘기면 출발선에 선 참가자가 달리는 중으로 잡힌다
+        verify(updateRunningComboJudge).judge(ROOM_ID, new UserId(USER_ID), RunningComboSignal.baseline(0));
     }
 }

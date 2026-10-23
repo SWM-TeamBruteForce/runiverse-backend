@@ -7,6 +7,7 @@ import com.runiverse.running_service.application.running.port.out.LoadRunningTra
 import com.runiverse.running_service.application.running.port.out.RunningTrack;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.infrastructure.metrics.running.RunningStateMeter;
 import com.runiverse.running_service.infrastructure.redis.RedisKey;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +27,11 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import static com.runiverse.running_service.infrastructure.metrics.running.RunningStatePhase.FINISH;
+import static com.runiverse.running_service.infrastructure.metrics.running.RunningStatePhase.RUNNING;
+import static com.runiverse.running_service.infrastructure.metrics.running.RunningStateStore.REDIS;
+import static com.runiverse.running_service.infrastructure.metrics.running.RunningStateTarget.TRACK;
 
 @Slf4j
 @Component
@@ -55,6 +61,7 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
             """, Long.class);
     private final StringRedisTemplate redisTemplate;
     private final RunningTrackProperties properties;
+    private final RunningStateMeter stateMeter;
 
     // Lua의 XADD가 쓰는 필드명과 같아야 한다
     private static final String POINTS_FIELD = "points";
@@ -75,10 +82,10 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
                     args.add(compact(point));
                 });
         try {
-            Long appended = redisTemplate.execute(
+            Long appended = stateMeter.write(REDIS, TRACK, RUNNING, runningRoomId, () -> redisTemplate.execute(
                     APPEND,
                     List.of(trackKey(runningRoomId, userId), seenKey(runningRoomId, userId)),
-                    args.toArray());
+                    args.toArray()));
             return appended == null ? 0 : appended.intValue();
         } catch (RuntimeException e) {
             // 이 배치는 못 담았지만 원본은 클라 로컬 트랙에 남아 있다.
@@ -94,7 +101,7 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
     private String compact(TrackPoint point) {
         return String.format(
                 Locale.ROOT,
-                "[%d,%.5f,%.5f,%s,%.1f,%s,%s,%s,%s,%d]",
+                "[%d,%.5f,%.5f,%s,%.1f,%s,%s,%s,%s,%d,%d]",
                 point.sequence(),
                 point.latitude(),
                 point.longitude(),
@@ -104,7 +111,8 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
                 nullable(point.headingDegrees(), "%.1f"),
                 nullable(point.cadenceSpm(), "%d"),
                 nullable(point.currentPaceSecondsPerKm(), "%d"),
-                point.recordedAt().atZone(ZoneId.systemDefault()).toEpochSecond());
+                point.recordedAt().atZone(ZoneId.systemDefault()).toEpochSecond(),
+                point.pauseSegment());
     }
 
     // 못 잰 값은 JSON null로 적어 자리를 지킨다 — 배열이라 칸을 비우면 뒤가 밀린다.
@@ -113,8 +121,15 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
         return value == null ? "null" : String.format(Locale.ROOT, format, value);
     }
 
+    // 종료 때 러닝 하나치를 통째로 읽는다 — 가져오기와 복원(파싱)을 함께 잰다.
+    // DB로 바꾸면 행을 객체로 옮기는 시간이 같이 잡히므로 여기서도 복원까지 넣어야 공정하다
     @Override
     public RunningTrack load(Long runningRoomId, UserId userId) {
+        return stateMeter.load(REDIS, TRACK, runningRoomId,
+                () -> fetch(runningRoomId, userId), track -> track.points().size());
+    }
+
+    private RunningTrack fetch(Long runningRoomId, UserId userId) {
         List<MapRecord<String, Object, Object>> batches;
         try {
             batches = redisTemplate.opsForStream()
@@ -158,7 +173,8 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
                     toInteger(fields[8]),
                     LocalDateTime.ofInstant(
                             Instant.ofEpochSecond(Long.parseLong(fields[9])),
-                            ZoneId.systemDefault())));
+                            ZoneId.systemDefault()),
+                    Integer.parseInt(fields[10])));      // 일시정지 구간 번호
         }
         return points;
     }
@@ -182,8 +198,8 @@ public class RunningTrackRedisAdapter implements AppendRunningTrackPort, LoadRun
     @Override
     public void delete(Long runningRoomId, UserId userId) {
         try {
-            redisTemplate.delete(List.of(
-                    trackKey(runningRoomId, userId), seenKey(runningRoomId, userId)));
+            stateMeter.write(REDIS, TRACK, FINISH, runningRoomId, () -> redisTemplate.delete(List.of(
+                    trackKey(runningRoomId, userId), seenKey(runningRoomId, userId))));
         } catch (RuntimeException e) {
             log.error("[러닝] 트랙 삭제 실패: Redis 오류 - roomId={}, userId={}", runningRoomId, userId.value(), e);
         }

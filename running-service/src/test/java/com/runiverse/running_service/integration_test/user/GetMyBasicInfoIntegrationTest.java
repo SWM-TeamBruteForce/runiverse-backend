@@ -1,8 +1,6 @@
 package com.runiverse.running_service.integration_test.user;
 
 import com.github.f4b6a3.uuid.UuidCreator;
-import com.runiverse.running_service.infrastructure.metrics.AuthMetricAdapter;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import com.runiverse.running_service.application.auth.command.oauthlogin.OauthLoginCommand;
 import com.runiverse.running_service.application.auth.command.oauthlogin.OauthLoginHandler;
 import com.runiverse.running_service.application.auth.command.oauthlogin.OauthUserResolver;
@@ -18,7 +16,9 @@ import com.runiverse.running_service.application.user.query.basicinfo.GetMyBasic
 import com.runiverse.running_service.application.user.query.basicinfo.GetMyBasicInfoQuery;
 import com.runiverse.running_service.application.user.query.basicinfo.GetMyBasicInfoResult;
 import com.runiverse.running_service.domain.user.vo.Provider;
+import com.runiverse.running_service.infrastructure.metrics.auth.AuthMetricAdapter;
 import com.runiverse.running_service.integration_test.IntegrationTestSupport;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -62,8 +62,9 @@ public class GetMyBasicInfoIntegrationTest extends IntegrationTestSupport {
                 userStore         // SaveUserPort
         );
         oauthLoginHandler = new OauthLoginHandler(
-                oauthClient,       // LoadKakaoProfilePort
-                oauthClient,       // LoadGoogleProfilePort
+                googleOauthClient, // LoadGoogleProfilePort
+                kakaoOauthClient,  // LoadKakaoProfilePort
+                appleOauthClient,  // LoadAppleProfilePort
                 oauthUserResolver,
                 tokenProvider,     // GenerateTokenPort
                 tokenProvider,     // RefreshTokenHashPort
@@ -86,8 +87,8 @@ public class GetMyBasicInfoIntegrationTest extends IntegrationTestSupport {
                 onboardingStore,  // LoadNicknamePort
                 userStore         // LoadOauthProviderPort
         );
-        oauthClient.register(KAKAO_CODE, new OauthProfile(Provider.KAKAO, KAKAO_ID, KAKAO_EMAIL));
-        oauthClient.register(GOOGLE_ID_TOKEN,new OauthProfile(Provider.GOOGLE, GOOGLE_ID, GOOGLE_EMAIL));
+        googleOauthClient.register(GOOGLE_ID_TOKEN, new OauthProfile(Provider.GOOGLE, GOOGLE_ID, GOOGLE_EMAIL));
+        kakaoOauthClient.register(KAKAO_CODE, new OauthProfile(Provider.KAKAO, KAKAO_ID, KAKAO_EMAIL));
     }
 
     private UUID signUp(String email) {
@@ -95,11 +96,11 @@ public class GetMyBasicInfoIntegrationTest extends IntegrationTestSupport {
     }
 
     private UUID kakaoLogin() {
-        return oauthLoginHandler.handle(new OauthLoginCommand("kakao", null, KAKAO_CODE, CODE_VERIFIER)).userId();
+        return oauthLoginHandler.handle(new OauthLoginCommand("kakao", null, null, KAKAO_CODE, CODE_VERIFIER)).userId();
     }
 
     private UUID googleLogin() {
-        return oauthLoginHandler.handle(new OauthLoginCommand("google", GOOGLE_ID_TOKEN, null, null)).userId();
+        return oauthLoginHandler.handle(new OauthLoginCommand("google", GOOGLE_ID_TOKEN, null, null, null)).userId();
     }
 
     private void completeOnboarding(UUID userId, String nickname) {

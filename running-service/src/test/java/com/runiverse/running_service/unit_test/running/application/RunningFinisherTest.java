@@ -1,8 +1,12 @@
 package com.runiverse.running_service.unit_test.running.application;
 
-import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.running.port.out.RecordRunningMetricPort;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionSynchronization;
 import com.runiverse.running_service.application.common.port.out.UpdateUserAvgPacePort;
 import com.runiverse.running_service.application.running.common.CalorieCalculator;
+import com.runiverse.running_service.application.running.common.GoalCheck;
+import com.runiverse.running_service.application.running.common.LiveRunningStatusChanger;
 import com.runiverse.running_service.application.running.common.RunningFinishProperties;
 import com.runiverse.running_service.application.running.common.RunningFinisher;
 import com.runiverse.running_service.application.running.exception.NotRoomPlayerException;
@@ -13,12 +17,14 @@ import com.runiverse.running_service.application.running.port.out.DeleteRunningT
 import com.runiverse.running_service.application.running.port.out.ExistsRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.ExistsRunningRecordPort;
 import com.runiverse.running_service.application.running.port.out.GpsTrackUpload;
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
 import com.runiverse.running_service.application.running.port.out.LoadRecentRunningPacesPort;
 import com.runiverse.running_service.application.running.port.out.LoadRunningTrackPort;
 import com.runiverse.running_service.application.running.port.out.LoadUserWeightPort;
 import com.runiverse.running_service.application.running.port.out.LoadWeatherPort;
 import com.runiverse.running_service.application.running.port.out.LockRunningPlayerPort;
 import com.runiverse.running_service.application.running.port.out.LockRunningRoomPort;
+import com.runiverse.running_service.application.running.port.out.MarkRunningComboFinishedPort;
 import com.runiverse.running_service.application.running.port.out.RecentRunningPace;
 import com.runiverse.running_service.application.running.port.out.RunningTrack;
 import com.runiverse.running_service.application.running.port.out.SaveGpsTrackPort;
@@ -41,6 +47,9 @@ import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
 import com.runiverse.running_service.domain.user.vo.AvgPace;
+import com.runiverse.running_service.support.LogCapture;
+import ch.qos.logback.classic.Level;
+import com.github.f4b6a3.uuid.UuidCreator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -60,15 +69,23 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import com.runiverse.running_service.application.running.common.RunningComboArchiver;
 
+import static org.mockito.ArgumentMatchers.anyLong;
+import static com.runiverse.running_service.support.TrackFilterFixtures.DEFAULT_PROPERTIES;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.STRING;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -143,8 +160,23 @@ public class RunningFinisherTest {
     @Mock
     private UpdateUserAvgPacePort updateUserAvgPacePort;
 
+    // 판정·발행·실패 처리는 LiveRunningStatusChangerTest가 본다 — 여기서는 언제 부르는지만 본다
+    @Mock
+    private LiveRunningStatusChanger liveRunningStatusChanger;
+
+    // 콤보 저장은 RunningComboArchiverTest가 본다 — 여기서는 방을 닫을 때 어느 쪽을 거는지만 본다
+    @Mock
+    private RunningComboArchiver runningComboArchiver;
+
+    @Mock
+    private MarkRunningComboFinishedPort markRunningComboFinishedPort;
+
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    // 메트릭 이름·태그는 RunningMetricAdapterTest가 본다 — 여기서는 언제 무엇을 알리는지만 본다
+    @Mock
+    private RecordRunningMetricPort recordRunningMetricPort;
 
     @Captor
     private ArgumentCaptor<RunningRecord> recordCaptor;
@@ -162,7 +194,8 @@ public class RunningFinisherTest {
                 createRunningRecordPort, updateRunningPlayerPort, deleteRunningTrackPort,
                 existsRunningPlayerPort, updateRunningRoomPort, startMatchCooldownPort,
                 existsRunningRecordPort, loadRecentRunningPacesPort, updateUserAvgPacePort,
-                eventPublisher, PROPERTIES);
+                liveRunningStatusChanger, runningComboArchiver, markRunningComboFinishedPort,
+                eventPublisher, PROPERTIES, DEFAULT_PROPERTIES, recordRunningMetricPort);
         // 이 클래스의 트랙은 대부분 유효 러닝을 통과해 기록이 남는다 —
         // 기록 없이 닫히는 경우만 개별 테스트가 뒤집는다
         lenient().when(existsRunningRecordPort.existsInRoom(new RunningRoomId(ROOM_ID)))
@@ -220,7 +253,7 @@ public class RunningFinisherTest {
         List<TrackPoint> points = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             points.add(new TrackPoint(i, 37.5 + i * stepMeters / METERS_PER_DEGREE, 127.0,
-                    null, 5.0, null, null, cadenceSpm, null, TRACK_START.plusSeconds(i)));
+                    null, 5.0, null, null, cadenceSpm, null, TRACK_START.plusSeconds(i), 0));
         }
         return new RunningTrack("raw", points);
     }
@@ -249,8 +282,10 @@ public class RunningFinisherTest {
         return recordCaptor.getValue();
     }
 
+    // 그 시점 거리로 바로 확정하는 종료 — 조기 종료를 고른 사용자와 강제 종료 시각이 이 경로다.
+    // 확정 거리가 모자랄 때 미루는 forced=false는 아래 자동·사용자 종료 미루기 테스트가 따로 본다
     private void finish() {
-        finisher.finish(ROOM_ID, USER_ID);
+        finisher.finish(ROOM_ID, USER_ID, true);
     }
 
     @Test
@@ -483,7 +518,8 @@ public class RunningFinisherTest {
             // then -> 목표를 넘겨 뛰었으므로 목표 지점에서 끊긴다
             assertThat(record.getTotalDistance().meters()).isEqualTo(TARGET);
             assertThat(record.getSplits()).hasSize(TARGET / PROPERTIES.splitDistanceMeters());
-            assertThat(record.getRoutePolyline().value()).isNotBlank();
+            assertThat(record.getSegments()).singleElement()
+                    .satisfies(segment -> assertThat(segment.getRoutePolyline().value()).isNotBlank());
             assertThat(record.getGpsTrackKey().value()).isEqualTo(GPS_TRACK_KEY);
         }
 
@@ -643,6 +679,31 @@ public class RunningFinisherTest {
         }
 
         @Test
+        @DisplayName("방을 FINISHED로 닫으면 콤보 저장을 커밋 뒤로 건다")
+        void archivesCombosWhenRoomFinishes() {
+            // when
+            finishIn(room(RunningRoomType.MATCH, TARGET));
+
+            // then -> 같은 트랜잭션에서 저장하면 콤보 실패가 이 종료까지 롤백시킨다
+            verify(runningComboArchiver).archiveAfterCommit(ROOM_ID);
+            verify(runningComboArchiver, never()).discardAfterCommit(anyLong());
+        }
+
+        @Test
+        @DisplayName("아직 뛰는 참가자가 있으면 콤보를 건드리지 않는다")
+        void leavesCombosWhileOthersRun() {
+            // given
+            given(existsRunningPlayerPort.existsRunning(new RunningRoomId(ROOM_ID)))
+                    .willReturn(true);
+
+            // when
+            finishIn(room(RunningRoomType.MATCH, TARGET));
+
+            // then -> 남은 사람의 콤보는 아직 바뀐다
+            verifyNoInteractions(runningComboArchiver);
+        }
+
+        @Test
         @DisplayName("남은 자리 없이 닫힌 방은 즉시 강제 종료를 요청하지 않는다")
         void doesNotRequestForceFinishWhenNobodyRemains() {
             // when
@@ -690,6 +751,9 @@ public class RunningFinisherTest {
             // then -> 완료로 남기지 않는다. 닫힌 시각은 FINISHED와 같게 함께 찍힌다
             assertThat(room.getStatus()).isEqualTo(RunningRoomStatus.CANCELLED);
             assertThat(room.getCloseAt()).isPresent();
+            // 남길 기록이 없어 콤보도 저장하지 않고 상태만 지운다
+            verify(runningComboArchiver).discardAfterCommit(ROOM_ID);
+            verify(runningComboArchiver, never()).archiveAfterCommit(anyLong());
         }
 
         @Test
@@ -856,6 +920,493 @@ public class RunningFinisherTest {
 
             // then
             verifyNoInteractions(loadRecentRunningPacesPort, updateUserAvgPacePort);
+        }
+    }
+
+    @Nested
+    @DisplayName("화면 상태 테스트")
+    class LiveStatusTest {
+
+        @Test
+        @DisplayName("확정하면 방의 목표 거리와 함께 FINISHED로 바꾼다")
+        void marksFinished() {
+            // given
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(track(1_801, 2.8));
+
+            // when
+            finish();
+
+            // then -> 이후로는 끊김·늦은 좌표가 와도 상대 화면에 FINISHED 그대로다
+            verify(liveRunningStatusChanger).change(
+                    ROOM_ID, new UserId(USER_ID), TARGET, LiveRunningStatus.FINISHED);
+        }
+
+        @Test
+        @DisplayName("기록 없이 상태만 확정해도 FINISHED로 바꾼다")
+        void marksFinishedWithoutRecord() {
+            // given -> 좌표를 한 번도 못 받은 러닝. 기록은 없어도 러닝은 끝났다
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(new RunningTrack("[]", List.of()));
+            lenient().when(existsRunningRecordPort.existsInRoom(new RunningRoomId(ROOM_ID)))
+                    .thenReturn(false);
+
+            // when
+            finish();
+
+            // then
+            verify(liveRunningStatusChanger).change(
+                    ROOM_ID, new UserId(USER_ID), TARGET, LiveRunningStatus.FINISHED);
+        }
+
+        @Test
+        @DisplayName("목표 없는 솔로 방이면 목표 거리를 null로 넘긴다")
+        void passesNullTargetForSoloRoom() {
+            // given
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.SOLO, null));
+            givenTrack(track(1_801, 2.8));
+
+            // when
+            finish();
+
+            // then
+            verify(liveRunningStatusChanger).change(
+                    ROOM_ID, new UserId(USER_ID), null, LiveRunningStatus.FINISHED);
+        }
+
+        @Test
+        @DisplayName("이미 확정된 참가자의 재요청에는 다시 알리지 않는다")
+        void skipsAlreadyFinished() {
+            // given -> 첫 확정 때 이미 FINISHED를 썼다
+            givenPlayer(player(RunningPlayerStatus.COMPLETED, PAST.plusMinutes(20)));
+
+            // when
+            finish();
+
+            // then
+            verifyNoInteractions(liveRunningStatusChanger);
+        }
+
+        @Test
+        @DisplayName("트랜잭션 동기화가 활성이면 커밋 뒤에 알린다")
+        void marksFinishedOnlyAfterCommit() {
+            // given
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(track(1_801, 2.8));
+            TransactionSynchronizationManager.initSynchronization();
+            try {
+                // when
+                finish();
+
+                // then -> 롤백될 종료를 FINISHED로 알리면 되돌릴 길이 없다
+                verifyNoInteractions(liveRunningStatusChanger);
+
+                // when -> 커밋 성공을 흉내 낸다
+                TransactionSynchronizationManager.getSynchronizations()
+                        .forEach(TransactionSynchronization::afterCommit);
+
+                // then
+                verify(liveRunningStatusChanger).change(
+                        ROOM_ID, new UserId(USER_ID), TARGET, LiveRunningStatus.FINISHED);
+            } finally {
+                TransactionSynchronizationManager.clearSynchronization();
+            }
+        }
+
+        @Test
+        @DisplayName("롤백되면 FINISHED로 알리지 않는다")
+        void skipsOnRollback() {
+            // given
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(track(1_801, 2.8));
+            TransactionSynchronizationManager.initSynchronization();
+            try {
+                finish();
+
+                // when -> 커밋 실패를 흉내 낸다
+                TransactionSynchronizationManager.getSynchronizations().forEach(synchronization ->
+                        synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
+
+                // then -> 참가자는 여전히 RUNNING이다. 재시도가 다시 확정한다
+                verifyNoInteractions(liveRunningStatusChanger);
+            } finally {
+                TransactionSynchronizationManager.clearSynchronization();
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("콤보 끊기 테스트")
+    class ComboBreakTest {
+
+        @Test
+        @DisplayName("아직 뛰는 참가자가 있으면 커밋 뒤에 종료 표시를 남긴다")
+        void marksComboFinishedAfterCommit() {
+            // given -> 나만 먼저 끝냈다
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(track(1_801, 2.8));
+            given(existsRunningPlayerPort.existsRunning(new RunningRoomId(ROOM_ID)))
+                    .willReturn(true);
+            TransactionSynchronizationManager.initSynchronization();
+            try {
+                // when
+                finish();
+
+                // then -> 롤백될 종료로 콤보를 끊으면 되돌릴 길이 없다
+                verifyNoInteractions(markRunningComboFinishedPort);
+
+                // when -> 커밋 성공을 흉내 낸다
+                TransactionSynchronizationManager.getSynchronizations()
+                        .forEach(TransactionSynchronization::afterCommit);
+
+                // then -> 표시가 없으면 끝낸 사람은 관측 없음(보류)이라 상대 화면에 콤보가 남는다
+                verify(markRunningComboFinishedPort).markFinished(ROOM_ID, new UserId(USER_ID));
+            } finally {
+                TransactionSynchronizationManager.clearSynchronization();
+            }
+        }
+
+        @Test
+        @DisplayName("방이 닫히면 종료 표시를 남기지 않는다")
+        void skipsWhenRoomCloses() {
+            // given -> 마지막 한 명이 끝냈다
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(track(1_801, 2.8));
+
+            // when
+            finish();
+
+            // then -> 볼 사람이 없고, 콤보 상태는 방 닫힘이 지운다
+            verifyNoInteractions(markRunningComboFinishedPort);
+        }
+
+        @Test
+        @DisplayName("종료 표시를 못 남겨도 던지지 않고 ERROR로 남긴다")
+        void swallowsMarkFailure() {
+            // given
+            RunningPlayer player = player(RunningPlayerStatus.RUNNING, null);
+            givenPlayer(player);
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(track(1_801, 2.8));
+            given(existsRunningPlayerPort.existsRunning(new RunningRoomId(ROOM_ID)))
+                    .willReturn(true);
+            willThrow(new IllegalStateException("redis down"))
+                    .given(markRunningComboFinishedPort).markFinished(ROOM_ID, new UserId(USER_ID));
+            LogCapture log = LogCapture.of(RunningFinisher.class);
+
+            try {
+                // when -> 콤보는 곁가지다. 종료는 이미 확정됐다
+                assertThatCode(RunningFinisherTest.this::finish).doesNotThrowAnyException();
+
+                // then
+                assertThat(player.getStatus()).isEqualTo(RunningPlayerStatus.COMPLETED);
+                assertThat(log.messages(Level.ERROR)).containsExactly(
+                        "[러닝] 종료 참가자 콤보 끊기 실패: 처리하지 못한 예외 - roomId=" + ROOM_ID
+                                + ", userId=" + USER_ID);
+                assertThat(log.events(Level.ERROR).getFirst().getThrowableProxy()).isNotNull();
+            } finally {
+                log.stop();
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("확정 거리 미달 시 미루기 테스트")
+    class GoalCheckTest {
+
+        // 약 4,760m를 달린 뒤 제자리에서 2분 동안 3m씩 흔들린다 — 흔들림까지 더한 누적은 5km를 넘지만
+        // 필터가 정지로 빼면 목표에 못 미친다
+        private RunningTrack jitteredTrack() {
+            List<TrackPoint> points = new ArrayList<>();
+            int running = 1_700;
+            for (int i = 0; i < running; i++) {
+                points.add(new TrackPoint(i, 37.5 + i * 2.8 / METERS_PER_DEGREE, 127.0,
+                        null, 5.0, null, null, CADENCE, null, TRACK_START.plusSeconds(i), 0));
+            }
+            double stopLatitude = 37.5 + (running - 1) * 2.8 / METERS_PER_DEGREE;
+            double metersPerDegreeLongitude = METERS_PER_DEGREE * Math.cos(Math.toRadians(37.5));
+            for (int i = 1; i <= 120; i++) {
+                double east = i % 2 == 0 ? 3.0 : -3.0;
+                points.add(new TrackPoint(running - 1 + i, stopLatitude,
+                        127.0 + east / metersPerDegreeLongitude, null, 5.0, null, null, CADENCE, null,
+                        TRACK_START.plusSeconds(running - 1 + i), 0));
+            }
+            return new RunningTrack("raw", points);
+        }
+
+        @Test
+        @DisplayName("확정 거리도 목표 이상이면 완주로 확정하고 끝냈다고 답한다")
+        void completesWhenConfirmedDistanceReachesTarget() {
+            // given -> 약 5,040m
+            RunningPlayer player = player(RunningPlayerStatus.RUNNING, null);
+            givenPlayer(player);
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(track(1_801, 2.8));
+
+            // when
+            GoalCheck check = finisher.finishOnGoal(ROOM_ID, USER_ID);
+
+            // then
+            assertThat(check.finished()).isTrue();
+            assertThat(player.getStatus()).isEqualTo(RunningPlayerStatus.COMPLETED);
+        }
+
+        @Test
+        @DisplayName("확정 거리가 목표에 못 미치면 아무것도 바꾸지 않고 남은 거리를 답한다")
+        void leavesEverythingWhenConfirmedDistanceFallsShort() {
+            // given -> 기록을 만들지 않으므로 업로드·날씨 스텁을 깔지 않는다
+            RunningPlayer player = player(RunningPlayerStatus.RUNNING, null);
+            givenPlayer(player);
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            given(loadUserWeightPort.loadWeightKg(new UserId(USER_ID))).willReturn(Optional.of(WEIGHT));
+            given(loadRunningTrackPort.load(ROOM_ID, new UserId(USER_ID))).willReturn(jitteredTrack());
+
+            // when
+            GoalCheck check = finisher.finishOnGoal(ROOM_ID, USER_ID);
+
+            // then -> 남은 거리는 약 4,757m를 뺀 값이다. 다음 배치가 다시 확인해야 하므로 트랙도 지우지 않는다
+            assertThat(check.finished()).isFalse();
+            assertThat(check.remainingMeters()).isBetween(240, 250);
+            assertThat(player.getStatus()).isEqualTo(RunningPlayerStatus.RUNNING);
+            verifyNoInteractions(createRunningRecordPort, updateRunningPlayerPort,
+                    deleteRunningTrackPort, saveGpsTrackPort, updateRunningRoomPort);
+        }
+
+        @Test
+        @DisplayName("같은 트랙도 조기 종료를 고른 종료(forced=true)는 확정 거리로 바로 판정한다")
+        void userFinishConfirmsSameTrackImmediately() {
+            // given -> 자동 종료나 forced=false였다면 미뤘을 트랙이다
+            RunningPlayer player = player(RunningPlayerStatus.RUNNING, null);
+            givenPlayer(player);
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(jitteredTrack());
+
+            // when
+            finish();
+
+            // then -> 목표의 95%라 제재 없는 조기 종료다
+            assertThat(player.getStatus()).isEqualTo(RunningPlayerStatus.RUNNING_LEFT_NO_PENALTY);
+            assertThat(savedRecord().getTotalDistance().meters()).isLessThan(TARGET);
+        }
+
+        @Test
+        @DisplayName("다 뛰었다고 보고 누른 종료(forced=false)도 확정 거리가 모자라면 미루고 남은 거리를 답한다")
+        void deferredUserFinishLeavesEverything() {
+            // given -> 화면 거리(흔들림 포함)로는 5km를 넘었다
+            RunningPlayer player = player(RunningPlayerStatus.RUNNING, null);
+            givenPlayer(player);
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            given(loadUserWeightPort.loadWeightKg(new UserId(USER_ID))).willReturn(Optional.of(WEIGHT));
+            given(loadRunningTrackPort.load(ROOM_ID, new UserId(USER_ID))).willReturn(jitteredTrack());
+
+            // when
+            GoalCheck check = finisher.finish(ROOM_ID, USER_ID, false);
+
+            // then -> 그대로 확정하면 다 뛰었다고 믿는 사용자의 러닝이 조기 종료로 남는다
+            assertThat(check.finished()).isFalse();
+            assertThat(check.remainingMeters()).isBetween(240, 250);
+            assertThat(player.getStatus()).isEqualTo(RunningPlayerStatus.RUNNING);
+            verifyNoInteractions(createRunningRecordPort, updateRunningPlayerPort,
+                    deleteRunningTrackPort, saveGpsTrackPort, updateRunningRoomPort);
+        }
+
+        @Test
+        @DisplayName("다 뛰었다고 보고 누른 종료(forced=false)가 확정 거리도 채웠으면 완주다")
+        void userFinishCompletesWhenConfirmedDistanceReachesTarget() {
+            // given -> 약 5,040m
+            RunningPlayer player = player(RunningPlayerStatus.RUNNING, null);
+            givenPlayer(player);
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(track(1_801, 2.8));
+
+            // when
+            GoalCheck check = finisher.finish(ROOM_ID, USER_ID, false);
+
+            // then
+            assertThat(check.finished()).isTrue();
+            assertThat(player.getStatus()).isEqualTo(RunningPlayerStatus.COMPLETED);
+        }
+
+        @Test
+        @DisplayName("목표 없는 솔로 방은 forced=false여도 미루지 않고 끝낸다")
+        void soloUserFinishNeverDefers() {
+            // given -> 목표가 없으니 모자랄 거리도 없다
+            RunningPlayer player = player(RunningPlayerStatus.RUNNING, null);
+            givenPlayer(player);
+            givenRoom(room(RunningRoomType.SOLO, null));
+            givenTrack(track(400, 2.8));
+
+            // when
+            GoalCheck check = finisher.finish(ROOM_ID, USER_ID, false);
+
+            // then
+            assertThat(check.finished()).isTrue();
+            assertThat(player.getStatus()).isEqualTo(RunningPlayerStatus.COMPLETED);
+        }
+
+        @Test
+        @DisplayName("이미 끝난 참가자면 끝냈다고 답해 RUNNING_FINISHED를 다시 보내게 한다")
+        void answersFinishedForAlreadyFinishedPlayer() {
+            // given
+            givenPlayer(player(RunningPlayerStatus.COMPLETED, PAST.plusMinutes(20)));
+
+            // when
+            GoalCheck check = finisher.finishOnGoal(ROOM_ID, USER_ID);
+
+            // then -> 클라가 로컬 트랙을 지울 수 있게 버퍼도 비운다
+            assertThat(check.finished()).isTrue();
+            verify(deleteRunningTrackPort).delete(ROOM_ID, new UserId(USER_ID));
+            verifyNoInteractions(updateRunningPlayerPort);
+        }
+
+        @Test
+        @DisplayName("확정하면 필터 결과를 기록하고, 사용자 종료는 자동 종료 판정을 세지 않는다")
+        void recordsFilterOnUserFinish() {
+            // given
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(track(1_801, 2.8));
+
+            // when
+            finish();
+
+            // then
+            verify(recordRunningMetricPort).trackFiltered(any());
+            verify(recordRunningMetricPort, never()).autoFinishChecked(anyBoolean());
+            verify(recordRunningMetricPort, never()).userFinishDeferred(anyInt());
+        }
+
+        @Test
+        @DisplayName("자동 종료가 확정되면 확정으로 세고 필터 결과를 기록한다")
+        void recordsFinishedAutoFinish() {
+            // given
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(track(1_801, 2.8));
+
+            // when
+            finisher.finishOnGoal(ROOM_ID, USER_ID);
+
+            // then
+            verify(recordRunningMetricPort).autoFinishChecked(true);
+            verify(recordRunningMetricPort).trackFiltered(any());
+        }
+
+        @Test
+        @DisplayName("자동 종료가 미뤄지면 미룸으로만 센다 — 다시 시도할 때마다 필터 결과를 쌓지 않는다")
+        void recordsPendingAutoFinishOnly() {
+            // given
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            given(loadUserWeightPort.loadWeightKg(new UserId(USER_ID))).willReturn(Optional.of(WEIGHT));
+            given(loadRunningTrackPort.load(ROOM_ID, new UserId(USER_ID))).willReturn(jitteredTrack());
+
+            // when
+            finisher.finishOnGoal(ROOM_ID, USER_ID);
+
+            // then
+            verify(recordRunningMetricPort).autoFinishChecked(false);
+            verify(recordRunningMetricPort, never()).trackFiltered(any());
+        }
+
+        @Test
+        @DisplayName("다 뛰었다고 보고 누른 종료가 미뤄지면 남은 거리를 기록한다")
+        void recordsDeferredUserFinish() {
+            // given
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            given(loadUserWeightPort.loadWeightKg(new UserId(USER_ID))).willReturn(Optional.of(WEIGHT));
+            given(loadRunningTrackPort.load(ROOM_ID, new UserId(USER_ID))).willReturn(jitteredTrack());
+
+            // when
+            GoalCheck check = finisher.finish(ROOM_ID, USER_ID, false);
+
+            // then
+            verify(recordRunningMetricPort).userFinishDeferred(check.remainingMeters());
+            verify(recordRunningMetricPort, never()).autoFinishChecked(anyBoolean());
+            verify(recordRunningMetricPort, never()).trackFiltered(any());
+        }
+
+        @Test
+        @DisplayName("좌표 없이 누른 종료(forced=false)가 미뤄져도 로그에는 사용자 종료로 남긴다")
+        void deferredEmptyUserFinishLogsFinishTrigger() {
+            // given -> 시작 직후 위치 배치 전이라 트랙이 비었다. 마지막 좌표 경과 시간도 잴 수 없어
+            // 자동 종료처럼 비어 있다 — 그 값으로 경로를 짐작하면 GOAL로 찍힌다
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            givenTrack(new RunningTrack("[]", List.of()));
+            LogCapture log = LogCapture.of(RunningFinisher.class);
+
+            try {
+                // when
+                GoalCheck check = finisher.finish(ROOM_ID, USER_ID, false);
+
+                // then
+                assertThat(check.remainingMeters()).isEqualTo(TARGET);
+                assertThat(log.messages(Level.INFO))
+                        .filteredOn(message -> message.contains("종료 건너뜀"))
+                        .singleElement(STRING)
+                        .contains("trigger=FINISH", "lastPointLagSec=null");
+            } finally {
+                log.stop();
+            }
+        }
+
+        @Test
+        @DisplayName("종료를 미룰 때 일시정지 경계 수와 뺀 거리를 함께 남긴다")
+        void deferredFinishLogsPauseBoundary() {
+            // given -> 2.8m/s로 600초, 일시정지한 채 30초 동안 100m 옮겨 재개, 다시 600초 — 목표에 못 미친다.
+            // 화면은 클라 로컬 거리로 목표에 닿았는데 서버가 미루면, 원인이 일시정지인지 로그로 가른다
+            List<TrackPoint> points = new ArrayList<>();
+            for (int i = 0; i <= 600; i++) {
+                points.add(new TrackPoint(points.size(), 37.5 + i * 2.8 / METERS_PER_DEGREE, 127.0,
+                        null, 5.0, null, null, CADENCE, null, TRACK_START.plusSeconds(i), 0));
+            }
+            double resumeNorth = 600 * 2.8 + 100.0;
+            for (int i = 0; i <= 600; i++) {
+                points.add(new TrackPoint(points.size(), 37.5 + (resumeNorth + i * 2.8) / METERS_PER_DEGREE, 127.0,
+                        null, 5.0, null, null, CADENCE, null, TRACK_START.plusSeconds(630 + i), 1));
+            }
+            givenPlayer(player(RunningPlayerStatus.RUNNING, null));
+            givenRoom(room(RunningRoomType.MATCH, TARGET));
+            given(loadUserWeightPort.loadWeightKg(new UserId(USER_ID))).willReturn(Optional.of(WEIGHT));
+            given(loadRunningTrackPort.load(ROOM_ID, new UserId(USER_ID)))
+                    .willReturn(new RunningTrack("raw", points));
+            LogCapture log = LogCapture.of(RunningFinisher.class);
+
+            try {
+                // when
+                GoalCheck check = finisher.finish(ROOM_ID, USER_ID, false);
+
+                // then
+                assertThat(check.remainingMeters()).isPositive();
+                assertThat(log.messages(Level.INFO))
+                        .filteredOn(message -> message.contains("종료 건너뜀"))
+                        .singleElement(STRING)
+                        .contains("pauseBoundaryCount=1", "pauseRemovedDistanceM=100");
+            } finally {
+                log.stop();
+            }
+        }
+
+        @Test
+        @DisplayName("이미 끝난 참가자의 재전송은 아무것도 세지 않는다")
+        void recordsNothingForAlreadyFinishedPlayer() {
+            // given
+            givenPlayer(player(RunningPlayerStatus.COMPLETED, PAST.plusMinutes(20)));
+
+            // when
+            finisher.finishOnGoal(ROOM_ID, USER_ID);
+
+            // then -> 늦은 배치가 올 때마다 세면 확정 수가 부풀려진다
+            verifyNoInteractions(recordRunningMetricPort);
         }
     }
 }

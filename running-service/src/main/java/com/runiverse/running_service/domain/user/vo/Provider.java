@@ -7,8 +7,9 @@ import java.util.Arrays;
 import java.util.Locale;
 
 public enum Provider {
+    GOOGLE,
     KAKAO,
-    GOOGLE;
+    APPLE;
 
     // 경로에 쓰는 소문자 이름과 정확히 같을 때만 인식한다 — GOOGLE·Kakao처럼 대소문자가 다르면 지원하지 않는 provider다.
     // 상수 이름은 DB 저장값·loginType 응답과 같아 대문자로 둔다

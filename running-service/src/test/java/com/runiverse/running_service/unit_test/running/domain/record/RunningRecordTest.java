@@ -2,13 +2,21 @@ package com.runiverse.running_service.unit_test.running.domain.record;
 
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.domain.running.record.RunningRecord;
+import com.runiverse.running_service.domain.running.record.SegmentDraft;
 import com.runiverse.running_service.domain.running.record.SplitDraft;
 import com.runiverse.running_service.domain.running.metric.exception.CaloriesRequiredException;
+import com.runiverse.running_service.domain.running.record.exception.InvalidSegmentNumberException;
+import com.runiverse.running_service.domain.running.record.exception.RoutePolylineRequiredException;
+import com.runiverse.running_service.domain.running.record.exception.SegmentNumberNotSequentialException;
+import com.runiverse.running_service.domain.running.record.exception.SegmentsRequiredException;
 import com.runiverse.running_service.domain.running.record.exception.SplitNumberNotSequentialException;
 import com.runiverse.running_service.domain.running.record.exception.SplitPeriodNotSequentialException;
 import com.runiverse.running_service.domain.running.record.exception.SplitPeriodOutOfRecordException;
 import com.runiverse.running_service.domain.running.record.exception.SplitRouteNotConnectedException;
 import com.runiverse.running_service.domain.running.record.exception.SplitRouteNotStartingAtOriginException;
+import com.runiverse.running_service.domain.running.record.exception.SplitRouteNotStartingAtSegmentException;
+import com.runiverse.running_service.domain.running.record.exception.SplitSegmentNotFoundException;
+import com.runiverse.running_service.domain.running.record.exception.SplitSegmentNotSequentialException;
 import com.runiverse.running_service.domain.running.record.exception.SplitsRequiredException;
 import com.runiverse.running_service.domain.running.metric.exception.TemperatureRequiredException;
 import com.runiverse.running_service.domain.running.metric.exception.WeatherCodeRequiredException;
@@ -41,7 +49,7 @@ public class RunningRecordTest {
                 .totalDuration(990)
                 .totalCalories(210)
                 .gpsTrackKey("gps-tracks/2026/08/19/125-abc.json")
-                .routePolyline("_p~iF~ps|U_ulLnnqC")
+                .segments(List.of(segment(1)))
                 .startAt(START)
                 .endAt(END)
                 .weatherCode(61)
@@ -59,8 +67,28 @@ public class RunningRecordTest {
     // 구간은 기록을 거쳐야만 만들어진다 — 테스트도 원시 입력까지만 채운다
     private static SplitDraft split(int splitNumber, int routeStartIndex, int routeEndIndex,
                                     LocalDateTime startAt, LocalDateTime endAt) {
-        return SplitDraft.create(splitNumber, 330, 1_000, 330,
+        return splitIn(1, splitNumber, routeStartIndex, routeEndIndex, startAt, endAt);
+    }
+
+    // 경로 범위는 segmentNumber 조각 안의 점 번호다
+    private static SplitDraft splitIn(int segmentNumber, int splitNumber, int routeStartIndex,
+                                      int routeEndIndex, LocalDateTime startAt, LocalDateTime endAt) {
+        return SplitDraft.create(splitNumber, segmentNumber, 330, 1_000, 330,
                 routeStartIndex, routeEndIndex, startAt, endAt, 70, null, null);
+    }
+
+    // 조각 검증은 polyline을 풀지 않는다 — 비어 있지만 않으면 된다
+    private static SegmentDraft segment(int segmentNumber) {
+        return new SegmentDraft(segmentNumber, "_p~iF~ps|U_ulLnnqC");
+    }
+
+    // 1번 조각 [0,1]→[1,2], 2번 조각은 끊긴 곳에 걸친 [0,0]으로 시작해 [0,1]로 이어진다
+    private static List<SplitDraft> splitsAcrossPause() {
+        return List.of(
+                splitIn(1, 1, 0, 1, START, START.plusMinutes(5)),
+                splitIn(1, 2, 1, 2, START.plusMinutes(5), START.plusMinutes(10)),
+                splitIn(2, 3, 0, 0, START.plusMinutes(10), START.plusMinutes(20)),
+                splitIn(2, 4, 0, 1, START.plusMinutes(20), START.plusMinutes(25)));
     }
 
     @Nested
@@ -146,7 +174,7 @@ public class RunningRecordTest {
                     .totalDuration(990)
                     .totalCalories(210)
                     .gpsTrackKey("gps-tracks/a.json")
-                    .routePolyline("_p~iF")
+                    .segments(List.of(segment(1)))
                     .startAt(START)
                     .endAt(END)
                     .weatherCode(61)
@@ -410,6 +438,179 @@ public class RunningRecordTest {
 
             // then -> 방어 복사가 없으면 기록의 구간이 통째로 사라진다
             assertThat(record.getSplits()).hasSize(3);
+        }
+    }
+
+    @Nested
+    @DisplayName("경로 조각 테스트")
+    class SegmentTest {
+
+        @Test
+        @DisplayName("끊긴 곳에 걸친 구간이 뒤 조각의 0번 점 하나를 가리키면 기록을 만들 수 있다")
+        void splitAcrossPauseStartsNextSegmentAtOrigin() {
+            // when
+            RunningRecord record = validRecord()
+                    .segments(List.of(segment(1), segment(2)))
+                    .splits(splitsAcrossPause())
+                    .build();
+
+            // then -> 구간 번호는 조각이 바뀌어도 이어 센다
+            assertThat(record.getSegments()).extracting(found -> found.getSegmentNumber().value())
+                    .containsExactly(1, 2);
+            assertThat(record.getSplits()).extracting(found -> found.getSegmentNumber().value())
+                    .containsExactly(1, 1, 2, 2);
+            assertThat(record.getSplits()).extracting(found -> found.getSplitNumber().value())
+                    .containsExactly(1, 2, 3, 4);
+        }
+
+        @Test
+        @DisplayName("1번 조각에 구간이 하나도 없어도 기록을 만들 수 있다")
+        void firstSegmentWithoutSplitIsAllowed() {
+            // given -> 출발 직후 첫 칸에서 끊겨 1번 조각은 0m 경계점 하나다. 첫 구간부터 2번 조각에 걸친다
+            List<SplitDraft> splits = List.of(
+                    splitIn(2, 1, 0, 0, START, START.plusMinutes(5)),
+                    splitIn(2, 2, 0, 1, START.plusMinutes(5), START.plusMinutes(10)));
+
+            // when
+            RunningRecord record = validRecord()
+                    .segments(List.of(segment(1), segment(2)))
+                    .splits(splits)
+                    .build();
+
+            // then
+            assertThat(record.getSegments()).hasSize(2);
+            assertThat(record.getSplits()).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("조각이 없으면 예외가 발생한다")
+        void segmentsAreRequired() {
+            // when & then -> 경로가 없는 기록은 지도에 그릴 수 없다
+            assertThatThrownBy(() -> validRecord().segments(null).build())
+                    .isInstanceOf(SegmentsRequiredException.class);
+            assertThatThrownBy(() -> validRecord().segments(List.of()).build())
+                    .isInstanceOf(SegmentsRequiredException.class);
+        }
+
+        @Test
+        @DisplayName("조각 번호가 1보다 작으면 예외가 발생한다")
+        void segmentNumberMustBePositive() {
+            // when & then
+            assertThatThrownBy(() -> validRecord().segments(List.of(segment(0))).build())
+                    .isInstanceOf(InvalidSegmentNumberException.class);
+        }
+
+        @Test
+        @DisplayName("조각 번호가 1부터 이어지지 않으면 예외가 발생한다")
+        void segmentNumbersMustBeSequential() {
+            // when & then -> 2부터 시작하거나 중간이 빠지면 구간이 가리킬 조각이 어긋난다
+            assertThatThrownBy(() -> validRecord().segments(List.of(segment(2))).build())
+                    .isInstanceOf(SegmentNumberNotSequentialException.class);
+            assertThatThrownBy(() -> validRecord().segments(List.of(segment(1), segment(3))).build())
+                    .isInstanceOf(SegmentNumberNotSequentialException.class);
+        }
+
+        @Test
+        @DisplayName("조각 경로가 비어 있으면 예외가 발생한다")
+        void segmentPolylineIsRequired() {
+            // when & then
+            assertThatThrownBy(() -> validRecord()
+                    .segments(List.of(new SegmentDraft(1, " ")))
+                    .build())
+                    .isInstanceOf(RoutePolylineRequiredException.class);
+        }
+
+        @Test
+        @DisplayName("구간이 기록에 없는 조각을 가리키면 예외가 발생한다")
+        void splitMustBelongToExistingSegment() {
+            // given -> 조각은 1번 하나뿐인데 구간이 2번을 가리킨다
+            List<SplitDraft> splits = splitsAcrossPause();
+
+            // when & then
+            assertThatThrownBy(() -> validRecord().splits(splits).build())
+                    .isInstanceOf(SplitSegmentNotFoundException.class);
+        }
+
+        @Test
+        @DisplayName("구간의 조각 번호가 줄어들면 예외가 발생한다")
+        void splitSegmentMustNotDecrease() {
+            // given -> 2번 조각 구간 뒤에 다시 1번 조각 구간이 온다
+            List<SplitDraft> splits = List.of(
+                    splitIn(1, 1, 0, 1, START, START.plusMinutes(5)),
+                    splitIn(2, 2, 0, 0, START.plusMinutes(5), START.plusMinutes(10)),
+                    splitIn(1, 3, 1, 2, START.plusMinutes(10), START.plusMinutes(15)));
+
+            // when & then -> 달린 순서를 거스르면 조각 경로와 구간이 엇갈린다
+            assertThatThrownBy(() -> validRecord()
+                    .segments(List.of(segment(1), segment(2)))
+                    .splits(splits)
+                    .build())
+                    .isInstanceOf(SplitSegmentNotSequentialException.class);
+        }
+
+        @Test
+        @DisplayName("조각이 바뀌는 구간이 0번 점 하나를 가리키지 않으면 예외가 발생한다")
+        void splitAcrossPauseMustPointOnlyToSegmentOrigin() {
+            // given -> 2번 조각 첫 구간이 [0,1]이다 — 시작 경계점은 앞 조각에 있어야 한다
+            List<SplitDraft> splits = List.of(
+                    splitIn(1, 1, 0, 1, START, START.plusMinutes(5)),
+                    splitIn(2, 2, 0, 1, START.plusMinutes(5), START.plusMinutes(10)));
+
+            // when & then -> 받아 주면 끊긴 곳 너머 10m가 조각 안의 선으로 그려진다
+            assertThatThrownBy(() -> validRecord()
+                    .segments(List.of(segment(1), segment(2)))
+                    .splits(splits)
+                    .build())
+                    .isInstanceOf(SplitRouteNotStartingAtSegmentException.class);
+        }
+
+        @Test
+        @DisplayName("조각이 바뀌는 구간이 0번 점에서 시작하지 않으면 예외가 발생한다")
+        void splitAcrossPauseMustStartAtSegmentOrigin() {
+            // given -> 2번 조각 첫 구간이 [1,1]이다
+            List<SplitDraft> splits = List.of(
+                    splitIn(1, 1, 0, 1, START, START.plusMinutes(5)),
+                    splitIn(2, 2, 1, 1, START.plusMinutes(5), START.plusMinutes(10)));
+
+            // when & then -> 조각 앞부분이 어느 구간에도 속하지 않게 된다
+            assertThatThrownBy(() -> validRecord()
+                    .segments(List.of(segment(1), segment(2)))
+                    .splits(splits)
+                    .build())
+                    .isInstanceOf(SplitRouteNotStartingAtOriginException.class);
+        }
+
+        @Test
+        @DisplayName("조각이 바뀐 뒤에는 같은 조각 안에서 경로가 이어져야 한다")
+        void splitsMustConnectWithinNextSegment() {
+            // given -> 2번 조각 [0,0] 다음이 [1,2]로 한 칸 뜬다
+            List<SplitDraft> splits = List.of(
+                    splitIn(1, 1, 0, 1, START, START.plusMinutes(5)),
+                    splitIn(2, 2, 0, 0, START.plusMinutes(5), START.plusMinutes(10)),
+                    splitIn(2, 3, 1, 2, START.plusMinutes(10), START.plusMinutes(15)));
+
+            // when & then
+            assertThatThrownBy(() -> validRecord()
+                    .segments(List.of(segment(1), segment(2)))
+                    .splits(splits)
+                    .build())
+                    .isInstanceOf(SplitRouteNotConnectedException.class);
+        }
+
+        @Test
+        @DisplayName("조각 목록은 밖에서 바꿀 수 없다")
+        void segmentsAreImmutable() {
+            // given
+            List<SegmentDraft> given = new ArrayList<>(List.of(segment(1)));
+            RunningRecord record = validRecord().segments(given).build();
+
+            // when
+            given.clear();
+
+            // then -> 방어 복사가 없으면 기록의 경로가 통째로 사라진다
+            assertThat(record.getSegments()).hasSize(1);
+            assertThatThrownBy(() -> record.getSegments().clear())
+                    .isInstanceOf(UnsupportedOperationException.class);
         }
     }
 }

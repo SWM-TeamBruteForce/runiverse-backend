@@ -7,14 +7,14 @@ import com.runiverse.running_service.application.user.command.accountdeletion.De
 import com.runiverse.running_service.application.user.command.accountdeletion.DeletedUserRedactor;
 import com.runiverse.running_service.application.user.command.accountdeletion.KakaoUnlinkRequestedEvent;
 import com.runiverse.running_service.application.user.command.accountdeletion.RedactDeletedUsersHandler;
-import com.runiverse.running_service.application.user.command.profileimage.ProfileImageContentType;
-import com.runiverse.running_service.application.user.command.profileimage.ProfileImageKeyPolicy;
+import com.runiverse.running_service.application.user.common.ImageContentType;
+import com.runiverse.running_service.application.user.common.UserImageType;
 import com.runiverse.running_service.application.user.port.out.AccountSnapshot;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.user.vo.Gender;
 import com.runiverse.running_service.domain.user.vo.LoginType;
 import com.runiverse.running_service.domain.user.vo.Provider;
-import com.runiverse.running_service.integration_test.fake.FakeProfileImageStorage;
+import com.runiverse.running_service.integration_test.fake.FakeImageStorage;
 import com.runiverse.running_service.integration_test.fake.InMemoryAccessTokenBlacklist;
 import com.runiverse.running_service.integration_test.fake.InMemoryDeletedUserStore;
 import com.runiverse.running_service.integration_test.fake.InMemoryRefreshTokenStore;
@@ -47,7 +47,7 @@ public class DeleteAccountIntegrationTest {
     private InMemoryDeletedUserStore deletedUserStore;
     private InMemoryRefreshTokenStore refreshTokenStore;
     private InMemoryAccessTokenBlacklist accessTokenBlacklist;
-    private FakeProfileImageStorage profileImageStorage;
+    private FakeImageStorage imageStorage;
     private List<Object> publishedEvents;
     private List<UUID> settledUserIds;
     private DeleteAccountHandler deleteAccountHandler;
@@ -59,7 +59,7 @@ public class DeleteAccountIntegrationTest {
         deletedUserStore = new InMemoryDeletedUserStore();
         refreshTokenStore = new InMemoryRefreshTokenStore();
         accessTokenBlacklist = new InMemoryAccessTokenBlacklist();
-        profileImageStorage = new FakeProfileImageStorage();
+        imageStorage = new FakeImageStorage();
         publishedEvents = new ArrayList<>();
         settledUserIds = new ArrayList<>();
 
@@ -75,7 +75,7 @@ public class DeleteAccountIntegrationTest {
         redactHandler = new RedactDeletedUsersHandler(
                 deletedUserStore,  // LoadDeletedUserIdsPort
                 new DeletedUserRedactor(
-                        profileImageStorage,  // DeleteProfileImagesPort
+                        imageStorage,  // DeleteImagesPort
                         deletedUserStore      // RedactDeletedUserPort
                 ),
                 new AccountDeletionProperties(RETENTION)
@@ -219,19 +219,25 @@ public class DeleteAccountIntegrationTest {
     }
 
     @Test
-    @DisplayName("보관 기간이 지나면 프로필 사진도 함께 지운다")
-    void deletesProfileImagesAfterRetention() {
+    @DisplayName("보관 기간이 지나면 프로필·배경 사진도 함께 지운다")
+    void deletesUserImagesAfterRetention() {
         // given -> 사진을 여러 번 바꿔 객체가 쌓인 상태다
-        String oldKey = ProfileImageKeyPolicy.create(
-                userId, UuidCreator.getTimeOrderedEpoch(), ProfileImageContentType.JPEG).value();
-        String currentKey = ProfileImageKeyPolicy.create(
-                userId, UuidCreator.getTimeOrderedEpoch(), ProfileImageContentType.JPEG).value();
-        profileImageStorage.put(oldKey);
-        profileImageStorage.put(currentKey);
-        String otherUsersKey = ProfileImageKeyPolicy.create(
-                UuidCreator.getTimeOrderedEpoch(), UuidCreator.getTimeOrderedEpoch(),
-                ProfileImageContentType.JPEG).value();
-        profileImageStorage.put(otherUsersKey);
+        String oldKey = UserImageType.PROFILE.createKey(
+                userId, UuidCreator.getTimeOrderedEpoch(), ImageContentType.JPEG);
+        String currentKey = UserImageType.PROFILE.createKey(
+                userId, UuidCreator.getTimeOrderedEpoch(), ImageContentType.JPEG);
+        String backgroundKey = UserImageType.BACKGROUND.createKey(
+                userId, UuidCreator.getTimeOrderedEpoch(), ImageContentType.PNG);
+        imageStorage.put(oldKey);
+        imageStorage.put(currentKey);
+        imageStorage.put(backgroundKey);
+        UUID otherUserId = UuidCreator.getTimeOrderedEpoch();
+        String otherUsersKey = UserImageType.PROFILE.createKey(
+                otherUserId, UuidCreator.getTimeOrderedEpoch(), ImageContentType.JPEG);
+        String otherUsersBackgroundKey = UserImageType.BACKGROUND.createKey(
+                otherUserId, UuidCreator.getTimeOrderedEpoch(), ImageContentType.JPEG);
+        imageStorage.put(otherUsersKey);
+        imageStorage.put(otherUsersBackgroundKey);
         givenOnboardedAccount(null);
         givenRetentionExpired();
         deleteAccount();
@@ -240,9 +246,11 @@ public class DeleteAccountIntegrationTest {
         redactHandler.redactAfterRetention();
 
         // then -> 해당 유저의 프리픽스만 지운다
-        assertThat(profileImageStorage.contains(oldKey)).isFalse();
-        assertThat(profileImageStorage.contains(currentKey)).isFalse();
-        assertThat(profileImageStorage.contains(otherUsersKey)).isTrue();
+        assertThat(imageStorage.contains(oldKey)).isFalse();
+        assertThat(imageStorage.contains(currentKey)).isFalse();
+        assertThat(imageStorage.contains(backgroundKey)).isFalse();
+        assertThat(imageStorage.contains(otherUsersKey)).isTrue();
+        assertThat(imageStorage.contains(otherUsersBackgroundKey)).isTrue();
     }
 
     @Test
@@ -257,9 +265,11 @@ public class DeleteAccountIntegrationTest {
         // when -> 다음 날 배치가 또 돈다
         redactHandler.redactAfterRetention();
 
-        // then -> 사진 삭제를 두 번 부르지 않는다
-        assertThat(profileImageStorage.deletedPrefixes())
-                .containsExactly(ProfileImageKeyPolicy.prefixOf(userId));
+        // then -> 사진 삭제를 두 번 부르지 않는다 — 종류마다 한 번씩뿐이다
+        assertThat(imageStorage.deletedPrefixes())
+                .containsExactlyInAnyOrder(
+                        UserImageType.PROFILE.prefixOf(userId),
+                        UserImageType.BACKGROUND.prefixOf(userId));
     }
 
     @Test

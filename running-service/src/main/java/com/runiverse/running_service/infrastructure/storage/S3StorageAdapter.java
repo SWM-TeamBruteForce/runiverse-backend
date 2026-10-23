@@ -1,6 +1,6 @@
 package com.runiverse.running_service.infrastructure.storage;
 
-import com.runiverse.running_service.application.user.port.out.DeleteProfileImagesPort;
+import com.runiverse.running_service.application.user.port.out.DeleteImagesPort;
 import com.runiverse.running_service.application.user.port.out.GenerateUploadUrlPort;
 import com.runiverse.running_service.application.user.port.out.GenerateViewUrlPort;
 import com.runiverse.running_service.application.user.port.out.LoadUploadedImagePort;
@@ -28,7 +28,7 @@ import java.util.Optional;
 @Component
 @RequiredArgsConstructor
 public class S3StorageAdapter implements GenerateUploadUrlPort, LoadUploadedImagePort, GenerateViewUrlPort,
-        DeleteProfileImagesPort {
+        DeleteImagesPort {
 
     private final S3Presigner s3Presigner;
     private final S3Properties properties;
@@ -86,10 +86,10 @@ public class S3StorageAdapter implements GenerateUploadUrlPort, LoadUploadedImag
                         .bucket(properties.userAssetBucket())
                         .prefix(keyPrefix)
                         .build())
-                .forEach(page -> deleteObjects(page.contents()));
+                .forEach(page -> deleteObjects(keyPrefix, page.contents()));
     }
 
-    private void deleteObjects(List<S3Object> objects) {
+    private void deleteObjects(String keyPrefix, List<S3Object> objects) {
         // 빈 목록을 넘기면 S3가 MalformedXML로 거절한다
         if (objects.isEmpty()) {
             return;
@@ -103,8 +103,8 @@ public class S3StorageAdapter implements GenerateUploadUrlPort, LoadUploadedImag
         // 개별 객체 실패는 예외가 아니라 200 응답의 errors로 온다 — 여기서 막지 않으면
         // 사진이 남은 채 기록만 비워져 다음 실행에서 다시 걸리지 않는다
         if (!response.errors().isEmpty()) {
-            throw new IllegalStateException("프로필 사진 삭제 실패 — %d건, 첫 사유 %s"
-                    .formatted(response.errors().size(), response.errors().getFirst().code()));
+            throw new IllegalStateException("사진 삭제 실패 - prefix=%s, count=%d, cause=%s"
+                    .formatted(keyPrefix, response.errors().size(), response.errors().getFirst().code()));
         }
     }
 }

@@ -19,7 +19,9 @@ public enum UserErrorCode implements ErrorCode {
     PROFILE_VISIBILITY_REQUIRED("PROFILE_VISIBILITY_REQUIRED", "프로필 공개 범위는 필수입니다."),
     UNSUPPORTED_PROFILE_VISIBILITY("UNSUPPORTED_PROFILE_VISIBILITY", "지원하지 않는 프로필 공개 범위입니다."),
     PROFILE_IMAGE_KEY_REQUIRED("PROFILE_IMAGE_KEY_REQUIRED", "프로필 이미지 키는 null일 수 없습니다."),
-    PROFILE_IMAGE_KEY_TOO_LONG("PROFILE_IMAGE_KEY_TOO_LONG", "프로필 이미지 키는 255자를 초과할 수 없습니다.");
+    PROFILE_IMAGE_KEY_TOO_LONG("PROFILE_IMAGE_KEY_TOO_LONG", "프로필 이미지 키는 255자를 초과할 수 없습니다."),
+    BACKGROUND_IMAGE_KEY_REQUIRED("BACKGROUND_IMAGE_KEY_REQUIRED", "배경 이미지 키는 null일 수 없습니다."),
+    BACKGROUND_IMAGE_KEY_TOO_LONG("BACKGROUND_IMAGE_KEY_TOO_LONG", "배경 이미지 키는 255자를 초과할 수 없습니다.");
     private final String code;
     private final String message;
 }

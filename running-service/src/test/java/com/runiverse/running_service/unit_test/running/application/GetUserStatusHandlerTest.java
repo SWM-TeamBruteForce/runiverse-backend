@@ -21,6 +21,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -38,7 +40,8 @@ class GetUserStatusHandlerTest {
     // 실제 application.properties와 같은 값으로 맞춘다
     private static final MatchProperties MATCH_PROPERTIES = new MatchProperties(
             Duration.ofMinutes(10), Duration.ofSeconds(10), Duration.ofHours(6),
-            10, Duration.ofMinutes(20));
+            10, Duration.ofMinutes(20),
+            LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
 
     @Mock
     private LoadUserStatusPort loadUserStatusPort;

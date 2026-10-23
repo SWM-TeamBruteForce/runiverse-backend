@@ -1,8 +1,8 @@
 package com.runiverse.running_service.application.match.command.apply;
 
 import com.runiverse.running_service.application.common.port.out.LoadUserAvgPacePort;
-import com.runiverse.running_service.application.match.common.MatchProperties;
 import com.runiverse.running_service.application.match.common.MatchRoomChangedEvent;
+import com.runiverse.running_service.application.match.common.MatchSlotPolicy;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
 import com.runiverse.running_service.application.match.exception.MatchAlreadyInProgressException;
 import com.runiverse.running_service.application.match.exception.MatchCooldownException;
@@ -34,16 +34,18 @@ public class ApplyMatchHandler implements ApplyMatchUsecase {
     private final LoadUserAvgPacePort loadUserAvgPacePort;
     private final CreateMatchApplicationPort createMatchApplicationPort;
     private final MatchRoomAssigner matchRoomAssigner;
-    private final MatchProperties matchProperties;
+    private final MatchSlotPolicy matchSlotPolicy;
     private final RoomInfoAssembler roomInfoAssembler;
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public ApplyMatchResult handle(ApplyMatchCommand command) {
-        // 1. 모집이 끝난 슬롯인가 — DB를 안 타는 검사라 제일 먼저 본다.
-        //    형식(30분 간격)은 Request DTO가 보고, 마감은 운영값·현재 시각에 걸린 정책이라 여기서 본다
-        LocalDateTime closeAt = command.scheduledStartAt().minus(matchProperties.closeOffset());
-        if (!LocalDateTime.now().isBefore(closeAt)) {
+        // 0. 고를 수 있는 시각·거리인가 — 선택지가 운영값이라 Request DTO가 못 보고 여기서 본다.
+        //    마감보다 먼저 봐야 03:00처럼 애초에 없는 슬롯이 409 마감이 아니라 400으로 나간다
+        matchSlotPolicy.validate(command.scheduledStartAt(), command.targetDistanceMeters());
+        // 1. 모집이 끝난 슬롯인가 — DB를 안 타는 검사라 앞쪽에 둔다.
+        //    경계는 슬롯 조회의 selectable과 같아야 해 정책이 함께 판정한다
+        if (!matchSlotPolicy.isOpen(command.scheduledStartAt(), LocalDateTime.now())) {
             throw new MatchSlotClosedException();
         }
         UserId userId = new UserId(command.userId());

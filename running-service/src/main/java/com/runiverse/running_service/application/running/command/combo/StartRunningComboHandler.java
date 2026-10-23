@@ -40,7 +40,7 @@ public class StartRunningComboHandler implements StartRunningComboUsecase {
             double meters = loadRunningDistancePort
                     .loadDistance(command.runningRoomId(), starter)
                     .meters();
-            updateRunningComboJudge.judge(command.runningRoomId(), starter, meters);
+            updateRunningComboJudge.judge(command.runningRoomId(), starter, RunningComboSignal.baseline(meters));
         } catch (RuntimeException e) {
             // 콤보는 곁가지다 — 못 세웠다고 러닝 시작을 막지 않는다.
             // 첫 좌표 배치가 도착하면 원래 경로로 콤보가 붙는다

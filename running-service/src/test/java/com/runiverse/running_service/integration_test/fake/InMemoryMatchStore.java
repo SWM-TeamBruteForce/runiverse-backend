@@ -1,5 +1,6 @@
 package com.runiverse.running_service.integration_test.fake;
 
+import com.runiverse.running_service.application.match.port.out.CountWaitingPlayersPort;
 import com.runiverse.running_service.application.match.port.out.LoadMatchCandidatesPort;
 import com.runiverse.running_service.application.match.port.out.LoadMatchPlayersPort;
 import com.runiverse.running_service.application.match.port.out.LoadMatchRoomPort;
@@ -13,13 +14,17 @@ import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 // MatchPersistenceAdapter를 대신한다 — 방 숨김(deleted_at)은 도메인에 없어 걸러내지 않는다
-public class InMemoryMatchStore implements LoadMatchRoomPort, LoadMatchPlayersPort, LoadMatchCandidatesPort {
+public class InMemoryMatchStore implements LoadMatchRoomPort, LoadMatchPlayersPort, LoadMatchCandidatesPort,
+        CountWaitingPlayersPort {
 
     private final InMemoryRunningStore runningStore;
 
@@ -65,6 +70,19 @@ public class InMemoryMatchStore implements LoadMatchRoomPort, LoadMatchPlayersPo
                         room.getAvgPace().orElseThrow().secondsPerKm(),
                         myLeaveCount(room, userId)))
                 .toList();
+    }
+
+    // 실제 쿼리의 GROUP BY start_at + SUM(current_player_count)
+    @Override
+    public Map<LocalDateTime, Integer> countWaitingPlayers(LocalDate date, int targetDistanceMeters) {
+        return runningStore.findAllRooms().stream()
+                .filter(room -> room.getType() == RunningRoomType.MATCH
+                        && room.getStatus() == RunningRoomStatus.MATCHING
+                        && room.getStartAt().toLocalDate().equals(date)
+                        && room.getTargetDistance().map(Distance::meters)
+                        .filter(meters -> meters == targetDistanceMeters).isPresent())
+                .collect(Collectors.groupingBy(RunningRoom::getStartAt,
+                        Collectors.summingInt(room -> room.getPlayerCount().current())));
     }
 
     private int myLeaveCount(RunningRoom room, UserId userId) {

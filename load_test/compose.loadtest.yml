@@ -1,0 +1,30 @@
+# e2e_test/compose.yml 위에 겹쳐 쓰는 부하 테스트용 설정.
+# 앱이 실제 Open-Meteo 대신 스텁을 보게 한다.
+# 경로는 첫 compose 파일 기준으로 풀리므로 LOAD_TEST_DIR(절대 경로)을 쓴다 — smoke-local.sh가 넣어준다.
+services:
+  weather-stub:
+    image: node:20-alpine
+    command: ["node", "/stub/weather-stub.js"]
+    environment:
+      WEATHER_STUB_DELAY_MS: ${WEATHER_STUB_DELAY_MS:-0}
+    volumes:
+      - ${LOAD_TEST_DIR}/stub:/stub:ro
+
+  # k6 결과(remote write)와 앱 메트릭을 함께 받는다 — COMPOSE_PROFILES=metrics일 때만 뜬다
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: ["metrics"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ${LOAD_TEST_DIR}/monitoring/prometheus-local.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "19090:9090"
+
+  app:
+    environment:
+      WEATHER_BASE_URI: http://weather-stub:8090
+    depends_on:
+      weather-stub:
+        condition: service_started

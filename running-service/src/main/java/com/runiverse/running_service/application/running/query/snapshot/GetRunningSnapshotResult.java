@@ -1,5 +1,6 @@
 package com.runiverse.running_service.application.running.query.snapshot;
 
+import com.runiverse.running_service.application.running.port.out.LiveRunningStatus;
 import com.runiverse.running_service.application.running.port.out.RunningComboPeer;
 
 import java.time.LocalDateTime;
@@ -16,6 +17,11 @@ public record GetRunningSnapshotResult(
         LocalDateTime startedAt,
         // 목표 없는 솔로 방은 null
         Integer targetDistanceMeters,
+        // 이하 요청한 본인 기준 — 로컬 트랙을 잃은 앱(재설치)이 이어 쓸 값이다. 앱은 로컬 값과 큰 쪽을 쓴다.
+        // 서버가 받은 마지막 순번 + 1, 받은 좌표가 없으면 0
+        long nextSequence,
+        // 서버가 받은 마지막 좌표의 일시정지 구간 번호, 받은 좌표가 없으면 0
+        int pauseSegment,
         List<Player> players,
         // 받는 사람이 낀 관계만. 겹치는 상대가 없으면 빈 목록이다
         List<RunningComboPeer> comboPeers
@@ -29,7 +35,7 @@ public record GetRunningSnapshotResult(
             String profileImageUrl,
             int distanceMeters,
             Integer currentPaceSecondsPerKm,
-            boolean paused
+            LiveRunningStatus status
     ) {
 
     }

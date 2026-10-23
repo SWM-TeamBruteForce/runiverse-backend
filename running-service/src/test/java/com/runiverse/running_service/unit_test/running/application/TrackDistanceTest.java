@@ -19,7 +19,7 @@ public class TrackDistanceTest {
 
     private static TrackPoint point(long sequence, double latitude, double longitude) {
         return new TrackPoint(sequence, latitude, longitude,
-                null, 5.0, null, null, null, null, AT.plusSeconds(sequence));
+                null, 5.0, null, null, null, null, AT.plusSeconds(sequence), 0);
     }
 
     @Test

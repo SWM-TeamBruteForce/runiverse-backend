@@ -142,7 +142,8 @@ class SoloRunningE2eTest extends E2eTestSupport {
         assertThat(record.get("startedAt")).isEqualTo(results.text("startedAt"));
         assertThat(record.get("totalDistanceMeters")).isEqualTo(me.get("totalDistanceMeters"));
         assertThat(record.get("totalDurationSeconds")).isEqualTo(me.get("totalDurationSeconds"));
-        assertThat((String) record.get("routePolyline")).isNotBlank();
+        // 목록은 경로를 싣지 않는다 — 경로는 6-1·6-2에서만 본다
+        assertThat(record).doesNotContainKey("routePolyline");
     }
 
     @Test
@@ -326,6 +327,8 @@ class SoloRunningE2eTest extends E2eTestSupport {
         point.put("headingDegrees", 0.0);
         point.put("cadenceSpm", CADENCE_SPM);
         point.put("currentPaceSecondsPerKm", PACE_SECONDS_PER_KM);
+        // 일시정지 없이 달린다 — 필수 값이라 빠지면 배치 전체가 INVALID_REQUEST로 거부된다
+        point.put("pauseSegment", 0);
         // LocalDateTime은 오프셋 없는 ISO 문자열이라야 서버가 그대로 받는다
         point.put("recordedAt", trackStartAt.plusSeconds((long) sequence * SECONDS_PER_STEP)
                 .format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));

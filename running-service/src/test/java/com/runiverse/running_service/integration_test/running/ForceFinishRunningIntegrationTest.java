@@ -11,6 +11,7 @@ import com.runiverse.running_service.application.running.command.forcefinish.Run
 import com.runiverse.running_service.application.running.command.location.UpdateRunningFinishJudge;
 import com.runiverse.running_service.application.running.command.location.UpdateRunningLocationCommand;
 import com.runiverse.running_service.application.running.command.location.UpdateRunningLocationHandler;
+import com.runiverse.running_service.application.running.common.LiveRunningStatusChanger;
 import com.runiverse.running_service.application.running.common.RunningFinishProperties;
 import com.runiverse.running_service.application.running.common.RunningFinisher;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
@@ -31,8 +32,10 @@ import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
 import com.runiverse.running_service.domain.scheduling.ScheduledJob;
 import com.runiverse.running_service.domain.scheduling.vo.ScheduledJobId;
 import com.runiverse.running_service.domain.scheduling.vo.ScheduledJobType;
+import com.runiverse.running_service.infrastructure.metrics.running.RunningMetricAdapter;
 import com.runiverse.running_service.integration_test.IntegrationTestSupport;
 import com.runiverse.running_service.integration_test.fake.InMemoryScheduledJobStore;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,12 +44,14 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.runiverse.running_service.support.TrackFilterFixtures.DEFAULT_PROPERTIES;
 import static org.assertj.core.api.Assertions.assertThat;
 
 // 예약 발화 → 남은 참가자 확정 → 방 종료까지를 실제 클래스로 잇는다.
@@ -76,7 +81,8 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
     private static final Duration RUNNING_COOLDOWN = Duration.ofMinutes(20);
     private static final MatchProperties MATCH_PROPERTIES = new MatchProperties(
             Duration.ofMinutes(10), Duration.ofSeconds(10), FORCE_FINISH_OFFSET,
-            10, MATCH_COOLDOWN);
+            10, MATCH_COOLDOWN,
+            LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
     private static final RunningFinishProperties FINISH_PROPERTIES = new RunningFinishProperties(
             0.8, 10, 100, 60, 3.0, RUNNING_COOLDOWN);
 
@@ -119,20 +125,29 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
                 runningRecordStore, // ExistsRunningRecordPort
                 runningRecordStore, // LoadRecentRunningPacesPort
                 onboardingStore,    // UpdateUserAvgPacePort
+                new LiveRunningStatusChanger( // LiveRunningStatusChanger
+                        liveRunningStatusStore, runningDistanceStore, runningProgressPublisher),
+                newRunningComboArchiver(), // RunningComboArchiver
+                runningComboStore,  // MarkRunningComboFinishedPort
                 event -> {          // ApplicationEventPublisher — 커밋 뒤 전달은 테스트가 직접 한다
                     if (event instanceof RunningForceFinishRequestedEvent request) {
                         forceFinishRequests.add(request);
                     }
                 },
-                FINISH_PROPERTIES
+                FINISH_PROPERTIES,  // RunningFinishProperties
+                DEFAULT_PROPERTIES, // TrackFilterProperties
+                new RunningMetricAdapter(new SimpleMeterRegistry()) // RecordRunningMetricPort
         );
         updateRunningLocationHandler = new UpdateRunningLocationHandler(
                 runningTrackStore,       // AppendRunningTrackPort
                 runningDistanceStore,    // LoadRunningDistancePort
                 runningDistanceStore,    // SaveRunningDistancePort
+                liveRunningStatusStore,   // ChangeLiveRunningStatusPort
+                liveRunningStatusStore,   // LoadLiveRunningStatusPort
                 runningProgressPublisher, // PublishRunningProgressPort
                 newUpdateRunningComboJudge(),
-                new UpdateRunningFinishJudge(runningFinisher)
+                new UpdateRunningFinishJudge(runningFinisher),
+                DEFAULT_PROPERTIES
         );
         FinishRunningHandler finishRunningHandler = new FinishRunningHandler(runningFinisher);
         ForceFinishRunningRoomHandler forceFinishRunningRoomHandler =
@@ -146,7 +161,8 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
                         this::recordCooldown, // StartMatchCooldownPort
                         runningRecordStore,   // ExistsRunningRecordPort
                         finishRunningHandler, // FinishRunningUsecase
-                        MATCH_PROPERTIES
+                        MATCH_PROPERTIES,
+                        newRunningComboArchiver()
                 );
         forceFinishListener = new RunningForceFinishListener(forceFinishRunningRoomHandler);
         runScheduledJobHandler = new RunScheduledJobHandler(
@@ -422,7 +438,7 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
         List<TrackPoint> points = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             points.add(new TrackPoint(i, 37.5 + i * 2.5 / METERS_PER_DEGREE, 127.0,
-                    null, 5.0, null, null, 168, null, TRACK_START.plusSeconds(i)));
+                    null, 5.0, null, null, 168, null, TRACK_START.plusSeconds(i), 0));
         }
         updateRunningLocationHandler.handle(
                 new UpdateRunningLocationCommand(userId, roomId, TARGET_DISTANCE, points));

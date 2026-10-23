@@ -1,6 +1,7 @@
 package com.runiverse.running_service.unit_test.observability;
 
 import com.runiverse.running_service.observability.logging.LogTag;
+import com.runiverse.running_service.presentation.app.controller.AppController;
 import com.runiverse.running_service.presentation.auth.controller.AuthController;
 import com.runiverse.running_service.presentation.common.exception.GlobalExceptionHandler;
 import com.runiverse.running_service.presentation.match.controller.RunningMatchController;
@@ -28,7 +29,8 @@ public class LogTagTest {
                 Arguments.of(AuthController.class, "[인증]"),
                 Arguments.of(UserController.class, "[회원]"),
                 Arguments.of(RunningMatchController.class, "[매칭]"),
-                Arguments.of(RunningRoomController.class, "[러닝]")
+                Arguments.of(RunningRoomController.class, "[러닝]"),
+                Arguments.of(AppController.class, "[앱]")
         );
     }
 

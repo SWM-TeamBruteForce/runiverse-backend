@@ -31,7 +31,7 @@ import java.util.UUID;
                 columnNames = {"provider", "provider_id"}
         )
 )
-@Check(name = "ck_oauth_user_provider", constraints = "provider in ('KAKAO', 'GOOGLE')")
+@Check(name = "ck_oauth_user_provider", constraints = "provider in ('GOOGLE', 'KAKAO', 'APPLE')")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OauthUserJpaEntity extends BaseTimeEntity {
 
