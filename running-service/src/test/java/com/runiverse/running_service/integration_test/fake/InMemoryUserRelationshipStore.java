@@ -61,6 +61,18 @@ public class InMemoryUserRelationshipStore implements LoadUserRelationshipPort, 
         save(received);
     }
 
+    // 요청·수락 API 없이 두 사람이 친구인 상태를 만든다
+    public void seedFriend(UUID userId, UUID targetId) {
+        UserRelationship mine = UserRelationship.none(userId, targetId);
+        mine.sendRequest();
+        mine.accept();
+        UserRelationship theirs = UserRelationship.none(targetId, userId);
+        theirs.receiveRequest();
+        theirs.accept();
+        save(mine);
+        save(theirs);
+    }
+
     public Optional<RelationshipType> typeOf(UUID userId, UUID targetId) {
         return Optional.ofNullable(rows.get(new Key(userId, targetId))).map(Row::type);
     }

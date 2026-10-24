@@ -2832,8 +2832,9 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **요청 취소·거절** (`DELETE .../friend-request`)
   - **호출자가 보낸 쪽이면 취소, 받은 쪽이면 거절이다.** 이름만 다를 뿐 하는 일은 같아서(양쪽 `FRIEND_REQUEST_*` 행을 `NONE`으로) 하나로 둔다
   - 행은 지우지 않는다. 취소인지 거절인지는 애플리케이션 로그로 남는다
+  - **이미 친구(`FRIEND`)여도 친구 삭제로 처리한다.** 요청을 보낸 뒤 상대가 수락하는 찰나에 취소를 누르면, 화면은 아직 "요청 취소"인데 관계는 이미 친구가 되어 있다. 취소하려던 뜻대로 관계를 `NONE`으로 되돌리고 `204`를 준다. 성립한 관계를 지우는 정식 경로는 여전히 `DELETE .../friend`다
   - **Response `204 No Content`**
-  - **에러 (404 Not Found)**: 둘 사이에 대기 중인 요청(`FRIEND_REQUEST_*`)이 없다
+  - **에러 (404 Not Found)**: 둘 사이에 대기 중인 요청(`FRIEND_REQUEST_*`)도 친구 관계도 없다
 - **친구 삭제** (`DELETE .../friend`): **양쪽 누구나 호출할 수 있다** — 성립한 뒤로는 방향에 의미가 없다. 두 행을 `NONE`으로 바꾼다
   - 성립 전 요청과 리소스를 나눈다 — 요청은 `friend-request`, 성립한 관계는 `friend`다
   - **Response `204 No Content`**
