@@ -1,10 +1,10 @@
 package com.runiverse.running_service.unit_test.user.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.exception.UserNotFoundException;
 import com.runiverse.running_service.application.user.port.out.LoadNicknamePort;
 import com.runiverse.running_service.application.user.port.out.LoadOauthProviderPort;
-import com.runiverse.running_service.application.user.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.query.basicinfo.GetMyBasicInfoHandler;
 import com.runiverse.running_service.application.user.query.basicinfo.GetMyBasicInfoQuery;
 import com.runiverse.running_service.application.user.query.basicinfo.GetMyBasicInfoResult;

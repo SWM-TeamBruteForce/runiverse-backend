@@ -1,13 +1,13 @@
 package com.runiverse.running_service.unit_test.user.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.command.profile.ChangeMyProfileCommand;
 import com.runiverse.running_service.application.user.command.profile.ChangeMyProfileHandler;
 import com.runiverse.running_service.application.user.command.profile.ChangeMyProfileResult;
 import com.runiverse.running_service.application.user.exception.OnboardingNotCompletedException;
 import com.runiverse.running_service.application.user.exception.UserNotFoundException;
 import com.runiverse.running_service.application.user.port.out.ExistsOnboardingPort;
-import com.runiverse.running_service.application.user.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.port.out.UpdateIntroductionPort;
 import com.runiverse.running_service.application.user.port.out.UpdateOnboardingPort;
 import com.runiverse.running_service.domain.common.vo.UserId;

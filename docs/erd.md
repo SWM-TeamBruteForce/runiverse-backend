@@ -365,7 +365,7 @@
 > CHECK `ck_user_relationship_type`: `type in ('NONE', 'FRIEND', 'FRIEND_REQUEST_SENT', 'FRIEND_REQUEST_RECEIVED', 'BLOCKED')`
 > CHECK `ck_user_relationship_users`: `user_id <> target_id`
 
-> **사람마다 자기 관점의 행을 갖는다.** `type`이 곧 조회자 기준 API `friendStatus`라 값 이름을 그대로 맞췄다(변환 없음). 친구 수·친구 목록·관계 확인이 전부 `user_id` 하나로 끝난다 — 요청자/수신자 두 컬럼을 OR로 볼 일이 없다.
+> **사람마다 자기 관점의 행을 갖는다.** `type`이 곧 조회자 기준 API `relationshipType`이라 값 이름을 그대로 맞췄다(변환 없음). 친구 수·친구 목록·관계 확인이 전부 `user_id` 하나로 끝난다 — 요청자/수신자 두 컬럼을 OR로 볼 일이 없다.
 > **관계가 끝나면 행을 지우지 않고 `NONE`으로 바꾼다.** 행이 지워지는 것은 탈퇴(두 FK CASCADE)뿐이다. 그래서 API `NONE`은 "행이 없다"와 "`NONE` 행이 있다" 두 경우다 — 둘을 같게 다룬다.
 > **친구·요청은 양쪽에 짝으로 쓴다** — A가 요청하면 `(A,B,FRIEND_REQUEST_SENT)`·`(B,A,FRIEND_REQUEST_RECEIVED)`, 수락하면 둘 다 `FRIEND`. **짝은 DB로 막을 수 없어 앱이 한 트랜잭션에서 함께 바꾼다.** 차단은 건 쪽 한 행만 `BLOCKED`다.
 
@@ -555,7 +555,7 @@ FK 강제 없는 독립 테이블(원본 삭제/수정된 row를 참조하므로
 |---|---|---|
 | feeds.visibility | FRIENDS / PUBLIC / PRIVATE | 피드별 개별 저장 |
 | users.profile_visibility | FRIENDS / PUBLIC | 지인 마스킹 — FRIENDS는 `user_relationships`로 직접 판정 |
-| user_relationships.type | NONE / FRIEND / FRIEND_REQUEST_SENT / FRIEND_REQUEST_RECEIVED / BLOCKED | 행 주인 관점의 관계 — 관계 없음(끝난 관계) / 친구 / 보낸 요청 / 받은 요청 / 내가 차단함. API `friendStatus`와 같은 값(`BLOCKED`는 차단 구현 때 API에 추가). 행이 없어도 `NONE`이다 |
+| user_relationships.type | NONE / FRIEND / FRIEND_REQUEST_SENT / FRIEND_REQUEST_RECEIVED / BLOCKED | 행 주인 관점의 관계 — 관계 없음(끝난 관계) / 친구 / 보낸 요청 / 받은 요청 / 내가 차단함. API `relationshipType`과 같은 값(`BLOCKED`는 차단 구현 때 API에 추가). 행이 없어도 `NONE`이다 |
 | running_room_invitations.status | PENDING / ACCEPTED / DECLINED / EXPIRED | 응답 대기 / 수락(방 입장) / 거절 / 모집 마감·방 취소로 만료. `user_relationships`와 달리 거절을 값으로 남긴다 — 방 화면에 보여준다 |
 | notifications.type | FRIEND_REQUESTED / FRIEND_ACCEPTED / RUNNING_INVITED | 친구 요청 도착 / 내 요청이 수락됨 / 러닝 초대 도착 |
 | colors.category | DISTANCE / SPEED / ENDURANCE / CONSISTENCY / CADENCE / INTERVAL / EVEN_PACE / HILLS / RECOVERY / COMPANY / ADVERSITY / MILESTONE | 12범주 — 거리 / 속도 / 지구력 / 꾸준함 / 케이던스 / 인터벌 / 균등페이스 / 언덕 / 회복 / 동행 / 악조건극복 / 이정표 |
@@ -579,7 +579,7 @@ FK 강제 없는 독립 테이블(원본 삭제/수정된 row를 참조하므로
 | 인덱스 대상 | 용도 |
 |---|---|
 | user_devices.user_id | 푸시 발송 — 유저의 활성 기기 조회 |
-| user_relationships.(user_id, target_id) | UNIQUE 겸 조회 — 친구 수·친구 목록·관계 확인(`friendStatus`)이 `user_id` 선두로 탄다 |
+| user_relationships.(user_id, target_id) | UNIQUE 겸 조회 — 친구 수·친구 목록·관계 확인(`relationshipType`)이 `user_id` 선두로 탄다 |
 | user_relationships.target_id | 탈퇴 시 `target_id` 쪽 CASCADE 삭제 — 차단 여부 확인은 상대 행을 `(user_id, target_id)`로 찾아 이 인덱스가 필요 없다 |
 | notifications.(user_id, created_at) | 알림함 최신순 조회·안 읽은 수 — 보관 기간 조건도 `created_at` 범위로 탄다 |
 | running_room_invitations.invitee_id | 받은 초대 조회 — UNIQUE가 `running_room_id` 방향만 커버한다. 방의 초대 현황은 UNIQUE가 맡는다 |

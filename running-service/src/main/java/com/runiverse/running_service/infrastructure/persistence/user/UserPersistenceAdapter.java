@@ -6,6 +6,7 @@ import com.runiverse.running_service.application.auth.port.out.LoadUserByProvide
 import com.runiverse.running_service.application.auth.port.out.SaveUserPort;
 import com.runiverse.running_service.application.common.port.out.LoadPlayerProfilesPort;
 import com.runiverse.running_service.application.common.port.out.LoadUserAvgPacePort;
+import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.common.port.out.PlayerProfile;
 import com.runiverse.running_service.application.common.port.out.UpdateUserAvgPacePort;
 import com.runiverse.running_service.application.running.port.out.LoadUserWeightPort;
@@ -23,7 +24,6 @@ import com.runiverse.running_service.application.user.port.out.LoadDeletedUserId
 import com.runiverse.running_service.application.user.port.out.LoadNicknamePort;
 import com.runiverse.running_service.application.user.port.out.LoadOauthProviderPort;
 import com.runiverse.running_service.application.user.port.out.LoadOnboardingProfilePort;
-import com.runiverse.running_service.application.user.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.port.out.OnboardingProfile;
 import com.runiverse.running_service.application.user.port.out.RedactDeletedUserPort;
 import com.runiverse.running_service.application.user.port.out.SaveDeletedUserPort;

@@ -1,20 +1,20 @@
 package com.runiverse.running_service.unit_test.user.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.common.port.out.PasswordHashPort;
 import com.runiverse.running_service.application.user.command.password.ChangePasswordCommand;
 import com.runiverse.running_service.application.user.command.password.ChangePasswordHandler;
 import com.runiverse.running_service.application.user.exception.InvalidCurrentPasswordException;
 import com.runiverse.running_service.application.user.exception.PasswordNotSetException;
 import com.runiverse.running_service.application.user.exception.UserNotFoundException;
-import com.runiverse.running_service.application.user.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.port.out.UpdatePasswordPort;
+import com.runiverse.running_service.domain.common.exception.InvalidUserIdFormatException;
+import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.user.User;
 import com.runiverse.running_service.domain.user.exception.InvalidPasswordHashFormatException;
-import com.runiverse.running_service.domain.common.exception.InvalidUserIdFormatException;
 import com.runiverse.running_service.domain.user.vo.PasswordHash;
 import com.runiverse.running_service.domain.user.vo.Provider;
-import com.runiverse.running_service.domain.common.vo.UserId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

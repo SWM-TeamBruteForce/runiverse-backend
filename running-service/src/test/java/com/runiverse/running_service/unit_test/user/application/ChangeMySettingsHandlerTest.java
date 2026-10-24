@@ -1,11 +1,11 @@
 package com.runiverse.running_service.unit_test.user.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.command.settings.ChangeMySettingsCommand;
 import com.runiverse.running_service.application.user.command.settings.ChangeMySettingsHandler;
 import com.runiverse.running_service.application.user.command.settings.ChangeMySettingsResult;
 import com.runiverse.running_service.application.user.exception.UserNotFoundException;
-import com.runiverse.running_service.application.user.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.port.out.UpdateSettingsPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.user.User;

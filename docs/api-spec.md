@@ -129,7 +129,7 @@
 | # | Method | Path | 설명 |
 |---|--------|------|------|
 | 44 | GET | `/api/v1/users/me` | 내 기본 정보 — 이메일·로그인 수단 포함(설정 화면이 재사용) — 사용 화면: 전역 |
-| 45 | GET | `/api/v1/users/{userId}` | 프로필 요약 (기본 정보·친구 수·친구 상태) |
+| 45 | GET | `/api/v1/users/{userId}` | 프로필 요약 (기본 정보·친구 수·관계) |
 | 46 | GET | `/api/v1/users/{userId}/feeds` | 피드 그리드 (경량: 썸네일+장수) **[MVP 제외]** |
 | 47 | POST | `/api/v1/users/{userId}/friend-request` | 친구 요청 — 사용 화면: 프로필, 사용자 검색 |
 | 48 | PUT | `/api/v1/users/{userId}/friend-request` | 친구 요청 수락 — 요청을 친구로 확정 |
@@ -189,11 +189,12 @@
 - **좌표 배열 형식**: `[[위도, 경도], [위도, 경도], …]`. 안쪽 배열은 항상 **위도가 먼저**다 — GeoJSON은 경도가 먼저라 반대이므로 그 관례를 따르지 않는다. 단일 지점도 같은 `[위도, 경도]` 두 칸 배열이다. 키 이름을 반복하지 않아 점 수백 개를 실어도 응답이 작다.
   - **조각으로 나뉜 경로**(6-1 `routes`)는 이 배열을 한 겹 더 감싼다 — `[[[위도, 경도], …], [[위도, 경도], …]]`. 끊긴 곳이 없어도 바깥 배열은 있다(조각 하나). 조각에는 점이 하나만 있을 수 있다.
 - **친구 관계**: 토글이 아니다. **성립 전 요청은 `/users/{userId}/friend-request` 한 리소스를 메서드로 다룬다** — 요청 `POST`(10-4), 수락 `PUT`(10-5), 취소·거절 `DELETE`(10-6). 성립한 친구의 삭제만 `/users/{userId}/friend`(10-6)다.
-- **친구 상태 `friendStatus`**: `NONE` | `FRIEND_REQUEST_SENT` | `FRIEND_REQUEST_RECEIVED` | `FRIEND` — 언제나 **조회하는 사람 기준**이다. 대상이 본인이면 `null`이다(10-2·10-7·10-9·2-4가 같은 값을 쓴다).
-  - **값이 추가될 수 있다** — 차단(`feature-spec.md` 차단 절)이 붙으면 차단 관계를 나타내는 값이 생긴다. 클라는 모르는 값을 받으면 친구 버튼을 그리지 않는다.
+- **관계 `relationshipType`**: `NONE` | `FRIEND_REQUEST_SENT` | `FRIEND_REQUEST_RECEIVED` | `FRIEND` — 언제나 **조회하는 사람 기준**이다. 대상이 본인이면 `null`이다(10-2·10-4·10-5·10-7·10-9·2-4가 같은 값을 쓴다). `user_relationships.type`과 같은 값이다.
+  - **친구 상태가 아니라 관계라서 `relationshipType`이다** — 친구가 아닌 관계(차단)도 같은 필드에 싣는다.
+  - **값이 추가될 수 있다** — 차단(`feature-spec.md` 차단 절)이 붙으면 `BLOCKED`가 생긴다. 클라는 모르는 값을 받으면 친구 버튼을 그리지 않는다.
 - **이미지 업로드 공통(Presigned)**: ① 업로드 URL 발급 API → ② 클라가 S3에 직접 업로드 → ③ 반환받은 `key`(또는 완료 API)를 본 API에 전달
 - **탈퇴 유저 표시**: 작성자·러닝 참가자는 `{ "userId": "01a0f2d4-...", "nickname": "탈퇴한 사용자", "profileImageUrl": null, "isDeleted": true }`로 반환한다(`userId`는 유지).
-- **값이 없는 필드**: 조회 응답에서는 `null`이다(`profileImageUrl`·`introduction`·`friendStatus` 등). 수정 응답(11-2·11-6·11-10·11-11)은 보낸 필드만 담는다 — 11-10에서 보내지 않은 필드는 키째 빠진다(11-2·11-11·11-6은 필드가 하나뿐이다).
+- **값이 없는 필드**: 조회 응답에서는 `null`이다(`profileImageUrl`·`introduction`·`relationshipType` 등). 수정 응답(11-2·11-6·11-10·11-11)은 보낸 필드만 담는다 — 11-10에서 보내지 않은 필드는 키째 빠진다(11-2·11-11·11-6은 필드가 하나뿐이다).
 - **수정 응답의 범위**: `PATCH`가 본문을 반환하면 저장 후의 리소스 전체 표현을 담는다(12-3). 반환할 표현이 없으면 `204 No Content`다. 위 네 API(11-2·11-6·11-10·11-11)는 예외로 보낸 필드만 담는다. 저장 위치가 여러 테이블로 나뉘는지는 기준이 아니다.
 - **`[MVP 제외]` 표기**: 지금 만들지 않는 엔드포인트. 정의는 그대로 두어 확장 시점에 재작성 없이 쓴다. 마커가 없으면 만드는 것이며, 차수(1차·2차)는 적지 않는다.
 - **앱 버전 헤더**: 앱은 서버로 가는 모든 요청(REST·SSE·WebSocket 연결)에 `X-App-Version`(버전 이름, 예: `1.1.0`)과 `X-App-Platform`(`IOS` | `ANDROID`)을 싣는다. 서버는 버전이 그 플랫폼의 최소 버전(2-3 `minimumVersion`)보다 낮으면 **요청을 처리하기 전에** `403 APP_UPDATE_REQUIRED`로 거절한다 — 호환을 깨는 배포 뒤에 구버전 요청이 기록·상태를 틀어지게 하지 않기 위해서다. 앱이 켤 때·돌아올 때 하는 확인(2-3)은 화면을 막을 뿐, 그 사이 이미 떠 있던 앱의 요청은 막지 못한다.
@@ -1060,7 +1061,7 @@
         "profileImageUrl": "https://...",
         "isDeleted": false
       },
-      "friendStatus": null,                 // FRIEND_* 알림만 — 지금 actor와의 친구 상태
+      "relationshipType": null,             // FRIEND_* 알림만 — 지금 actor와의 관계
       "invitation": {                       // RUNNING_INVITED만
         "runningRoomInvitationId": 31,
         "runningRoomId": 130,
@@ -1079,11 +1080,11 @@
 | `type` | String | O | 알림 종류 — erd §6 `notifications.type` |
 | `isRead` | Boolean | O | 읽음 여부 |
 | `actor` | Object | O | 알림을 일으킨 사람. 탈퇴했으면 §0 탈퇴 유저 형식 |
-| `friendStatus` | String | X | `FRIEND_REQUESTED`·`FRIEND_ACCEPTED`일 때 **지금** actor와의 친구 상태(§0). `RUNNING_INVITED`면 `null` |
+| `relationshipType` | String | X | `FRIEND_REQUESTED`·`FRIEND_ACCEPTED`일 때 **지금** actor와의 관계(§0). `RUNNING_INVITED`면 `null` |
 | `invitation` | Object | X | `RUNNING_INVITED`일 때만 있고 그 밖에는 `null` |
 | `invitation.status` | String | O | 초대의 **지금** 상태 — `PENDING`이면 수락·거절 버튼을 그린다 |
 
-- **알림은 사건의 기록이고 버튼은 지금 상태로 그린다** — 요청이 취소됐거나 초대가 만료됐어도 알림은 남는다. 그래서 `friendStatus`·`invitation.status`는 저장값이 아니라 조회 시점 값이다(근거는 `feature-spec.md` 인앱 알림 저장 절)
+- **알림은 사건의 기록이고 버튼은 지금 상태로 그린다** — 요청이 취소됐거나 초대가 만료됐어도 알림은 남는다. 그래서 `relationshipType`·`invitation.status`는 저장값이 아니라 조회 시점 값이다(근거는 `feature-spec.md` 인앱 알림 저장 절)
   - 친구 요청 알림: `FRIEND_REQUEST_RECEIVED`면 수락(10-5)·거절(10-6) 버튼, 그 밖이면 결과만 보여준다
   - 초대 알림: `PENDING`이면 수락(4-3)·거절(4-4) 버튼, `ACCEPTED`면 탭하면 초대 방으로 간다
 - **보관 기간(운영값)이 지난 알림은 나오지 않는다**
@@ -2746,12 +2747,12 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   "profileImageUrl": "https://...",
   "introduction": "즐겁게 달려요",
   "friendCount": 42,                   // user_relationships에서 COUNT (type=FRIEND)
-  "friendStatus": "FRIEND"           // NONE | FRIEND_REQUEST_SENT | FRIEND_REQUEST_RECEIVED | FRIEND
+  "relationshipType": "FRIEND"         // NONE | FRIEND_REQUEST_SENT | FRIEND_REQUEST_RECEIVED | FRIEND
 }
 ```
 
 - **러닝 통계(마일리지·최고 페이스·러닝 횟수)는 싣지 않는다** — FE와 합의해 프로필 화면에서 제외했다. 다시 필요해지면 유효 러닝 판정(`feature-spec.md`)을 거친 집계로 추가한다
-- `friendStatus`로 버튼을 가른다(10-6 표). 본인 프로필(`isMe=true`)이면 `null`이다
+- `relationshipType`으로 버튼을 가른다(10-6 표). 본인 프로필(`isMe=true`)이면 `null`이다
 - **배경 사진은 싣지 않는다** — 11-7이 따로 내린다(프로필 사진과 같은 이유로 presigned URL을 표시 시점에 받는다)
 - 친구 목록(10-7)·업적(10-10)은 각자의 API로 받는다
 
@@ -2792,12 +2793,13 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 ```json
 {
-  "friendStatus": "FRIEND_REQUEST_SENT"
+  "relationshipType": "FRIEND_REQUEST_SENT"
 }
 ```
 
 - `user_relationships`에 `(요청자→대상, FRIEND_REQUEST_SENT)`·`(대상→요청자, FRIEND_REQUEST_RECEIVED)` 두 행을 쓰고(이전 관계로 `NONE` 행이 남아 있으면 그 행을 갱신한다) 대상에게 "친구 요청 도착" 인앱 알림(`FRIEND_REQUESTED`, 2-4)을 쌓고 푸시를 보낸다
-- **이미 상대가 나에게 요청해 둔 상태면(내 행이 `FRIEND_REQUEST_RECEIVED`) 새 요청을 만들지 않고 수락으로 처리한다.** 서로 요청을 주고받은 상황은 이미 합의된 것이라 한 번 더 수락을 요구할 이유가 없다. 이때 응답은 `ACCEPTED`이고, 역방향 요청자에게 `FRIEND_ACCEPTED` 알림을 쌓는다
+- **이미 상대가 나에게 요청해 둔 상태면(내 행이 `FRIEND_REQUEST_RECEIVED`) 새 요청을 만들지 않고 수락으로 처리한다.** 서로 요청을 주고받은 상황은 이미 합의된 것이라 한 번 더 수락을 요구할 이유가 없다. 이때 응답은 10-5 수락과 같은 `200 OK` `{ "relationshipType": "FRIEND" }`이고(요청을 새로 만들지 않으므로 `201`이 아니다), 역방향 요청자에게 `FRIEND_ACCEPTED` 알림을 쌓는다
+  - **동시에 서로 요청해도 같다** — 두 요청 중 뒤에 처리되는 쪽이 앞쪽이 만든 요청을 받은 상태로 보고 수락한다. 둘 다 `FRIEND_REQUEST_SENT`로 끝나는 일은 없다
 - **에러 (400 Bad Request)**: `CANNOT_FRIEND_SELF` — 자기 자신에게는 요청할 수 없다
 - **에러 (409 Conflict)**: `FRIEND_REQUEST_ALREADY_EXISTS` — 이미 요청했거나 이미 친구다
 - **에러 (404 Not Found)**: 대상이 없다
@@ -2821,7 +2823,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **Request 본문이 없다** — 수락 말고 바꿀 수 있는 값이 없다. `PATCH`로 상태 값을 받으면 `FRIEND_REQUEST_SENT` 같은 의미 없는 값까지 검증해야 한다
 - 요청자에게 "친구 요청 수락됨" 인앱 알림(`FRIEND_ACCEPTED`)을 쌓고 푸시를 보낸다
 - **멱등이다** — 이미 그 사람과 친구(`FRIEND`)면 아무것도 바꾸지 않고 같은 응답을 준다. 알림도 다시 쌓지 않는다. 응답을 못 받은 앱이 다시 보내도 에러가 나지 않는다
-- **Response `200 OK`**: `{ "friendStatus": "FRIEND" }`
+- **Response `200 OK`**: `{ "relationshipType": "FRIEND" }`
 - **에러 (404 Not Found)**: 그 사람이 나에게 보낸 요청이 없다 — 내가 보낸 요청을 내가 수락하려는 경우도 여기다
 - **인증**: 필요
 
@@ -2838,7 +2840,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   - **에러 (404 Not Found)**: 친구가 아니다
 - **인증**: 필요
 
-> | `friendStatus` | 화면 버튼 | 호출 |
+> | `relationshipType` | 화면 버튼 | 호출 |
 > |---|---|---|
 > | `NONE` | 친구 요청 | `POST .../friend-request` |
 > | `FRIEND_REQUEST_SENT` | 요청 취소 | `DELETE .../friend-request` |
@@ -2858,12 +2860,12 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - `profile_visibility`로 가리지 않는다
 - **Query**: `q`(이름 필터), `cursor`/`limit`
-- **Response `200 OK`**: `{ "items": [ { "userId", "nickname", "profileImageUrl", "friendStatus" } ], "nextCursor": "..." }`
-- **`friendStatus`는 조회하는 사람 기준이다**(§0)
+- **Response `200 OK`**: `{ "items": [ { "userId", "nickname", "profileImageUrl", "relationshipType" } ], "nextCursor": "..." }`
+- **`relationshipType`은 조회하는 사람 기준이다**(§0)
   - 본인 목록: 항목의 상태 그대로 — `FRIEND_REQUEST_RECEIVED`면 수락(10-5)·거절(10-6), `FRIEND_REQUEST_SENT`면 취소(10-6), `FRIEND`면 삭제(10-6)
   - 타인 목록: 나와 그 사람의 관계 — 타인의 목록에서 바로 친구 요청 버튼을 그린다. 목록에 조회자 본인이 있으면 그 항목은 `null`이다
 - **정렬**: 받은 요청 → 보낸 요청 → 확정 순으로 묶고, 묶음 안에서는 닉네임순이다. 커서는 묶음과 그 안의 위치를 함께 담는다 — 묶음 경계에서 페이지가 끊겨도 이어진다
-- `user_relationships`에서 `user_id`가 대상인 행이다(`NONE`·`BLOCKED`는 담지 않는다) — 본인이면 `type`이 `FRIEND`·`FRIEND_REQUEST_SENT`·`FRIEND_REQUEST_RECEIVED`, 타인이면 `FRIEND`만. 행의 `type`이 곧 본인 목록의 `friendStatus`다
+- `user_relationships`에서 `user_id`가 대상인 행이다(`NONE`·`BLOCKED`는 담지 않는다) — 본인이면 `type`이 `FRIEND`·`FRIEND_REQUEST_SENT`·`FRIEND_REQUEST_RECEIVED`, 타인이면 `FRIEND`만. 행의 `type`이 곧 본인 목록의 `relationshipType`이다
 - **10-2 `friendCount`는 확정만 센다** — 본인 목록의 항목 수와 다를 수 있다
 - **에러 (404 Not Found)**: 대상이 없다(탈퇴 포함)
 - **인증**: 필요
@@ -2922,8 +2924,8 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **화면**: 사용자 검색 — **친구를 추가하려면 먼저 사람을 찾아야 하므로 친구 기능의 진입점이다**
 - **Query**: `q`(필수, 닉네임), `cursor`/`limit`
-- **Response `200 OK`**: `{ "items": [ { "userId", "nickname", "profileImageUrl", "friendStatus" } ], "nextCursor": "..." }`
-- `friendStatus`는 10-2와 같은 값이며, 버튼을 무엇으로 그릴지가 이 값에 달렸다
+- **Response `200 OK`**: `{ "items": [ { "userId", "nickname", "profileImageUrl", "relationshipType" } ], "nextCursor": "..." }`
+- `relationshipType`은 10-2와 같은 값이며, 버튼을 무엇으로 그릴지가 이 값에 달렸다
 - **인증**: 필요
 
 ### 10-10. `GET /api/v1/users/{userId}/achievements` — 업적
@@ -2983,7 +2985,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 ```
 
 - **함께 뛴 사람(`RAN_TOGETHER`)을 먼저 채우고 남은 자리를 페이스가 비슷한 사람(`SIMILAR_PACE`)으로 채운다.** 판정·제외 규칙은 `feature-spec.md` 추천 친구 절
-- **결과는 모두 친구 요청을 보낼 수 있는 사람이다**(`friendStatus`가 늘 `NONE`이라 싣지 않는다) — 버튼은 친구 요청(10-4) 하나다
+- **결과는 모두 친구 요청을 보낼 수 있는 사람이다**(`relationshipType`이 늘 `NONE`이라 싣지 않는다) — 버튼은 친구 요청(10-4) 하나다
 - 상대의 페이스 값은 싣지 않는다
 - **페이지를 나누지 않는다** — 총 인원이 운영값으로 묶여 있다. 후보가 없으면 빈 배열이다
 - 온보딩 전이면 페이스 갈래는 비고 함께 뛴 사람만 나온다

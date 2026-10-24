@@ -1,10 +1,10 @@
 package com.runiverse.running_service.application.user.command.profile;
 
+import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.exception.OnboardingNotCompletedException;
 import com.runiverse.running_service.application.user.exception.UserNotFoundException;
 import com.runiverse.running_service.application.user.port.in.ChangeMyProfileUsecase;
 import com.runiverse.running_service.application.user.port.out.ExistsOnboardingPort;
-import com.runiverse.running_service.application.user.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.port.out.UpdateIntroductionPort;
 import com.runiverse.running_service.application.user.port.out.UpdateOnboardingPort;
 import com.runiverse.running_service.domain.common.vo.UserId;

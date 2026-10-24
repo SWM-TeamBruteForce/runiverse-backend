@@ -2,6 +2,7 @@ package com.runiverse.running_service.presentation.common.exception;
 
 import com.runiverse.running_service.application.common.exception.AuthErrorCode;
 import com.runiverse.running_service.application.common.exception.MatchErrorCode;
+import com.runiverse.running_service.application.common.exception.RelationshipErrorCode;
 import com.runiverse.running_service.application.common.exception.ResourceErrorCode;
 import com.runiverse.running_service.application.common.exception.RunningErrorCode;
 import com.runiverse.running_service.application.common.exception.UserErrorCode;
@@ -54,7 +55,9 @@ public final class ErrorExposurePolicy {
             MatchErrorCode.MATCH_ALREADY_IN_PROGRESS.getCode(),
             MatchErrorCode.MATCH_COOLDOWN.getCode(),
             MatchErrorCode.MATCH_SLOT_CLOSED.getCode(),
-            MatchErrorCode.MATCH_ALREADY_STARTED.getCode()
+            MatchErrorCode.MATCH_ALREADY_STARTED.getCode(),
+            // 이미 요청했거나 이미 친구다 — 409로 그대로 보내 앱이 버튼 상태를 다시 그리게 한다
+            RelationshipErrorCode.FRIEND_REQUEST_ALREADY_EXISTS.getCode()
     );
 
     private ErrorExposurePolicy() {

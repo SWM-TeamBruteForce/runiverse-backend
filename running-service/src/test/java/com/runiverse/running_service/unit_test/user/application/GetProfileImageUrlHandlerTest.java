@@ -1,16 +1,16 @@
 package com.runiverse.running_service.unit_test.user.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.common.UserImageUrlResolver;
 import com.runiverse.running_service.application.user.exception.ProfileNotFoundException;
 import com.runiverse.running_service.application.user.port.out.GenerateViewUrlPort;
-import com.runiverse.running_service.application.user.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.query.profileimage.GetProfileImageUrlHandler;
 import com.runiverse.running_service.application.user.query.profileimage.GetProfileImageUrlQuery;
 import com.runiverse.running_service.application.user.query.profileimage.GetProfileImageUrlResult;
+import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.user.User;
 import com.runiverse.running_service.domain.user.vo.ProfileVisibility;
-import com.runiverse.running_service.domain.common.vo.UserId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

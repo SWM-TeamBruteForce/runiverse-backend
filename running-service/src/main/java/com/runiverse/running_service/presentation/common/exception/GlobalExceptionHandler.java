@@ -4,6 +4,7 @@ import com.runiverse.running_service.application.common.exception.AuthErrorCode;
 import com.runiverse.running_service.application.common.exception.BusinessException;
 import com.runiverse.running_service.application.common.exception.ErrorCode;
 import com.runiverse.running_service.application.common.exception.MatchErrorCode;
+import com.runiverse.running_service.application.common.exception.RelationshipErrorCode;
 import com.runiverse.running_service.application.common.exception.ResourceErrorCode;
 import com.runiverse.running_service.application.common.exception.RunningErrorCode;
 import com.runiverse.running_service.application.common.exception.UserErrorCode;
@@ -257,6 +258,7 @@ public class GlobalExceptionHandler {
             case AuthErrorCode code -> toStatus(code);
             case RunningErrorCode code -> toStatus(code);
             case MatchErrorCode code -> toStatus(code);
+            case RelationshipErrorCode code -> toStatus(code);
             case ResourceErrorCode code -> toStatus(code);
         };
     }
@@ -326,6 +328,13 @@ public class GlobalExceptionHandler {
                  MATCH_COOLDOWN,
                  MATCH_SLOT_CLOSED,
                  MATCH_ALREADY_STARTED -> HttpStatus.CONFLICT;
+        };
+    }
+
+    private HttpStatus toStatus(RelationshipErrorCode code) {
+        return switch (code) {
+            case CANNOT_FRIEND_SELF -> HttpStatus.BAD_REQUEST;
+            case FRIEND_REQUEST_ALREADY_EXISTS -> HttpStatus.CONFLICT;
         };
     }
 

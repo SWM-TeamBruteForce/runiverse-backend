@@ -4,16 +4,17 @@ import com.runiverse.running_service.application.auth.port.out.CheckEmailDuplica
 import com.runiverse.running_service.application.auth.port.out.LoadUserByEmailPort;
 import com.runiverse.running_service.application.auth.port.out.LoadUserByProviderPort;
 import com.runiverse.running_service.application.auth.port.out.SaveUserPort;
+import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.exception.UserNotFoundException;
 import com.runiverse.running_service.application.user.port.out.ClearBackgroundImagePort;
 import com.runiverse.running_service.application.user.port.out.ClearProfileImagePort;
 import com.runiverse.running_service.application.user.port.out.LoadOauthProviderPort;
-import com.runiverse.running_service.application.user.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.port.out.UpdateBackgroundImagePort;
 import com.runiverse.running_service.application.user.port.out.UpdateIntroductionPort;
 import com.runiverse.running_service.application.user.port.out.UpdatePasswordPort;
 import com.runiverse.running_service.application.user.port.out.UpdateProfileImagePort;
 import com.runiverse.running_service.application.user.port.out.UpdateSettingsPort;
+import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.user.User;
 import com.runiverse.running_service.domain.user.vo.BackgroundImageKey;
 import com.runiverse.running_service.domain.user.vo.Introduction;
@@ -21,7 +22,6 @@ import com.runiverse.running_service.domain.user.vo.PasswordHash;
 import com.runiverse.running_service.domain.user.vo.ProfileImageKey;
 import com.runiverse.running_service.domain.user.vo.ProfileVisibility;
 import com.runiverse.running_service.domain.user.vo.Provider;
-import com.runiverse.running_service.domain.common.vo.UserId;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

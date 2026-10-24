@@ -1,8 +1,8 @@
 package com.runiverse.running_service.application.user.query.settings;
 
+import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.user.exception.UserNotFoundException;
 import com.runiverse.running_service.application.user.port.in.GetMySettingsUsecase;
-import com.runiverse.running_service.application.user.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.user.User;
 import lombok.RequiredArgsConstructor;
