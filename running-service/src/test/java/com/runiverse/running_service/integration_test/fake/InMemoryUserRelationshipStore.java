@@ -8,7 +8,9 @@ import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.relationship.UserRelationship;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,7 +20,7 @@ public class InMemoryUserRelationshipStore implements LoadUserRelationshipPort, 
         EnsureUserRelationshipPairPort {
 
     // user_relationships의 한 행 — 꺼낼 때마다 새 도메인 객체를 만들어 저장 전 변경이 새지 않게 한다
-    private record Row(long id, UUID userId, UUID targetId, RelationshipType type) {
+    public record Row(long id, UUID userId, UUID targetId, RelationshipType type, LocalDateTime updatedAt) {
     }
 
     private record Key(UUID userId, UUID targetId) {
@@ -26,6 +28,8 @@ public class InMemoryUserRelationshipStore implements LoadUserRelationshipPort, 
 
     private final Map<Key, Row> rows = new LinkedHashMap<>();
     private long nextId = 1;
+    // 바꿀 때마다 1초씩 흐르는 시계 — 친구 목록이 updated_at 최근순이라 순서가 드러나야 한다
+    private LocalDateTime clock = LocalDateTime.of(2026, 10, 25, 9, 0);
 
     @Override
     public UserRelationshipPair loadPairForUpdate(UserId userId, UserId targetId) {
@@ -48,7 +52,24 @@ public class InMemoryUserRelationshipStore implements LoadUserRelationshipPort, 
         long id = relationship.getUserRelationshipId()
                 .map(relationshipId -> relationshipId.value())
                 .orElseGet(() -> nextId++);
-        rows.put(new Key(userId, targetId), new Row(id, userId, targetId, relationship.getType()));
+        Key key = new Key(userId, targetId);
+        Row before = rows.get(key);
+        // @UpdateTimestamp처럼 type이 바뀔 때만 시각이 움직인다
+        LocalDateTime updatedAt = before != null && before.type() == relationship.getType()
+                ? before.updatedAt()
+                : tick();
+        rows.put(key, new Row(id, userId, targetId, relationship.getType(), updatedAt));
+    }
+
+    // 친구 목록 페이크가 user_id 선두로 읽는다
+    public List<Row> rowsOwnedBy(UUID userId) {
+        return rows.values().stream()
+                .filter(row -> row.userId().equals(userId))
+                .toList();
+    }
+
+    public Optional<Row> rowOf(UUID userId, UUID targetId) {
+        return Optional.ofNullable(rows.get(new Key(userId, targetId)));
     }
 
     // 요청 API 없이 "requester가 receiver에게 요청한" 상태를 만든다
@@ -79,7 +100,12 @@ public class InMemoryUserRelationshipStore implements LoadUserRelationshipPort, 
 
     private void insertNoneIfAbsent(UUID userId, UUID targetId) {
         rows.computeIfAbsent(new Key(userId, targetId),
-                key -> new Row(nextId++, userId, targetId, RelationshipType.NONE));
+                key -> new Row(nextId++, userId, targetId, RelationshipType.NONE, tick()));
+    }
+
+    private LocalDateTime tick() {
+        clock = clock.plusSeconds(1);
+        return clock;
     }
 
     private Optional<UserRelationship> find(UUID userId, UUID targetId) {

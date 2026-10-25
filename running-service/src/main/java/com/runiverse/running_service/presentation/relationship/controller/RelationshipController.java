@@ -9,20 +9,32 @@ import com.runiverse.running_service.application.relationship.command.request.Re
 import com.runiverse.running_service.application.relationship.port.in.AcceptFriendRequestUsecase;
 import com.runiverse.running_service.application.relationship.port.in.CancelFriendRequestUsecase;
 import com.runiverse.running_service.application.relationship.port.in.DeleteFriendUsecase;
+import com.runiverse.running_service.application.relationship.port.in.GetFriendRecommendationsUsecase;
+import com.runiverse.running_service.application.relationship.port.in.GetFriendsUsecase;
 import com.runiverse.running_service.application.relationship.port.in.RequestFriendUsecase;
+import com.runiverse.running_service.application.relationship.query.friends.GetFriendsQuery;
+import com.runiverse.running_service.application.relationship.query.friends.GetFriendsResult;
+import com.runiverse.running_service.application.relationship.query.recommendation.GetFriendRecommendationsQuery;
+import com.runiverse.running_service.application.relationship.query.recommendation.GetFriendRecommendationsResult;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
+import com.runiverse.running_service.presentation.relationship.response.FriendRecommendationsResponse;
+import com.runiverse.running_service.presentation.relationship.response.FriendsResponse;
 import com.runiverse.running_service.presentation.relationship.response.RelationshipTypeResponse;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -36,10 +48,14 @@ public class RelationshipController {
     // UserId VO가 받는 UUIDv7만 — UUID 타입으로 받으면 1-1-1-1-1 같은 값도 변환된다
     private static final String USER_ID_FORMAT =
             "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
+    // api-convention 커서 페이지네이션 — 기본 20, 넘으면 50으로 줄인다
+    private static final int MAX_LIMIT = 50;
     private final RequestFriendUsecase requestFriendUsecase;
     private final AcceptFriendRequestUsecase acceptFriendRequestUsecase;
     private final CancelFriendRequestUsecase cancelFriendRequestUsecase;
     private final DeleteFriendUsecase deleteFriendUsecase;
+    private final GetFriendsUsecase getFriendsUsecase;
+    private final GetFriendRecommendationsUsecase getFriendRecommendationsUsecase;
 
     // 경로의 userId는 요청을 받을 사람이다 — 요청하는 사람은 토큰에서만 온다
     @PostMapping("/{userId}/friend-request")
@@ -89,5 +105,33 @@ public class RelationshipController {
                 UUID.fromString(jwt.getSubject()),
                 UUID.fromString(userId)));
         return ResponseEntity.noContent().build();
+    }
+
+    // 경로의 userId는 목록 주인이다 — 본인이면 요청까지, 타인이면 친구만 담는 것은 유스케이스가 가른다
+    @GetMapping("/{userId}/friends")
+    public ResponseEntity<FriendsResponse> getFriends(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable @Pattern(regexp = USER_ID_FORMAT, message = "입력값이 올바르지 않습니다.") String userId,
+            // 닉네임 최대 길이보다 긴 검색어는 아무것도 찾지 못한다
+            @RequestParam(required = false) @Size(max = 16, message = "입력값이 올바르지 않습니다.") String q,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "20") @Min(value = 1, message = "입력값이 올바르지 않습니다.") int limit
+    ) {
+        GetFriendsResult result = getFriendsUsecase.handle(new GetFriendsQuery(
+                UUID.fromString(jwt.getSubject()),
+                UUID.fromString(userId),
+                q,
+                // 첫 페이지에 cursor=를 빈 값으로 실어 보내도 처음부터 읽는다
+                cursor == null || cursor.isBlank() ? null : cursor,
+                Math.min(limit, MAX_LIMIT)));
+        return ResponseEntity.ok(FriendsResponse.from(result));
+    }
+
+    // 남이 볼 경우가 없는 리소스라 /me다 — 대상은 토큰 주체뿐이다
+    @GetMapping("/me/friend-recommendations")
+    public ResponseEntity<FriendRecommendationsResponse> getFriendRecommendations(@AuthenticationPrincipal Jwt jwt) {
+        GetFriendRecommendationsResult result = getFriendRecommendationsUsecase.handle(
+                new GetFriendRecommendationsQuery(UUID.fromString(jwt.getSubject())));
+        return ResponseEntity.ok(FriendRecommendationsResponse.from(result));
     }
 }

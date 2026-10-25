@@ -8,14 +8,23 @@ import com.runiverse.running_service.application.relationship.command.delete.Del
 import com.runiverse.running_service.application.relationship.command.request.RequestFriendCommand;
 import com.runiverse.running_service.application.relationship.command.request.RequestFriendResult;
 import com.runiverse.running_service.application.relationship.exception.CannotFriendSelfException;
+import com.runiverse.running_service.application.relationship.exception.FriendListOwnerNotFoundException;
 import com.runiverse.running_service.application.relationship.exception.FriendNotFoundException;
 import com.runiverse.running_service.application.relationship.exception.FriendRequestAlreadyExistsException;
 import com.runiverse.running_service.application.relationship.exception.FriendRequestNotFoundException;
 import com.runiverse.running_service.application.relationship.exception.FriendTargetNotFoundException;
+import com.runiverse.running_service.application.relationship.exception.InvalidFriendCursorException;
 import com.runiverse.running_service.application.relationship.port.in.AcceptFriendRequestUsecase;
 import com.runiverse.running_service.application.relationship.port.in.CancelFriendRequestUsecase;
 import com.runiverse.running_service.application.relationship.port.in.DeleteFriendUsecase;
+import com.runiverse.running_service.application.relationship.port.in.GetFriendRecommendationsUsecase;
+import com.runiverse.running_service.application.relationship.port.in.GetFriendsUsecase;
 import com.runiverse.running_service.application.relationship.port.in.RequestFriendUsecase;
+import com.runiverse.running_service.application.relationship.query.friends.GetFriendsQuery;
+import com.runiverse.running_service.application.relationship.query.friends.GetFriendsResult;
+import com.runiverse.running_service.application.relationship.query.recommendation.GetFriendRecommendationsQuery;
+import com.runiverse.running_service.application.relationship.query.recommendation.GetFriendRecommendationsResult;
+import com.runiverse.running_service.application.relationship.query.recommendation.RecommendationReason;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 import com.runiverse.running_service.presentation.common.exception.GlobalExceptionHandler;
 import com.runiverse.running_service.presentation.relationship.controller.RelationshipController;
@@ -37,14 +46,18 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup;
@@ -70,12 +83,19 @@ class RelationshipControllerTest {
     @Mock
     private DeleteFriendUsecase deleteFriendUsecase;
 
+    @Mock
+    private GetFriendsUsecase getFriendsUsecase;
+
+    @Mock
+    private GetFriendRecommendationsUsecase getFriendRecommendationsUsecase;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = standaloneSetup(new RelationshipController(
-                requestFriendUsecase, acceptFriendRequestUsecase, cancelFriendRequestUsecase, deleteFriendUsecase))
+                requestFriendUsecase, acceptFriendRequestUsecase, cancelFriendRequestUsecase, deleteFriendUsecase,
+                getFriendsUsecase, getFriendRecommendationsUsecase))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setMessageConverters(new JacksonJsonHttpMessageConverter(JSON_MAPPER))
@@ -310,6 +330,198 @@ class RelationshipControllerTest {
         assertThat(result.getResponse().getStatus()).isEqualTo(400);
         assertThat(body(result)).containsEntry("code", "INVALID_REQUEST");
         then(deleteFriendUsecase).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("친구 목록: 조회자는 토큰, 주인은 경로에서 꺼내고 항목과 다음 커서를 내린다")
+    void getFriends() throws Exception {
+        // given -> 값이 없는 필드도 키째 null로 나가야 한다
+        UUID friendId = UuidCreator.getTimeOrderedEpoch();
+        given(getFriendsUsecase.handle(new GetFriendsQuery(USER_ID, TARGET_ID, "철수", "next-cursor", 10)))
+                .willReturn(new GetFriendsResult(List.of(
+                        new GetFriendsResult.Friend(friendId, "철수", "https://cdn/a.png", RelationshipType.FRIEND),
+                        new GetFriendsResult.Friend(USER_ID, "나", null, null)),
+                        "cursor-2"));
+
+        // when
+        MvcResult result = mockMvc.perform(get("/users/{userId}/friends", TARGET_ID)
+                .param("q", "철수")
+                .param("cursor", "next-cursor")
+                .param("limit", "10")).andReturn();
+
+        // then
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        Map<String, Object> body = body(result);
+        assertThat(body).containsEntry("nextCursor", "cursor-2");
+        assertThat(body.get("items")).isEqualTo(List.of(
+                Map.of("userId", friendId.toString(), "nickname", "철수",
+                        "profileImageUrl", "https://cdn/a.png", "relationshipType", "FRIEND"),
+                nullableMap("userId", USER_ID.toString(), "nickname", "나",
+                        "profileImageUrl", null, "relationshipType", null)));
+    }
+
+    @Test
+    @DisplayName("친구 목록: 마지막 페이지면 nextCursor는 키째 null이다")
+    void getFriendsLastPage() throws Exception {
+        // given
+        given(getFriendsUsecase.handle(any())).willReturn(new GetFriendsResult(List.of(), null));
+
+        // when
+        MvcResult result = mockMvc.perform(get("/users/{userId}/friends", TARGET_ID)).andReturn();
+
+        // then
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        assertThat(body(result)).containsEntry("items", List.of()).containsKey("nextCursor");
+        assertThat(body(result).get("nextCursor")).isNull();
+    }
+
+    @Test
+    @DisplayName("친구 목록: limit이 없으면 20, 50을 넘으면 50으로 넘기고 검색어·커서가 없으면 null이다")
+    void getFriendsLimitDefaultAndClamp() throws Exception {
+        // given
+        given(getFriendsUsecase.handle(new GetFriendsQuery(USER_ID, TARGET_ID, null, null, 20)))
+                .willReturn(new GetFriendsResult(List.of(), null));
+        given(getFriendsUsecase.handle(new GetFriendsQuery(USER_ID, TARGET_ID, null, null, 50)))
+                .willReturn(new GetFriendsResult(List.of(), null));
+
+        // when
+        MvcResult byDefault = mockMvc.perform(get("/users/{userId}/friends", TARGET_ID)).andReturn();
+        MvcResult clamped = mockMvc.perform(get("/users/{userId}/friends", TARGET_ID)
+                .param("limit", "51")).andReturn();
+
+        // then -> 스텁과 다른 값이 넘어가면 엄격 스텁이 실패시킨다
+        assertThat(byDefault.getResponse().getStatus()).isEqualTo(200);
+        assertThat(clamped.getResponse().getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("친구 목록: 빈 cursor는 첫 페이지로 넘긴다")
+    void getFriendsBlankCursorIsFirstPage() throws Exception {
+        // given
+        given(getFriendsUsecase.handle(new GetFriendsQuery(USER_ID, TARGET_ID, null, null, 20)))
+                .willReturn(new GetFriendsResult(List.of(), null));
+
+        // when
+        MvcResult result = mockMvc.perform(get("/users/{userId}/friends", TARGET_ID)
+                .param("cursor", "")).andReturn();
+
+        // then
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("친구 목록: limit이 1보다 작거나 숫자가 아니거나 검색어가 16자를 넘으면 400이고 유스케이스를 부르지 않는다")
+    void getFriendsInvalidParams() throws Exception {
+        // when
+        MvcResult zeroLimit = mockMvc.perform(get("/users/{userId}/friends", TARGET_ID)
+                .param("limit", "0")).andReturn();
+        MvcResult textLimit = mockMvc.perform(get("/users/{userId}/friends", TARGET_ID)
+                .param("limit", "abc")).andReturn();
+        MvcResult longQuery = mockMvc.perform(get("/users/{userId}/friends", TARGET_ID)
+                .param("q", "가".repeat(17))).andReturn();
+
+        // then
+        for (MvcResult result : List.of(zeroLimit, textLimit, longQuery)) {
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(result))
+                    .containsEntry("code", "INVALID_REQUEST")
+                    .containsEntry("message", "입력값이 올바르지 않습니다.");
+        }
+        then(getFriendsUsecase).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("친구 목록: UUIDv7이 아닌 경로는 400이고 유스케이스를 부르지 않는다")
+    void getFriendsWithInvalidUserId() throws Exception {
+        // when
+        MvcResult result = mockMvc.perform(get("/users/{userId}/friends", "1-1-1-1-1")).andReturn();
+
+        // then
+        assertThat(result.getResponse().getStatus()).isEqualTo(400);
+        assertThat(body(result)).containsEntry("code", "INVALID_REQUEST");
+        then(getFriendsUsecase).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("친구 목록: 깨진 커서는 400 INVALID_REQUEST다")
+    void getFriendsWithInvalidCursor() throws Exception {
+        // given
+        given(getFriendsUsecase.handle(any())).willThrow(new InvalidFriendCursorException());
+
+        // when
+        MvcResult result = mockMvc.perform(get("/users/{userId}/friends", TARGET_ID)
+                .param("cursor", "broken")).andReturn();
+
+        // then
+        assertThat(result.getResponse().getStatus()).isEqualTo(400);
+        assertThat(body(result))
+                .containsEntry("code", "INVALID_REQUEST")
+                .containsEntry("message", "입력값이 올바르지 않습니다.");
+    }
+
+    @Test
+    @DisplayName("친구 목록: 목록 주인이 없으면 404 NOT_FOUND다")
+    void getFriendsOwnerNotFound() throws Exception {
+        // given
+        given(getFriendsUsecase.handle(any())).willThrow(new FriendListOwnerNotFoundException());
+
+        // when
+        MvcResult result = mockMvc.perform(get("/users/{userId}/friends", TARGET_ID)).andReturn();
+
+        // then
+        assertThat(result.getResponse().getStatus()).isEqualTo(404);
+        assertThat(body(result))
+                .containsEntry("code", "NOT_FOUND")
+                .containsEntry("message", "요청한 리소스를 찾을 수 없습니다.");
+    }
+
+    @Test
+    @DisplayName("추천 친구: 토큰 주체의 추천을 이유와 함께 내리고 사진이 없으면 null이다")
+    void getFriendRecommendations() throws Exception {
+        // given
+        UUID runnerId = UuidCreator.getTimeOrderedEpoch();
+        UUID similarId = UuidCreator.getTimeOrderedEpoch();
+        given(getFriendRecommendationsUsecase.handle(new GetFriendRecommendationsQuery(USER_ID)))
+                .willReturn(new GetFriendRecommendationsResult(List.of(
+                        new GetFriendRecommendationsResult.Recommendation(
+                                runnerId, "철수", "https://cdn/a.png", RecommendationReason.RAN_TOGETHER),
+                        new GetFriendRecommendationsResult.Recommendation(
+                                similarId, "영희", null, RecommendationReason.SIMILAR_PACE))));
+
+        // when
+        MvcResult result = mockMvc.perform(get("/users/me/friend-recommendations")).andReturn();
+
+        // then -> 결과는 모두 요청을 보낼 수 있는 사람이라 relationshipType을 싣지 않는다
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        assertThat(body(result).get("recommendations")).isEqualTo(List.of(
+                Map.of("userId", runnerId.toString(), "nickname", "철수",
+                        "profileImageUrl", "https://cdn/a.png", "reason", "RAN_TOGETHER"),
+                nullableMap("userId", similarId.toString(), "nickname", "영희",
+                        "profileImageUrl", null, "reason", "SIMILAR_PACE")));
+    }
+
+    @Test
+    @DisplayName("추천 친구: 후보가 없으면 빈 배열이다")
+    void getFriendRecommendationsEmpty() throws Exception {
+        // given
+        given(getFriendRecommendationsUsecase.handle(new GetFriendRecommendationsQuery(USER_ID)))
+                .willReturn(new GetFriendRecommendationsResult(List.of()));
+
+        // when
+        MvcResult result = mockMvc.perform(get("/users/me/friend-recommendations")).andReturn();
+
+        // then
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        assertThat(body(result)).containsExactly(Map.entry("recommendations", List.of()));
+    }
+
+    // Map.of는 null 값을 받지 않는다
+    private static Map<String, Object> nullableMap(Object... keyValues) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        for (int i = 0; i < keyValues.length; i += 2) {
+            map.put((String) keyValues[i], keyValues[i + 1]);
+        }
+        return map;
     }
 
     private static Map<String, Object> body(MvcResult result) throws Exception {

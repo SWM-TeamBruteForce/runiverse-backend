@@ -333,7 +333,8 @@ public class GlobalExceptionHandler {
 
     private HttpStatus toStatus(RelationshipErrorCode code) {
         return switch (code) {
-            case CANNOT_FRIEND_SELF -> HttpStatus.BAD_REQUEST;
+            case CANNOT_FRIEND_SELF,
+                 INVALID_FRIEND_CURSOR -> HttpStatus.BAD_REQUEST;
             case FRIEND_REQUEST_ALREADY_EXISTS -> HttpStatus.CONFLICT;
         };
     }

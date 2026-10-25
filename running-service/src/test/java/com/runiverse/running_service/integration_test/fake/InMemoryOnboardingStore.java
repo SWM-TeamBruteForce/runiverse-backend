@@ -26,6 +26,7 @@ import lombok.Getter;
 import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -160,6 +161,11 @@ public class InMemoryOnboardingStore implements ExistsOnboardingPort,
 
     public int size() {
         return rows.size();
+    }
+
+    // 추천 친구 페이크가 user_onboardings 전체를 훑는다
+    public List<OnboardingRow> findAll() {
+        return List.copyOf(rows.values());
     }
 
     private Optional<OnboardingRow> row(UserId userId) {

@@ -33,6 +33,8 @@ public abstract class E2eTestSupport {
     // compose가 container_name 없이 붙이는 기본 이름이다 — compose.yml의 프로젝트명·서비스명과 같아야 한다
     private static final String S3_CONTAINER =
             System.getenv().getOrDefault("E2E_S3_CONTAINER", "runiverse-e2e-localstack-1");
+    private static final String POSTGRES_CONTAINER =
+            System.getenv().getOrDefault("E2E_POSTGRES_CONTAINER", "runiverse-e2e-postgres-1");
     // 핸들러가 등록된 경로(application.properties의 websocket.running-endpoint)를 컨텍스트 경로 뒤에 붙인다
     private static final String RUNNING_WEBSOCKET_URL =
             BASE_URL.replaceFirst("^http", "ws") + "/ws/running";
@@ -174,6 +176,11 @@ public abstract class E2eTestSupport {
      * 러닝은 온보딩의 평균 페이스·몸무게가 없으면 시작조차 못 해 대부분의 흐름이 여기서 출발한다.
      */
     protected TestUser signUpAndOnboard() {
+        return signUpAndOnboard(330);
+    }
+
+    /** 평균 페이스를 정해 온보딩한다 — 페이스로 사람을 고르는 흐름이 다른 테스트의 사용자와 섞이지 않게 한다. */
+    protected TestUser signUpAndOnboard(int averagePaceSecondsPerKm) {
         String email = uniqueEmail();
         String password = "Password123!";
         String accessToken = signUp(email, password);
@@ -182,7 +189,7 @@ public abstract class E2eTestSupport {
                 "nickname", nickname,
                 "gender", "MALE",
                 "birthday", "1998-03-21",
-                "averagePaceSecondsPerKm", 330,
+                "averagePaceSecondsPerKm", averagePaceSecondsPerKm,
                 "weightKg", new BigDecimal("68.5"),
                 "heightCm", new BigDecimal("176.2")
         ), accessToken);
@@ -248,6 +255,31 @@ public abstract class E2eTestSupport {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("S3 업로드가 중단되었습니다", e);
+        }
+    }
+
+    /**
+     * API로 만들 수 없는 상태를 DB에 직접 심는다. 매칭 러닝은 예약 슬롯 시각이 돼야 시작돼 E2E 안에서 끝까지 돌 수 없다.
+     * 운영처럼 손으로 쓴 SQL이 실제 스키마의 제약을 통과하는지도 함께 확인된다.
+     */
+    protected void executeSql(String sql) {
+        try {
+            Process process = new ProcessBuilder("docker", "exec", "-i", POSTGRES_CONTAINER,
+                    "psql", "--quiet", "--username=runiverse", "--dbname=runiverse_e2e",
+                    "--set", "ON_ERROR_STOP=1", "--file=-")
+                    .redirectErrorStream(true)
+                    .start();
+            process.getOutputStream().write(sql.getBytes(StandardCharsets.UTF_8));
+            process.getOutputStream().close();
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            if (process.waitFor() != 0) {
+                throw new IllegalStateException("SQL 실행에 실패했습니다: " + output);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("SQL 실행이 중단되었습니다", e);
         }
     }
 

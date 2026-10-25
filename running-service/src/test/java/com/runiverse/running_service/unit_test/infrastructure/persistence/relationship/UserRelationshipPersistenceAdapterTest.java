@@ -1,6 +1,8 @@
 package com.runiverse.running_service.unit_test.infrastructure.persistence.relationship;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.relationship.port.out.FriendKeyset;
+import com.runiverse.running_service.application.relationship.port.out.FriendRow;
 import com.runiverse.running_service.application.relationship.port.out.UserRelationshipPair;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.relationship.UserRelationship;
@@ -28,8 +30,10 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -46,6 +50,9 @@ public class UserRelationshipPersistenceAdapterTest {
 
     @Mock
     private Query insertQuery;
+
+    @Mock
+    private TypedQuery<FriendRow> friendQuery;
 
     @InjectMocks
     private UserRelationshipPersistenceAdapter adapter;
@@ -189,6 +196,80 @@ public class UserRelationshipPersistenceAdapterTest {
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
         verify(entityManager).createNativeQuery(sql.capture());
         assertThat(sql.getValue()).contains("ON CONFLICT (user_id, target_id) DO NOTHING");
+    }
+
+    @Test
+    @DisplayName("친구 목록은 검색어·커서가 없으면 묶음 조건과 정렬만으로 읽는다")
+    void loadGroupWithoutFilterOrCursor() {
+        // given
+        UUID viewerId = UuidCreator.getTimeOrderedEpoch();
+        List<FriendRow> rows = List.of(new FriendRow(targetId, "철수", null, RelationshipType.FRIEND,
+                LocalDateTime.of(2026, 10, 25, 12, 0), null));
+        givenFriendQuery(rows);
+
+        // when
+        List<FriendRow> result = adapter.loadGroup(
+                new UserId(userId), new UserId(viewerId), RelationshipType.FRIEND, null, null, 21);
+
+        // then -> 쓰지 않는 조건의 파라미터를 넣으면 Hibernate가 없는 이름이라고 실패한다
+        assertThat(result).isEqualTo(rows);
+        String jpql = capturedFriendJpql();
+        assertThat(jpql).doesNotContain("LIKE").doesNotContain(":afterUpdatedAt");
+        assertThat(jpql).contains("ORDER BY r.updatedAt DESC, r.targetId DESC");
+        verify(friendQuery).setParameter("ownerId", userId);
+        verify(friendQuery).setParameter("viewerId", viewerId);
+        verify(friendQuery).setParameter("type", RelationshipType.FRIEND);
+        verify(friendQuery).setMaxResults(21);
+        verify(friendQuery, never()).setParameter(eq("nicknamePattern"), any());
+        verify(friendQuery, never()).setParameter(eq("afterUpdatedAt"), any());
+    }
+
+    @Test
+    @DisplayName("친구 목록 커서가 있으면 그 위치 다음부터 읽는 조건을 붙인다")
+    void loadGroupWithCursorAddsKeysetCondition() {
+        // given
+        UUID lastUserId = UuidCreator.getTimeOrderedEpoch();
+        LocalDateTime lastUpdatedAt = LocalDateTime.of(2026, 10, 25, 12, 0, 0, 123_456_000);
+        givenFriendQuery(List.of());
+
+        // when
+        adapter.loadGroup(new UserId(userId), new UserId(userId), RelationshipType.FRIEND_REQUEST_SENT,
+                null, new FriendKeyset(lastUpdatedAt, lastUserId), 5);
+
+        // then -> 같은 시각이면 userId로 가른다
+        assertThat(capturedFriendJpql())
+                .contains("r.updatedAt < :afterUpdatedAt")
+                .contains("r.updatedAt = :afterUpdatedAt AND r.targetId < :afterUserId");
+        verify(friendQuery).setParameter("afterUpdatedAt", lastUpdatedAt);
+        verify(friendQuery).setParameter("afterUserId", lastUserId);
+    }
+
+    @Test
+    @DisplayName("친구 목록 검색어는 부분 일치이고 %·_·\\는 글자 그대로 찾는다")
+    void loadGroupWithNicknameEscapesWildcards() {
+        // given
+        givenFriendQuery(List.of());
+
+        // when
+        adapter.loadGroup(new UserId(userId), new UserId(userId), RelationshipType.FRIEND,
+                "a%b_c\\d", null, 21);
+
+        // then -> 이스케이프하지 않으면 "%"만 넣어도 모든 친구가 걸린다
+        assertThat(capturedFriendJpql()).contains("o.nickname LIKE :nicknamePattern ESCAPE '\\'");
+        verify(friendQuery).setParameter("nicknamePattern", "%a\\%b\\_c\\\\d%");
+    }
+
+    private void givenFriendQuery(List<FriendRow> rows) {
+        when(entityManager.createQuery(anyString(), eq(FriendRow.class))).thenReturn(friendQuery);
+        when(friendQuery.setParameter(anyString(), any())).thenReturn(friendQuery);
+        when(friendQuery.setMaxResults(anyInt())).thenReturn(friendQuery);
+        when(friendQuery.getResultList()).thenReturn(rows);
+    }
+
+    private String capturedFriendJpql() {
+        ArgumentCaptor<String> jpql = ArgumentCaptor.forClass(String.class);
+        verify(entityManager).createQuery(jpql.capture(), eq(FriendRow.class));
+        return jpql.getValue();
     }
 
     private void givenInsertQuery() {

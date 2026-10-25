@@ -579,7 +579,8 @@ FK 강제 없는 독립 테이블(원본 삭제/수정된 row를 참조하므로
 | 인덱스 대상 | 용도 |
 |---|---|
 | user_devices.user_id | 푸시 발송 — 유저의 활성 기기 조회 |
-| user_relationships.(user_id, target_id) | UNIQUE 겸 조회 — 친구 수·친구 목록·관계 확인(`relationshipType`)이 `user_id` 선두로 탄다 |
+| user_relationships.(user_id, target_id) | UNIQUE 겸 조회 — 친구 수·관계 확인(`relationshipType`)이 `user_id` 선두로 탄다 |
+| user_relationships.(user_id, type, updated_at, target_id) | 친구 목록(10-7) — 묶음(`type`)마다 따로 읽어 `updated_at`·`target_id` 역순 정렬과 커서 조건을 인덱스가 처리한다. 묶음을 `CASE`로 한 번에 정렬하면 인덱스 순서를 쓰지 못해 묶음 단위로 나눠 읽는다. 역방향 스캔이라 컬럼에 `DESC`를 붙이지 않는다 |
 | user_relationships.target_id | 탈퇴 시 `target_id` 쪽 CASCADE 삭제 — 차단 여부 확인은 상대 행을 `(user_id, target_id)`로 찾아 이 인덱스가 필요 없다 |
 | notifications.(user_id, created_at) | 알림함 최신순 조회·안 읽은 수 — 보관 기간 조건도 `created_at` 범위로 탄다 |
 | running_room_invitations.invitee_id | 받은 초대 조회 — UNIQUE가 `running_room_id` 방향만 커버한다. 방의 초대 현황은 UNIQUE가 맡는다 |

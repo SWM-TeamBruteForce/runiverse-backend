@@ -34,8 +34,12 @@ import java.util.UUID;
                 name = "uk_user_relationship_user_target",
                 columnNames = {"user_id", "target_id"}
         ),
-        // 상대가 탈퇴할 때 target_id 쪽 CASCADE 삭제가 탄다 — 조회는 (user_id, target_id) UNIQUE가 맡는다
-        indexes = @Index(name = "idx_user_relationship_target", columnList = "target_id")
+        // 상대가 탈퇴할 때 target_id 쪽 CASCADE 삭제가 탄다 — 관계 확인은 (user_id, target_id) UNIQUE가 맡는다
+        indexes = {
+                @Index(name = "idx_user_relationship_target", columnList = "target_id"),
+                // 친구 목록 — 묶음(type)마다 updated_at·target_id 역순으로 읽는다. 역방향 스캔이라 DESC를 붙이지 않는다
+                @Index(name = "idx_user_relationship_list", columnList = "user_id, type, updated_at, target_id")
+        }
 )
 @Check(name = "ck_user_relationship_type",
         constraints = "type in ('NONE', 'FRIEND', 'FRIEND_REQUEST_SENT', 'FRIEND_REQUEST_RECEIVED', 'BLOCKED')")

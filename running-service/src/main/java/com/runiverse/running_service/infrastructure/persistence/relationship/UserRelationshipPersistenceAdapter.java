@@ -1,6 +1,9 @@
 package com.runiverse.running_service.infrastructure.persistence.relationship;
 
 import com.runiverse.running_service.application.relationship.port.out.EnsureUserRelationshipPairPort;
+import com.runiverse.running_service.application.relationship.port.out.FriendKeyset;
+import com.runiverse.running_service.application.relationship.port.out.FriendRow;
+import com.runiverse.running_service.application.relationship.port.out.LoadFriendsPort;
 import com.runiverse.running_service.application.relationship.port.out.LoadUserRelationshipPort;
 import com.runiverse.running_service.application.relationship.port.out.SaveUserRelationshipPort;
 import com.runiverse.running_service.application.relationship.port.out.UserRelationshipPair;
@@ -9,6 +12,7 @@ import com.runiverse.running_service.domain.relationship.UserRelationship;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.TypedQuery;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -21,7 +25,7 @@ import java.util.stream.Stream;
 @Component
 @RequiredArgsConstructor
 public class UserRelationshipPersistenceAdapter implements LoadUserRelationshipPort, SaveUserRelationshipPort,
-        EnsureUserRelationshipPairPort {
+        EnsureUserRelationshipPairPort, LoadFriendsPort {
 
     // JPQL에는 ON CONFLICT가 없어 네이티브로 쓴다. 이미 있는 행은 건드리지 않고, 다른 트랜잭션이 막 넣은 행이면
     // 그 커밋을 기다렸다 지나간다 — UNIQUE 위반이 나지 않는다
@@ -30,6 +34,30 @@ public class UserRelationshipPersistenceAdapter implements LoadUserRelationshipP
             VALUES (:firstUserId, :firstTargetId, :type, :now, :now),
                    (:secondUserId, :secondTargetId, :type, :now, :now)
             ON CONFLICT (user_id, target_id) DO NOTHING
+            """;
+    // 상대의 닉네임·사진과 조회자가 그 사람과 맺은 관계를 함께 읽는다. 온보딩 전인 상대는 닉네임이 없어 JOIN에서 빠진다.
+    // 본인 목록이면 조회자 행이 곧 r이라 v.type = r.type이다
+    private static final String SELECT_FRIENDS = """
+            SELECT NEW com.runiverse.running_service.application.relationship.port.out.FriendRow(
+                r.targetId, o.nickname, u.profileImageKey, r.type, r.updatedAt, v.type)
+            FROM UserRelationshipJpaEntity r
+            JOIN UserOnboardingJpaEntity o ON o.userId = r.targetId
+            JOIN UserJpaEntity u ON u.userId = r.targetId
+            LEFT JOIN UserRelationshipJpaEntity v ON v.userId = :viewerId AND v.targetId = r.targetId
+            WHERE r.userId = :ownerId
+              AND r.type = :type
+            """;
+    private static final String NICKNAME_CONDITION = """
+              AND o.nickname LIKE :nicknamePattern ESCAPE '\\'
+            """;
+    // 튜플 비교((a, b) < (x, y))를 JPQL이 받지 않아 풀어 쓴다
+    private static final String AFTER_CONDITION = """
+              AND (r.updatedAt < :afterUpdatedAt
+                   OR (r.updatedAt = :afterUpdatedAt AND r.targetId < :afterUserId))
+            """;
+    // idx_user_relationship_list(user_id, type, updated_at, target_id)를 거꾸로 읽는다
+    private static final String ORDER_FRIENDS = """
+            ORDER BY r.updatedAt DESC, r.targetId DESC
             """;
     private final EntityManager entityManager;
 
@@ -97,6 +125,37 @@ public class UserRelationshipPersistenceAdapter implements LoadUserRelationshipP
                 .setParameter("type", RelationshipType.NONE.name())
                 .setParameter("now", now)
                 .executeUpdate();
+    }
+
+    // 조건을 쿼리 문자열로 붙인다 — ":param IS NULL OR ..."로 쓰면 null 파라미터의 타입을 PostgreSQL이 추론하지 못한다
+    @Override
+    public List<FriendRow> loadGroup(UserId ownerId, UserId viewerId, RelationshipType type,
+                                     String nicknameFilter, FriendKeyset after, int limit) {
+        String jpql = SELECT_FRIENDS
+                + (nicknameFilter == null ? "" : NICKNAME_CONDITION)
+                + (after == null ? "" : AFTER_CONDITION)
+                + ORDER_FRIENDS;
+
+        TypedQuery<FriendRow> query = entityManager.createQuery(jpql, FriendRow.class)
+                .setParameter("ownerId", ownerId.value())
+                .setParameter("viewerId", viewerId.value())
+                .setParameter("type", type)
+                .setMaxResults(limit);
+        if (nicknameFilter != null) {
+            query.setParameter("nicknamePattern", "%" + escapeLike(nicknameFilter) + "%");
+        }
+        if (after != null) {
+            query.setParameter("afterUpdatedAt", after.updatedAt())
+                    .setParameter("afterUserId", after.userId());
+        }
+        return query.getResultList();
+    }
+
+    // 검색어의 %·_를 와일드카드가 아닌 글자로 찾는다 — 이스케이프 문자 자체를 먼저 바꿔야 두 번 바뀌지 않는다
+    private static String escapeLike(String value) {
+        return value.replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
     }
 
     private static UserRelationship toDomain(UserRelationshipJpaEntity entity) {

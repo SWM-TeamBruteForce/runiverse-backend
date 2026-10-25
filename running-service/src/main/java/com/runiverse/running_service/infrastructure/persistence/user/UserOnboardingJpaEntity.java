@@ -9,6 +9,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.ForeignKey;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
@@ -32,7 +33,9 @@ import java.util.UUID;
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_user_onboarding_nickname",
                 columnNames = "nickname"
-        )
+        ),
+        // 추천 친구의 페이스 비슷한 사람 — 본인 페이스 ± 운영값 범위를 읽는다
+        indexes = @Index(name = "idx_user_onboarding_avg_pace", columnList = "avg_pace")
 )
 @Check(name = "ck_user_onboarding_nickname", constraints = "char_length(nickname) between 2 and 16")
 @Check(name = "ck_user_onboarding_gender", constraints = "gender in ('MALE', 'FEMALE')")
