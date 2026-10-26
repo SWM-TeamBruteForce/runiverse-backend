@@ -92,6 +92,23 @@ public class DeleteAccountHandlerTest {
     }
 
     @Test
+    @DisplayName("계정을 지우기 전에 기기를 먼저 지운다")
+    void deletesDevicesBeforeDeletingAccount() {
+        // given
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        when(loadAccountSnapshotPort.loadAccountSnapshot(new UserId(userId)))
+                .thenReturn(Optional.of(notOnboardedSnapshot(userId)));
+
+        // when
+        handler.handle(new DeleteAccountCommand(userId, ACCESS_TOKEN_ID));
+
+        // then -> FK가 붙지 않은 DB도 있어 CASCADE에 기대지 않는다
+        InOrder order = inOrder(deleteUserDevicesPort, deleteUserPort);
+        order.verify(deleteUserDevicesPort).deleteAll(new UserId(userId));
+        order.verify(deleteUserPort).deleteUser(new UserId(userId));
+    }
+
+    @Test
     @DisplayName("계정을 지우기 전에 진행 중인 러닝을 정리한다")
     void settlesRunningBeforeDeletingAccount() {
         // given
@@ -209,6 +226,7 @@ public class DeleteAccountHandlerTest {
                 handler.handle(new DeleteAccountCommand(unknownUserId, ACCESS_TOKEN_ID)))
                 .isInstanceOf(UserNotFoundException.class);
         verify(saveDeletedUserPort, never()).saveDeletedUser(any());
+        verify(deleteUserDevicesPort, never()).deleteAll(any());
         verify(deleteUserPort, never()).deleteUser(any());
     }
 

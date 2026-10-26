@@ -4,6 +4,7 @@ import com.runiverse.running_service.observability.logging.LogTag;
 import com.runiverse.running_service.presentation.app.controller.AppController;
 import com.runiverse.running_service.presentation.auth.controller.AuthController;
 import com.runiverse.running_service.presentation.common.exception.GlobalExceptionHandler;
+import com.runiverse.running_service.presentation.device.controller.DeviceController;
 import com.runiverse.running_service.presentation.match.controller.MatchRoomController;
 import com.runiverse.running_service.presentation.notification.controller.UserNotificationController;
 import com.runiverse.running_service.presentation.relationship.controller.RelationshipController;
@@ -34,7 +35,8 @@ public class LogTagTest {
                 Arguments.of(MatchRoomController.class, "[매칭]"),
                 Arguments.of(RunningRoomController.class, "[러닝]"),
                 Arguments.of(UserNotificationController.class, "[알림]"),
-                Arguments.of(AppController.class, "[앱]")
+                Arguments.of(AppController.class, "[앱]"),
+                Arguments.of(DeviceController.class, "[기기]")
         );
     }
 
