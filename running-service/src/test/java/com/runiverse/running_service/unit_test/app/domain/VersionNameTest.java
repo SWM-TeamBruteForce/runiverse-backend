@@ -1,8 +1,8 @@
 package com.runiverse.running_service.unit_test.app.domain;
 
-import com.runiverse.running_service.domain.app.exception.InvalidVersionNameFormatException;
-import com.runiverse.running_service.domain.app.exception.VersionNameRequiredException;
-import com.runiverse.running_service.domain.app.vo.VersionName;
+import com.runiverse.running_service.domain.common.exception.InvalidVersionNameFormatException;
+import com.runiverse.running_service.domain.common.exception.VersionNameRequiredException;
+import com.runiverse.running_service.domain.common.vo.VersionName;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;

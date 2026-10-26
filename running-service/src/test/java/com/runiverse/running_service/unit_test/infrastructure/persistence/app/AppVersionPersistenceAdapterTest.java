@@ -1,8 +1,8 @@
 package com.runiverse.running_service.unit_test.infrastructure.persistence.app;
 
 import com.runiverse.running_service.domain.app.AppVersion;
-import com.runiverse.running_service.domain.app.vo.VersionName;
 import com.runiverse.running_service.domain.common.vo.Platform;
+import com.runiverse.running_service.domain.common.vo.VersionName;
 import com.runiverse.running_service.infrastructure.persistence.app.AppVersionJpaEntity;
 import com.runiverse.running_service.infrastructure.persistence.app.AppVersionPersistenceAdapter;
 import jakarta.persistence.EntityManager;

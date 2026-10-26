@@ -1,8 +1,8 @@
 package com.runiverse.running_service.domain.app;
 
-import com.runiverse.running_service.domain.app.vo.VersionName;
 import com.runiverse.running_service.domain.common.exception.PlatformRequiredException;
 import com.runiverse.running_service.domain.common.vo.Platform;
+import com.runiverse.running_service.domain.common.vo.VersionName;
 import lombok.Builder;
 import lombok.Getter;
 
