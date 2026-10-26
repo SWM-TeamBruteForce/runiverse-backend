@@ -3,6 +3,7 @@ package com.runiverse.running_service.unit_test.user.application;
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.auth.port.out.BlockAccessTokenPort;
 import com.runiverse.running_service.application.auth.port.out.DeleteRefreshTokenPort;
+import com.runiverse.running_service.application.device.port.out.DeleteUserDevicesPort;
 import com.runiverse.running_service.application.running.command.accountdeletion.SettleRunningForAccountDeletionCommand;
 import com.runiverse.running_service.application.running.exception.RunningTrackUnavailableException;
 import com.runiverse.running_service.application.running.port.in.SettleRunningForAccountDeletionUsecase;
@@ -59,6 +60,8 @@ public class DeleteAccountHandlerTest {
     private SettleRunningForAccountDeletionUsecase settleRunningForAccountDeletionUsecase;
     @Mock
     private SaveDeletedUserPort saveDeletedUserPort;
+    @Mock
+    private DeleteUserDevicesPort deleteUserDevicesPort;
     @Mock
     private DeleteUserPort deleteUserPort;
     @Mock

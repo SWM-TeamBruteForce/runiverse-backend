@@ -18,6 +18,7 @@ import com.runiverse.running_service.integration_test.fake.FakeImageStorage;
 import com.runiverse.running_service.integration_test.fake.InMemoryAccessTokenBlacklist;
 import com.runiverse.running_service.integration_test.fake.InMemoryDeletedUserStore;
 import com.runiverse.running_service.integration_test.fake.InMemoryRefreshTokenStore;
+import com.runiverse.running_service.integration_test.fake.InMemoryUserDeviceStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -47,6 +48,7 @@ public class DeleteAccountIntegrationTest {
     private InMemoryDeletedUserStore deletedUserStore;
     private InMemoryRefreshTokenStore refreshTokenStore;
     private InMemoryAccessTokenBlacklist accessTokenBlacklist;
+    private InMemoryUserDeviceStore userDeviceStore;
     private FakeImageStorage imageStorage;
     private List<Object> publishedEvents;
     private List<UUID> settledUserIds;
@@ -59,6 +61,7 @@ public class DeleteAccountIntegrationTest {
         deletedUserStore = new InMemoryDeletedUserStore();
         refreshTokenStore = new InMemoryRefreshTokenStore();
         accessTokenBlacklist = new InMemoryAccessTokenBlacklist();
+        userDeviceStore = new InMemoryUserDeviceStore();
         imageStorage = new FakeImageStorage();
         publishedEvents = new ArrayList<>();
         settledUserIds = new ArrayList<>();
@@ -67,6 +70,7 @@ public class DeleteAccountIntegrationTest {
                 deletedUserStore,                                 // LoadAccountSnapshotPort
                 command -> settledUserIds.add(command.userId()),  // SettleRunningForAccountDeletionUsecase
                 deletedUserStore,                                 // SaveDeletedUserPort
+                userDeviceStore,                                  // DeleteUserDevicesPort
                 deletedUserStore,                                 // DeleteUserPort
                 refreshTokenStore,                                // DeleteRefreshTokenPort
                 accessTokenBlacklist,                             // BlockAccessTokenPort

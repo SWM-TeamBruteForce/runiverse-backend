@@ -2,6 +2,7 @@ package com.runiverse.running_service.application.user.command.accountdeletion;
 
 import com.runiverse.running_service.application.auth.port.out.BlockAccessTokenPort;
 import com.runiverse.running_service.application.auth.port.out.DeleteRefreshTokenPort;
+import com.runiverse.running_service.application.device.port.out.DeleteUserDevicesPort;
 import com.runiverse.running_service.application.running.command.accountdeletion.SettleRunningForAccountDeletionCommand;
 import com.runiverse.running_service.application.running.exception.RunningTrackUnavailableException;
 import com.runiverse.running_service.application.running.port.in.SettleRunningForAccountDeletionUsecase;
@@ -30,6 +31,7 @@ public class DeleteAccountHandler implements DeleteAccountUsecase {
     private final LoadAccountSnapshotPort loadAccountSnapshotPort;
     private final SettleRunningForAccountDeletionUsecase settleRunningForAccountDeletionUsecase;
     private final SaveDeletedUserPort saveDeletedUserPort;
+    private final DeleteUserDevicesPort deleteUserDevicesPort;
     private final DeleteUserPort deleteUserPort;
     private final DeleteRefreshTokenPort deleteRefreshTokenPort;
     private final BlockAccessTokenPort blockAccessTokenPort;
@@ -48,8 +50,9 @@ public class DeleteAccountHandler implements DeleteAccountUsecase {
         } catch (RunningTrackUnavailableException e) {
             throw new AccountDeletionUnavailableException();
         }
-        // 3. 스냅샷을 남긴 뒤 계정을 지운다
+        // 3. 스냅샷을 남긴 뒤 계정을 지운다. 기기는 FK CASCADE에 기대지 않고 먼저 지운다
         saveDeletedUserPort.saveDeletedUser(toDeletedUser(snapshot));
+        deleteUserDevicesPort.deleteAll(userId);
         deleteUserPort.deleteUser(userId);
         // 4. 토큰을 폐기한다 — 로그아웃과 같은 두 단계
         deleteRefreshTokenPort.delete(userId);
