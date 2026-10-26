@@ -10,7 +10,9 @@ import com.runiverse.running_service.application.user.command.accountdeletion.Re
 import com.runiverse.running_service.application.user.common.ImageContentType;
 import com.runiverse.running_service.application.user.common.UserImageType;
 import com.runiverse.running_service.application.user.port.out.AccountSnapshot;
+import com.runiverse.running_service.domain.common.vo.Platform;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.domain.device.UserDevice;
 import com.runiverse.running_service.domain.user.vo.Gender;
 import com.runiverse.running_service.domain.user.vo.LoginType;
 import com.runiverse.running_service.domain.user.vo.Provider;
@@ -162,6 +164,27 @@ public class DeleteAccountIntegrationTest {
         assertThat(settledUserIds).containsExactly(userId);
         assertThat(refreshTokenStore.loadById(userId)).isEmpty();
         assertThat(accessTokenBlacklist.isBlocked(ACCESS_TOKEN_ID)).isTrue();
+    }
+
+    @Test
+    @DisplayName("탈퇴하면 그 유저의 기기를 지우고 다른 유저의 기기는 남긴다")
+    void deletesOwnDevicesOnly() {
+        // given -> 꺼진 기기도 지운다
+        givenOnboardedAccount(null);
+        UUID otherUserId = UuidCreator.getTimeOrderedEpoch();
+        userDeviceStore.upsert(UserDevice.register(userId, "device-old", "token-old", Platform.IOS, "1.1.0"));
+        userDeviceStore.deactivateAll(new UserId(userId));
+        userDeviceStore.upsert(UserDevice.register(userId, "device-new", "token-new", Platform.IOS, "1.1.0"));
+        userDeviceStore.upsert(UserDevice.register(otherUserId, "device-other", "token-other", Platform.ANDROID,
+                "1.1.0"));
+
+        // when
+        deleteAccount();
+
+        // then
+        assertThat(userDeviceStore.find("device-old")).isEmpty();
+        assertThat(userDeviceStore.find("device-new")).isEmpty();
+        assertThat(userDeviceStore.find("device-other")).isPresent();
     }
 
     @Test
