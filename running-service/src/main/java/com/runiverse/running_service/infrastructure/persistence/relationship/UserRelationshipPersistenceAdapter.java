@@ -10,6 +10,7 @@ import com.runiverse.running_service.application.relationship.port.out.UserRelat
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.relationship.UserRelationship;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
+import com.runiverse.running_service.infrastructure.persistence.common.LikePatterns;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.TypedQuery;
@@ -142,20 +143,13 @@ public class UserRelationshipPersistenceAdapter implements LoadUserRelationshipP
                 .setParameter("type", type)
                 .setMaxResults(limit);
         if (nicknameFilter != null) {
-            query.setParameter("nicknamePattern", "%" + escapeLike(nicknameFilter) + "%");
+            query.setParameter("nicknamePattern", LikePatterns.containing(nicknameFilter));
         }
         if (after != null) {
             query.setParameter("afterUpdatedAt", after.updatedAt())
                     .setParameter("afterUserId", after.userId());
         }
         return query.getResultList();
-    }
-
-    // 검색어의 %·_를 와일드카드가 아닌 글자로 찾는다 — 이스케이프 문자 자체를 먼저 바꿔야 두 번 바뀌지 않는다
-    private static String escapeLike(String value) {
-        return value.replace("\\", "\\\\")
-                .replace("%", "\\%")
-                .replace("_", "\\_");
     }
 
     private static UserRelationship toDomain(UserRelationshipJpaEntity entity) {

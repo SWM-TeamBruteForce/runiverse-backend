@@ -12,15 +12,20 @@ import com.runiverse.running_service.application.relationship.port.in.DeleteFrie
 import com.runiverse.running_service.application.relationship.port.in.GetFriendRecommendationsUsecase;
 import com.runiverse.running_service.application.relationship.port.in.GetFriendsUsecase;
 import com.runiverse.running_service.application.relationship.port.in.RequestFriendUsecase;
+import com.runiverse.running_service.application.relationship.port.in.SearchUsersUsecase;
 import com.runiverse.running_service.application.relationship.query.friends.GetFriendsQuery;
 import com.runiverse.running_service.application.relationship.query.friends.GetFriendsResult;
 import com.runiverse.running_service.application.relationship.query.recommendation.GetFriendRecommendationsQuery;
 import com.runiverse.running_service.application.relationship.query.recommendation.GetFriendRecommendationsResult;
+import com.runiverse.running_service.application.relationship.query.search.SearchUsersQuery;
+import com.runiverse.running_service.application.relationship.query.search.SearchUsersResult;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 import com.runiverse.running_service.presentation.relationship.response.FriendRecommendationsResponse;
 import com.runiverse.running_service.presentation.relationship.response.FriendsResponse;
 import com.runiverse.running_service.presentation.relationship.response.RelationshipTypeResponse;
+import com.runiverse.running_service.presentation.relationship.response.UserSearchResponse;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +61,7 @@ public class RelationshipController {
     private final DeleteFriendUsecase deleteFriendUsecase;
     private final GetFriendsUsecase getFriendsUsecase;
     private final GetFriendRecommendationsUsecase getFriendRecommendationsUsecase;
+    private final SearchUsersUsecase searchUsersUsecase;
 
     // 경로의 userId는 요청을 받을 사람이다 — 요청하는 사람은 토큰에서만 온다
     @PostMapping("/{userId}/friend-request")
@@ -133,5 +139,26 @@ public class RelationshipController {
         GetFriendRecommendationsResult result = getFriendRecommendationsUsecase.handle(
                 new GetFriendRecommendationsQuery(UUID.fromString(jwt.getSubject())));
         return ResponseEntity.ok(FriendRecommendationsResponse.from(result));
+    }
+
+    // 친구 기능의 진입점이라 relationship에 둔다 — /{userId} 경로보다 고정 경로가 먼저 매칭된다
+    @GetMapping("/search")
+    public ResponseEntity<UserSearchResponse> searchUsers(
+            @AuthenticationPrincipal Jwt jwt,
+            // 필수지만 required=false로 받는다 — 빠졌을 때 누락 예외가 아니라 검증 실패로 400이 나게 한다.
+            // 닉네임 최대 길이보다 긴 검색어는 아무것도 찾지 못한다
+            @RequestParam(required = false)
+            @NotBlank(message = "입력값이 올바르지 않습니다.")
+            @Size(max = 16, message = "입력값이 올바르지 않습니다.") String q,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "20") @Min(value = 1, message = "입력값이 올바르지 않습니다.") int limit
+    ) {
+        SearchUsersResult result = searchUsersUsecase.handle(new SearchUsersQuery(
+                UUID.fromString(jwt.getSubject()),
+                q,
+                // 첫 페이지에 cursor=를 빈 값으로 실어 보내도 처음부터 읽는다
+                cursor == null || cursor.isBlank() ? null : cursor,
+                Math.min(limit, MAX_LIMIT)));
+        return ResponseEntity.ok(UserSearchResponse.from(result));
     }
 }

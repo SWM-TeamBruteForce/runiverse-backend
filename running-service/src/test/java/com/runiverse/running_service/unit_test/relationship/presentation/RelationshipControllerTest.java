@@ -14,17 +14,21 @@ import com.runiverse.running_service.application.relationship.exception.FriendRe
 import com.runiverse.running_service.application.relationship.exception.FriendRequestNotFoundException;
 import com.runiverse.running_service.application.relationship.exception.FriendTargetNotFoundException;
 import com.runiverse.running_service.application.relationship.exception.InvalidFriendCursorException;
+import com.runiverse.running_service.application.relationship.exception.InvalidUserSearchCursorException;
 import com.runiverse.running_service.application.relationship.port.in.AcceptFriendRequestUsecase;
 import com.runiverse.running_service.application.relationship.port.in.CancelFriendRequestUsecase;
 import com.runiverse.running_service.application.relationship.port.in.DeleteFriendUsecase;
 import com.runiverse.running_service.application.relationship.port.in.GetFriendRecommendationsUsecase;
 import com.runiverse.running_service.application.relationship.port.in.GetFriendsUsecase;
 import com.runiverse.running_service.application.relationship.port.in.RequestFriendUsecase;
+import com.runiverse.running_service.application.relationship.port.in.SearchUsersUsecase;
 import com.runiverse.running_service.application.relationship.query.friends.GetFriendsQuery;
 import com.runiverse.running_service.application.relationship.query.friends.GetFriendsResult;
 import com.runiverse.running_service.application.relationship.query.recommendation.GetFriendRecommendationsQuery;
 import com.runiverse.running_service.application.relationship.query.recommendation.GetFriendRecommendationsResult;
 import com.runiverse.running_service.application.relationship.query.recommendation.RecommendationReason;
+import com.runiverse.running_service.application.relationship.query.search.SearchUsersQuery;
+import com.runiverse.running_service.application.relationship.query.search.SearchUsersResult;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 import com.runiverse.running_service.presentation.common.exception.GlobalExceptionHandler;
 import com.runiverse.running_service.presentation.relationship.controller.RelationshipController;
@@ -89,13 +93,16 @@ class RelationshipControllerTest {
     @Mock
     private GetFriendRecommendationsUsecase getFriendRecommendationsUsecase;
 
+    @Mock
+    private SearchUsersUsecase searchUsersUsecase;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = standaloneSetup(new RelationshipController(
                 requestFriendUsecase, acceptFriendRequestUsecase, cancelFriendRequestUsecase, deleteFriendUsecase,
-                getFriendsUsecase, getFriendRecommendationsUsecase))
+                getFriendsUsecase, getFriendRecommendationsUsecase, searchUsersUsecase))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setMessageConverters(new JacksonJsonHttpMessageConverter(JSON_MAPPER))
@@ -513,6 +520,114 @@ class RelationshipControllerTest {
         // then
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
         assertThat(body(result)).containsExactly(Map.entry("recommendations", List.of()));
+    }
+
+    @Test
+    @DisplayName("사용자 검색: 조회자는 토큰에서 꺼내고 항목과 다음 커서를 내린다")
+    void searchUsers() throws Exception {
+        // given -> 값이 없는 필드도 키째 null로 나가야 한다
+        UUID friendId = UuidCreator.getTimeOrderedEpoch();
+        UUID strangerId = UuidCreator.getTimeOrderedEpoch();
+        given(searchUsersUsecase.handle(new SearchUsersQuery(USER_ID, "철수", "next-cursor", 10)))
+                .willReturn(new SearchUsersResult(List.of(
+                        new SearchUsersResult.User(friendId, "철수", "https://cdn/a.png", RelationshipType.FRIEND),
+                        new SearchUsersResult.User(strangerId, "김철수", null, RelationshipType.NONE)),
+                        "cursor-2"));
+
+        // when
+        MvcResult result = mockMvc.perform(get("/users/search")
+                .param("q", "철수")
+                .param("cursor", "next-cursor")
+                .param("limit", "10")).andReturn();
+
+        // then
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        Map<String, Object> body = body(result);
+        assertThat(body).containsEntry("nextCursor", "cursor-2");
+        assertThat(body.get("items")).isEqualTo(List.of(
+                Map.of("userId", friendId.toString(), "nickname", "철수",
+                        "profileImageUrl", "https://cdn/a.png", "relationshipType", "FRIEND"),
+                nullableMap("userId", strangerId.toString(), "nickname", "김철수",
+                        "profileImageUrl", null, "relationshipType", "NONE")));
+    }
+
+    @Test
+    @DisplayName("사용자 검색: 마지막 페이지면 nextCursor는 키째 null이다")
+    void searchUsersLastPage() throws Exception {
+        // given
+        given(searchUsersUsecase.handle(any())).willReturn(new SearchUsersResult(List.of(), null));
+
+        // when
+        MvcResult result = mockMvc.perform(get("/users/search").param("q", "철수")).andReturn();
+
+        // then
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        assertThat(body(result)).containsEntry("items", List.of()).containsKey("nextCursor");
+        assertThat(body(result).get("nextCursor")).isNull();
+    }
+
+    @Test
+    @DisplayName("사용자 검색: limit이 없으면 20, 50을 넘으면 50으로 넘기고 빈 cursor는 첫 페이지다")
+    void searchUsersLimitDefaultClampAndBlankCursor() throws Exception {
+        // given
+        given(searchUsersUsecase.handle(new SearchUsersQuery(USER_ID, "철수", null, 20)))
+                .willReturn(new SearchUsersResult(List.of(), null));
+        given(searchUsersUsecase.handle(new SearchUsersQuery(USER_ID, "철수", null, 50)))
+                .willReturn(new SearchUsersResult(List.of(), null));
+
+        // when
+        MvcResult byDefault = mockMvc.perform(get("/users/search")
+                .param("q", "철수")
+                .param("cursor", "")).andReturn();
+        MvcResult clamped = mockMvc.perform(get("/users/search")
+                .param("q", "철수")
+                .param("limit", "51")).andReturn();
+
+        // then -> 스텁과 다른 값이 넘어가면 엄격 스텁이 실패시킨다
+        assertThat(byDefault.getResponse().getStatus()).isEqualTo(200);
+        assertThat(clamped.getResponse().getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("사용자 검색: 검색어가 없거나 비었거나 16자를 넘거나 limit이 잘못되면 400이고 유스케이스를 부르지 않는다")
+    void searchUsersInvalidParams() throws Exception {
+        // when
+        MvcResult missingQuery = mockMvc.perform(get("/users/search")).andReturn();
+        MvcResult blankQuery = mockMvc.perform(get("/users/search").param("q", "   ")).andReturn();
+        MvcResult longQuery = mockMvc.perform(get("/users/search").param("q", "가".repeat(17))).andReturn();
+        MvcResult zeroLimit = mockMvc.perform(get("/users/search")
+                .param("q", "철수")
+                .param("limit", "0")).andReturn();
+        MvcResult textLimit = mockMvc.perform(get("/users/search")
+                .param("q", "철수")
+                .param("limit", "abc")).andReturn();
+
+        // then -> 검색어가 빠져도 누락 예외로 500이 나지 않고 검증 실패로 400이다
+        for (MvcResult result : List.of(missingQuery, blankQuery, longQuery, zeroLimit, textLimit)) {
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(body(result))
+                    .containsEntry("code", "INVALID_REQUEST")
+                    .containsEntry("message", "입력값이 올바르지 않습니다.");
+        }
+        then(searchUsersUsecase).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("사용자 검색: 깨진 커서는 400 INVALID_REQUEST다")
+    void searchUsersWithInvalidCursor() throws Exception {
+        // given
+        given(searchUsersUsecase.handle(any())).willThrow(new InvalidUserSearchCursorException());
+
+        // when
+        MvcResult result = mockMvc.perform(get("/users/search")
+                .param("q", "철수")
+                .param("cursor", "broken")).andReturn();
+
+        // then
+        assertThat(result.getResponse().getStatus()).isEqualTo(400);
+        assertThat(body(result))
+                .containsEntry("code", "INVALID_REQUEST")
+                .containsEntry("message", "입력값이 올바르지 않습니다.");
     }
 
     // Map.of는 null 값을 받지 않는다
