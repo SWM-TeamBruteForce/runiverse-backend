@@ -82,13 +82,17 @@
 | 컬럼 | 타입 | 제약 | 비고 |
 |---|---|---|---|
 | user_device_id | bigint | PK | |
-| user_id | UUID | FK → users, NOT NULL | |
-| push_token | varchar | NOT NULL | FCM/APNs 토큰 |
-| platform | enum | NOT NULL |  |
-| device_id | varchar | UNIQUE, NOT NULL | 기기 식별자 (`POST /devices` upsert 키) |
-| app_version | varchar | nullable | |
-| is_active | boolean | NOT NULL, default true | 재로그인 시 devices API가 true 갱신. 기기 단위 비활성화(로그아웃 시 false)는 **[MVP 제외]** — 로그아웃은 토큰 블랙리스트만 |
+| user_id | UUID | FK → users, NOT NULL, ON DELETE CASCADE | 지금 이 기기로 로그인한 유저 — 다른 계정이 등록하면 바뀐다 |
+| push_token | text | NOT NULL | FCM 등록 토큰. 공식 길이 상한이 없어 `text`다 |
+| platform | enum | NOT NULL | `X-App-Platform` 헤더 값 |
+| device_id | varchar(100) | UNIQUE, NOT NULL | 앱이 설치 때 만드는 기기 식별자 (`POST /users/me/devices` upsert 키). 형식은 보지 않는다 |
+| app_version | varchar(255) | NOT NULL | `X-App-Version` 헤더 값 — 등록할 때의 앱 버전 |
+| is_active | boolean | NOT NULL, default true | 푸시를 받는 기기인가. 등록하면 이 기기만 true(유저당 하나), 로그아웃하면 그 유저의 기기 전부 false |
 | created_at / updated_at | timestamp | NOT NULL | |
+
+> CHECK `ck_user_device_platform`: `platform in ('IOS', 'ANDROID')`
+> CHECK `ck_user_device_app_version`: `app_version ~ '^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}$'`
+> 받는 기기를 유저당 하나로 두는 것은 로그인 세션이 계정당 하나라서다. 기기별 세션이 생기면 기기 단위로 바꾼다.
 
 ### app_versions (앱 버전 정책)
 
@@ -98,8 +102,8 @@
 |---|---|---|---|
 | app_version_id | bigint | PK | |
 | platform | enum | UNIQUE, NOT NULL | 플랫폼당 한 행 |
-| minimum_version | varchar | NOT NULL | 이보다 낮은 앱은 쓸 수 없다. API `minimumVersion` |
-| latest_version | varchar | NOT NULL | 스토어에 공개된 최신 버전. API `latestVersion` |
+| minimum_version | varchar(255) | NOT NULL | 이보다 낮은 앱은 쓸 수 없다. API `minimumVersion` |
+| latest_version | varchar(255) | NOT NULL | 스토어에 공개된 최신 버전. API `latestVersion` |
 | created_at / updated_at | timestamp | NOT NULL | |
 
 > CHECK `ck_app_version_platform`: `platform in ('IOS', 'ANDROID')`
