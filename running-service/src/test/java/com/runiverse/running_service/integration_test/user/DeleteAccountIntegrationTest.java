@@ -69,6 +69,7 @@ public class DeleteAccountIntegrationTest {
         settledUserIds = new ArrayList<>();
 
         deleteAccountHandler = new DeleteAccountHandler(
+                id -> { },                                        // LockUserPort — 한 스레드라 줄 세울 일이 없다
                 deletedUserStore,                                 // LoadAccountSnapshotPort
                 command -> settledUserIds.add(command.userId()),  // SettleRunningForAccountDeletionUsecase
                 deletedUserStore,                                 // SaveDeletedUserPort

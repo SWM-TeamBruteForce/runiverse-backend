@@ -40,11 +40,13 @@ public class LogoutIntegrationTest extends IntegrationTestSupport {
     @BeforeEach
     void setUp() {
         userDeviceStore = new InMemoryUserDeviceStore();
+        signUpHandler = newSignUpHandler();
         registerDeviceHandler = new RegisterDeviceHandler(
+                userId -> { },     // LockUserPort — 한 스레드라 줄 세울 일이 없다
+                userStore,         // LoadUserByIdPort
                 userDeviceStore,   // UpsertUserDevicePort
                 userDeviceStore    // DeactivateUserDevicesPort
         );
-        signUpHandler = newSignUpHandler();
         loginHandler = new LoginHandler(
                 userStore, passwordHasher, tokenProvider,
                 tokenProvider, refreshTokenStore);

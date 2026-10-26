@@ -5,8 +5,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -19,6 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DeviceE2eTest extends E2eTestSupport {
 
     private static final String PATH = "/users/me/devices";
+    // 동시 요청이 실제로 겹칠 기회를 늘리려고 여러 번 반복한다
+    private static final int CONCURRENT_ROUNDS = 5;
 
     @Test
     @DisplayName("유저당 마지막에 등록한 기기 하나만 켜지고, 계정을 바꾸면 주인이 바뀌며, 로그아웃하면 모두 꺼진다")
@@ -55,6 +60,37 @@ class DeviceE2eTest extends E2eTestSupport {
         // when & then - 로그아웃하면 그 유저의 기기가 전부 꺼진다
         assertThat(post("/auth/logout", Map.of(), other.accessToken()).status()).isEqualTo(204);
         assertActiveDevices(other.userId());
+    }
+
+    @Test
+    @DisplayName("한 유저의 두 기기가 동시에 등록해도 500 없이 하나만 켜진다")
+    void concurrentRegistrationsLeaveOneActive() {
+        for (int i = 0; i < CONCURRENT_ROUNDS; i++) {
+            // given - 이미 켜진 기기가 있다
+            TestUser user = signUpAndOnboard();
+            String oldDevice = uniqueDeviceId();
+            register(oldDevice, "token-old", user.accessToken());
+            CountDownLatch start = new CountDownLatch(1);
+
+            // when - 줄을 세우지 않으면 서로 상대가 아직 꺼지지 않은 걸 못 봐 둘 다 켜진다
+            CompletableFuture<Integer> first = CompletableFuture.supplyAsync(() -> {
+                await(start);
+                return register(uniqueDeviceId(), "token-1", user.accessToken());
+            });
+            CompletableFuture<Integer> second = CompletableFuture.supplyAsync(() -> {
+                await(start);
+                return register(uniqueDeviceId(), "token-2", user.accessToken());
+            });
+            start.countDown();
+
+            // then
+            assertThat(List.of(first.join(), second.join())).containsExactly(204, 204);
+            assertInDb(String.format("""
+                    (SELECT count(*) FROM user_devices WHERE user_id = '%s' AND is_active) = 1
+                    AND NOT EXISTS (SELECT 1 FROM user_devices WHERE device_id = '%s' AND is_active)""",
+                            user.userId(), oldDevice),
+                    "동시 등록 뒤 켜진 기기가 하나가 아니다");
+        }
     }
 
     @Test
@@ -97,6 +133,15 @@ class DeviceE2eTest extends E2eTestSupport {
 
     private static String uniqueDeviceId() {
         return UUID.randomUUID().toString();
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
     }
 
     // 켜진 기기가 정확히 이것들뿐인지 본다 — 비워 두면 켜진 기기가 없어야 한다

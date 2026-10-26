@@ -4,8 +4,11 @@ import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.device.command.register.RegisterDeviceCommand;
 import com.runiverse.running_service.application.device.command.register.RegisterDeviceHandler;
 import com.runiverse.running_service.domain.common.vo.Platform;
+import com.runiverse.running_service.domain.user.User;
+import com.runiverse.running_service.domain.user.vo.Provider;
 import com.runiverse.running_service.integration_test.fake.InMemoryUserDeviceStore;
 import com.runiverse.running_service.integration_test.fake.InMemoryUserDeviceStore.StoredDevice;
+import com.runiverse.running_service.integration_test.fake.InMemoryUserStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,13 +22,19 @@ public class RegisterDeviceIntegrationTest {
 
     private final UUID userId = UuidCreator.getTimeOrderedEpoch();
     private final UUID otherUserId = UuidCreator.getTimeOrderedEpoch();
+    private InMemoryUserStore userStore;
     private InMemoryUserDeviceStore userDeviceStore;
     private RegisterDeviceHandler registerDeviceHandler;
 
     @BeforeEach
     void setUp() {
+        userStore = new InMemoryUserStore();
+        userStore.save(User.registerWithOauth(userId, "runner@runiverse.com", Provider.KAKAO, "kakao-1"));
+        userStore.save(User.registerWithOauth(otherUserId, "other@runiverse.com", Provider.KAKAO, "kakao-2"));
         userDeviceStore = new InMemoryUserDeviceStore();
         registerDeviceHandler = new RegisterDeviceHandler(
+                id -> { },         // LockUserPort — 한 스레드라 줄 세울 일이 없다
+                userStore,         // LoadUserByIdPort
                 userDeviceStore,   // UpsertUserDevicePort
                 userDeviceStore    // DeactivateUserDevicesPort
         );
@@ -120,6 +129,16 @@ public class RegisterDeviceIntegrationTest {
         assertThat(userDeviceStore.find("device-1").orElseThrow().userId()).isEqualTo(otherUserId);
         assertThat(userDeviceStore.activeDeviceIds(userId)).isEmpty();
         assertThat(userDeviceStore.activeDeviceIds(otherUserId)).containsExactly("device-1");
+    }
+
+    @Test
+    @DisplayName("이미 탈퇴한 유저의 등록은 아무것도 저장하지 않는다")
+    void deletedUserIsSkipped() {
+        // when -> 잠금을 기다리는 사이 탈퇴가 끝난 경우다
+        register(UuidCreator.getTimeOrderedEpoch(), "device-1", "token-1");
+
+        // then
+        assertThat(userDeviceStore.size()).isZero();
     }
 
     @Test
