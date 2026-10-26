@@ -11,6 +11,7 @@ import com.runiverse.running_service.application.auth.command.signup.SignUpComma
 import com.runiverse.running_service.application.auth.command.signup.SignUpHandler;
 import com.runiverse.running_service.application.auth.exception.InvalidRefreshTokenException;
 import com.runiverse.running_service.integration_test.IntegrationTestSupport;
+import com.runiverse.running_service.integration_test.fake.InMemoryUserDeviceStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,9 +32,11 @@ public class LogoutIntegrationTest extends IntegrationTestSupport {
     private LoginHandler loginHandler;
     private RefreshHandler refreshHandler;
     private LogoutHandler logoutHandler;
+    private InMemoryUserDeviceStore userDeviceStore;
 
     @BeforeEach
     void setUp() {
+        userDeviceStore = new InMemoryUserDeviceStore();
         signUpHandler = newSignUpHandler();
         loginHandler = new LoginHandler(
                 userStore, passwordHasher, tokenProvider,
@@ -42,6 +45,7 @@ public class LogoutIntegrationTest extends IntegrationTestSupport {
                 tokenProvider, refreshTokenStore, tokenProvider,
                 refreshTokenStore, tokenProvider, refreshTokenStore);
         logoutHandler = new LogoutHandler(
+                userDeviceStore,       // DeactivateUserDevicesPort
                 refreshTokenStore,     // DeleteRefreshTokenPort
                 accessTokenBlacklist   // BlockAccessTokenPort
         );
