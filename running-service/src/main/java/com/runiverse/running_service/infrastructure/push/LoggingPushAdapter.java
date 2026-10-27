@@ -15,7 +15,8 @@ public class LoggingPushAdapter implements SendPushPort {
 
     @Override
     public PushSendStatus send(PushToken pushToken, PushMessage message) {
-        log.info("[푸시 발송 생략] title={} body={} data={}", message.title(), message.body(), message.data());
+        log.warn("[기기] 푸시 발송 건너뜀: 로컬 프로필 - title={}, body={}, data={}",
+                message.title(), message.body(), message.data());
         return PushSendStatus.SENT;
     }
 }
