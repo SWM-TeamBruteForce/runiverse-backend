@@ -8,7 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-// 실패해도 원래 요청은 이미 커밋됐다(예외는 Spring이 로그만 남긴다) — 푸시 하나를 잃을 뿐 되돌리지 않는다
+// 실패해도 원래 요청은 이미 커밋됐다(예외는 Spring이 로그만 남긴다) — 푸시 하나를 잃을 뿐 되돌리지 않는다.
+// 트랜잭션 안에서 발행해야 돈다 — 밖에서 발행하면 오류 없이 무시된다
 @Component
 @RequiredArgsConstructor
 public class PushListener {
