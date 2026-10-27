@@ -6,6 +6,7 @@ import com.runiverse.running_service.application.auth.port.out.LoadUserByProvide
 import com.runiverse.running_service.application.auth.port.out.SaveUserPort;
 import com.runiverse.running_service.application.common.port.out.LoadPlayerProfilesPort;
 import com.runiverse.running_service.application.common.port.out.LoadUserAvgPacePort;
+import com.runiverse.running_service.application.common.port.out.ExistsUserPort;
 import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.common.port.out.PlayerProfile;
 import com.runiverse.running_service.application.common.port.out.UpdateUserAvgPacePort;
@@ -71,9 +72,9 @@ import java.util.stream.Collectors;
 @Component
 @RequiredArgsConstructor
 public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUserPort, LoadUserByEmailPort,
-        LoadUserByProviderPort, LoadUserByIdPort, ExistsOnboardingPort, CheckNicknameDuplicatePort, SaveOnboardingPort,
-        UpdateProfileImagePort, ClearProfileImagePort, UpdateBackgroundImagePort, ClearBackgroundImagePort,
-        LoadNicknamePort, UpdateNicknamePort,
+        LoadUserByProviderPort, LoadUserByIdPort, ExistsUserPort, ExistsOnboardingPort, CheckNicknameDuplicatePort,
+        SaveOnboardingPort, UpdateProfileImagePort, ClearProfileImagePort, UpdateBackgroundImagePort,
+        ClearBackgroundImagePort, LoadNicknamePort, UpdateNicknamePort,
         UpdatePasswordPort, LoadUserAvgPacePort, UpdateIntroductionPort, UpdateOnboardingPort, LoadUserWeightPort,
         LoadOnboardingProfilePort, LoadPlayerProfilesPort, UpdateSettingsPort, LoadOauthProviderPort,
         LoadAccountSnapshotPort, SaveDeletedUserPort, DeleteUserPort,
@@ -309,6 +310,18 @@ public class UserPersistenceAdapter implements CheckEmailDuplicatePort, SaveUser
                 .getResultStream()
                 .findFirst()
                 .map(this::toDomain);
+    }
+
+    @Override
+    public boolean existsById(UserId userId) {
+        Long count = entityManager.createQuery("""
+                        SELECT COUNT(u)
+                        FROM UserJpaEntity u
+                        WHERE u.userId = :userId
+                        """, Long.class)
+                .setParameter("userId", userId.value())
+                .getSingleResult();
+        return count > 0;
     }
 
     @Override
