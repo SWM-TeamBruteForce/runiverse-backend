@@ -14,7 +14,7 @@ import java.util.Base64;
 
 @Configuration
 @Profile("!local")
-public class FirebaseConfig {
+public class FcmClientConfig {
 
     // 커밋 뒤 요청 스레드에서 보내므로 응답이 이만큼 늦어질 수 있다
     private static final int CONNECT_TIMEOUT_MILLIS = 2_000;
