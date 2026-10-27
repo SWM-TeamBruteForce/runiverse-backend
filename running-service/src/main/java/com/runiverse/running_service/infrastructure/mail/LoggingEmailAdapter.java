@@ -12,6 +12,7 @@ public class LoggingEmailAdapter implements SendEmailPort {
 
     @Override
     public void send(String to, String subject, String body) {
-        log.info("[메일 발송 생략] to={} subject={}\n{}", to, subject, body);
+        // 본문은 다음 줄에 둔다 — 로컬 가입·E2E가 여기서 인증 코드를 읽는다
+        log.warn("[인증] 인증 메일 발송 건너뜀: 로컬 프로필 - to={}, subject={}\n{}", to, subject, body);
     }
 }

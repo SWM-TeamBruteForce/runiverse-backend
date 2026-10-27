@@ -39,7 +39,7 @@ public abstract class E2eTestSupport {
     // 핸들러가 등록된 경로(application.properties의 websocket.running-endpoint)를 컨텍스트 경로 뒤에 붙인다
     private static final String RUNNING_WEBSOCKET_URL =
             BASE_URL.replaceFirst("^http", "ws") + "/ws/running";
-    private static final String MAIL_LOG_MARKER = "[메일 발송 생략]";
+    private static final String MAIL_LOG_MARKER = "[인증] 인증 메일 발송 건너뜀: 로컬 프로필";
     private static final Pattern VERIFICATION_CODE = Pattern.compile("\\d{6}");
     private static final int CODE_LOOKUP_RETRIES = 10;
     private static final int MAIL_BODY_LINES = 5;
