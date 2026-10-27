@@ -1,7 +1,7 @@
 package com.runiverse.running_service.unit_test.user.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
-import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
+import com.runiverse.running_service.application.common.port.out.ExistsUserPort;
 import com.runiverse.running_service.application.user.command.profile.ChangeMyProfileCommand;
 import com.runiverse.running_service.application.user.command.profile.ChangeMyProfileHandler;
 import com.runiverse.running_service.application.user.command.profile.ChangeMyProfileResult;
@@ -11,12 +11,10 @@ import com.runiverse.running_service.application.user.port.out.ExistsOnboardingP
 import com.runiverse.running_service.application.user.port.out.UpdateIntroductionPort;
 import com.runiverse.running_service.application.user.port.out.UpdateOnboardingPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
-import com.runiverse.running_service.domain.user.User;
 import com.runiverse.running_service.domain.user.vo.Birthday;
 import com.runiverse.running_service.domain.user.vo.Gender;
 import com.runiverse.running_service.domain.user.vo.Height;
 import com.runiverse.running_service.domain.user.vo.Introduction;
-import com.runiverse.running_service.domain.user.vo.ProfileVisibility;
 import com.runiverse.running_service.domain.user.vo.Weight;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,7 +25,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,16 +37,13 @@ import static org.mockito.Mockito.when;
 @DisplayName("프로필 수정 단위 테스트")
 public class ChangeMyProfileHandlerTest {
 
-    // PasswordHash VO가 Argon2id 형식만 허용하므로 형식에 맞는 값을 쓴다
-    private static final String PASSWORD_HASH =
-            "$argon2id$v=19$m=16384,t=2,p=1$c29tZXNhbHQ$aGFzaHZhbHVl";
     private static final String INTRODUCTION = "즐겁게 달려요";
     private static final LocalDate BIRTHDAY = LocalDate.of(1998, 12, 16);
     private static final BigDecimal WEIGHT = new BigDecimal("70.5");
     private static final BigDecimal HEIGHT = new BigDecimal("175.0");
 
     @Mock
-    private LoadUserByIdPort loadUserByIdPort;
+    private ExistsUserPort existsUserPort;
 
     @Mock
     private UpdateIntroductionPort updateIntroductionPort;
@@ -63,13 +57,8 @@ public class ChangeMyProfileHandlerTest {
     @InjectMocks
     private ChangeMyProfileHandler handler;
 
-    private static User userOf(UUID userId) {
-        return new User(userId, "runner@runiverse.com", PASSWORD_HASH, true,
-                null, null, ProfileVisibility.PUBLIC, "");
-    }
-
     private void givenUser(UUID userId) {
-        when(loadUserByIdPort.loadById(new UserId(userId))).thenReturn(Optional.of(userOf(userId)));
+        when(existsUserPort.existsById(new UserId(userId))).thenReturn(true);
     }
 
     private void givenOnboarded(UUID userId) {
@@ -216,7 +205,7 @@ public class ChangeMyProfileHandlerTest {
     void throwsWhenUserNotFound() {
         // given
         UUID unknownUserId = UuidCreator.getTimeOrderedEpoch();
-        when(loadUserByIdPort.loadById(new UserId(unknownUserId))).thenReturn(Optional.empty());
+        when(existsUserPort.existsById(new UserId(unknownUserId))).thenReturn(false);
 
         // when & then
         assertThatThrownBy(() -> handler.handle(
