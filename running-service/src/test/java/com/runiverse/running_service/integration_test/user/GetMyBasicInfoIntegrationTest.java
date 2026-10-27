@@ -59,7 +59,8 @@ public class GetMyBasicInfoIntegrationTest extends IntegrationTestSupport {
                 userStore,        // LoadUserByProviderPort
                 userStore,        // CheckEmailDuplicatePort
                 userIdGenerator,  // GenerateUserIdPort
-                userStore         // SaveUserPort
+                userStore,        // SaveUserPort
+                userDeviceStore   // DeactivateUserDevicesPort
         );
         oauthLoginHandler = new OauthLoginHandler(
                 googleOauthClient, // LoadGoogleProfilePort

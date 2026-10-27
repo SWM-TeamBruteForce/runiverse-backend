@@ -6,6 +6,7 @@ import com.runiverse.running_service.application.auth.port.out.GenerateUserIdPor
 import com.runiverse.running_service.application.auth.port.out.LoadUserByProviderPort;
 import com.runiverse.running_service.application.auth.port.out.OauthProfile;
 import com.runiverse.running_service.application.auth.port.out.SaveUserPort;
+import com.runiverse.running_service.application.device.port.out.DeactivateUserDevicesPort;
 import com.runiverse.running_service.domain.user.User;
 import com.runiverse.running_service.domain.user.vo.Email;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class OauthUserResolver {
     private final CheckEmailDuplicatePort checkEmailDuplicatePort;
     private final GenerateUserIdPort generateUserIdPort;
     private final SaveUserPort saveUserPort;
+    private final DeactivateUserDevicesPort deactivateUserDevicesPort;
 
     @Transactional
     public User findOrRegister(OauthProfile oauthProfile) {
@@ -34,8 +36,9 @@ public class OauthUserResolver {
                 oauthProfile.providerId()
         );
 
-        // 2. 있으면 그대로 반환
+        // 2. 있으면 다른 기기에서 쓰던 세션이 이 로그인으로 끝난다 — 그 기기들로 푸시가 가지 않게 끄고 반환
         if (foundUser.isPresent()) {
+            deactivateUserDevicesPort.deactivateAll(foundUser.get().getUserId());
             return foundUser.get();
         }
 
