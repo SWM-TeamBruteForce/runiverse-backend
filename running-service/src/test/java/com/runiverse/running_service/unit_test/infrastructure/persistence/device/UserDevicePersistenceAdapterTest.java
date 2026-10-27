@@ -1,13 +1,17 @@
 package com.runiverse.running_service.unit_test.infrastructure.persistence.device;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.device.port.out.PushTarget;
 import com.runiverse.running_service.domain.common.vo.Platform;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.device.UserDevice;
 import com.runiverse.running_service.domain.device.vo.DeviceId;
+import com.runiverse.running_service.domain.device.vo.PushToken;
+import com.runiverse.running_service.infrastructure.persistence.device.UserDeviceJpaEntity;
 import com.runiverse.running_service.infrastructure.persistence.device.UserDevicePersistenceAdapter;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
+import jakarta.persistence.TypedQuery;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,12 +21,15 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,6 +43,9 @@ public class UserDevicePersistenceAdapterTest {
 
     @Mock
     private Query query;
+
+    @Mock
+    private TypedQuery<UserDeviceJpaEntity> typedQuery;
 
     @InjectMocks
     private UserDevicePersistenceAdapter adapter;
@@ -124,6 +134,64 @@ public class UserDevicePersistenceAdapterTest {
         String jpql = capturedJpql();
         assertThat(jpql).contains("DELETE FROM UserDeviceJpaEntity d").doesNotContain("active");
         verify(query).setParameter("userId", userId);
+        verify(query).executeUpdate();
+    }
+
+    @Test
+    @DisplayName("푸시 대상은 그 유저의 켜진 기기 중 마지막에 켜진 기기다")
+    void loadPushTargetPicksLatestActiveDevice() {
+        // given
+        UserDeviceJpaEntity entity = mock(UserDeviceJpaEntity.class);
+        when(entity.getDeviceId()).thenReturn("device-1");
+        when(entity.getPushToken()).thenReturn("token-1");
+        when(entityManager.createQuery(anyString(), eq(UserDeviceJpaEntity.class))).thenReturn(typedQuery);
+        when(typedQuery.setParameter(anyString(), any())).thenReturn(typedQuery);
+        when(typedQuery.getResultStream()).thenReturn(Stream.of(entity));
+
+        // when
+        Optional<PushTarget> target = adapter.loadPushTarget(new UserId(userId));
+
+        // then -> 등록이 하나만 켜 두지만 DB가 강제하지 않아, 여럿이어도 한 곳으로만 보낸다
+        assertThat(target).contains(new PushTarget(new DeviceId("device-1"), new PushToken("token-1")));
+        ArgumentCaptor<String> jpql = ArgumentCaptor.forClass(String.class);
+        verify(entityManager).createQuery(jpql.capture(), eq(UserDeviceJpaEntity.class));
+        assertThat(jpql.getValue())
+                .contains("d.userId = :userId")
+                .contains("d.active = TRUE")
+                .contains("ORDER BY d.updatedAt DESC");
+        verify(typedQuery).setParameter("userId", userId);
+    }
+
+    @Test
+    @DisplayName("켜진 기기가 없으면 푸시 대상도 없다")
+    void loadPushTargetIsEmptyWithoutActiveDevice() {
+        // given
+        when(entityManager.createQuery(anyString(), eq(UserDeviceJpaEntity.class))).thenReturn(typedQuery);
+        when(typedQuery.setParameter(anyString(), any())).thenReturn(typedQuery);
+        when(typedQuery.getResultStream()).thenReturn(Stream.empty());
+
+        // when & then
+        assertThat(adapter.loadPushTarget(new UserId(userId))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("만료 토큰 정리는 그 기기의 토큰이 그대로일 때만 끈다")
+    void deactivateStaleRequiresSameToken() {
+        // given
+        givenJpqlQuery();
+
+        // when
+        adapter.deactivateStale(new DeviceId("device-1"), new PushToken("token-1"));
+
+        // then -> 보내는 사이 앱이 새 토큰을 등록했으면 그 기기는 살아 있다
+        String jpql = capturedJpql();
+        assertThat(jpql)
+                .contains("SET d.active = FALSE, d.updatedAt = :now")
+                .contains("d.deviceId = :deviceId")
+                .contains("d.pushToken = :pushToken")
+                .contains("d.active = TRUE");
+        verify(query).setParameter("deviceId", "device-1");
+        verify(query).setParameter("pushToken", "token-1");
         verify(query).executeUpdate();
     }
 
