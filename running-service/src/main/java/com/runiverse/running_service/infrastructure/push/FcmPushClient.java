@@ -38,10 +38,10 @@ public class FcmPushClient implements SendPushPort {
             if (e.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED) {
                 return PushSendStatus.UNREGISTERED;
             }
-            // 원인 예외에 FCM 응답 본문이 담겨 온다 — 예외 객체 대신 종류만 남긴다
+            // 원인 예외에 FCM 응답 본문이 담겨 온다 — 예외 객체 대신 직접 원인의 종류만 남긴다
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
             log.error("[기기] 푸시 발송 실패: FCM 오류 - errorCode={}, messagingErrorCode={}, cause={}",
-                    e.getErrorCode(), e.getMessagingErrorCode(),
-                    e.getCause() == null ? null : e.getCause().getClass().getSimpleName());
+                    e.getErrorCode(), e.getMessagingErrorCode(), cause.getClass().getSimpleName());
             return PushSendStatus.FAILED;
         }
     }

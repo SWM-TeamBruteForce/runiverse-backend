@@ -113,6 +113,21 @@ public class FcmPushClientTest {
         assertThat(log.events(Level.ERROR).get(0).getThrowableProxy()).isNull();
     }
 
+    @Test
+    @DisplayName("FCM 오류에 원인 예외가 없으면 잡은 예외의 종류를 남긴다")
+    void errorWithoutCauseLogsCaughtType() throws Exception {
+        // given -> 라이브러리가 원인 없이 FCM 오류만 던졌다
+        FirebaseMessagingException exception = fcmException(MessagingErrorCode.INTERNAL);
+        when(firebaseMessaging.send(any())).thenThrow(exception);
+
+        // when
+        client.send(TOKEN, MESSAGE);
+
+        // then
+        assertThat(log.messages(Level.ERROR)).singleElement().asString()
+                .contains("cause=FirebaseMessagingException");
+    }
+
     // 생성자가 공개돼 있지 않아 mock으로 만든다
     private FirebaseMessagingException fcmException(MessagingErrorCode messagingErrorCode) {
         FirebaseMessagingException exception = mock(FirebaseMessagingException.class);
