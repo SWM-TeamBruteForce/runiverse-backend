@@ -140,6 +140,8 @@ java.lang.NullPointerException: Cannot invoke "RunningRoom.getStatus()" because 
 - 원본 GPS 좌표
 - 요청·응답 바디 전체
 
+local 프로필에서 발송 대신 로그만 남기는 어댑터는 예외다 — 확인용으로 보낸 내용(받는 주소·인증 코드)을 남긴다. 운영에서는 돌지 않는다.
+
 ## 전환 중
 
 - `GlobalExceptionHandler`는 아직 업무 예외를 WARN으로 찍는다. 유스케이스마다 INFO 로그를 채운 뒤 중앙의 업무 예외 로그를 제거한다 — 먼저 제거하면 업무 실패가 로그에 남지 않는다.
