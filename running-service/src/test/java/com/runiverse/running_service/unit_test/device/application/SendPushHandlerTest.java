@@ -8,7 +8,7 @@ import com.runiverse.running_service.application.device.command.push.SendPushHan
 import com.runiverse.running_service.application.device.port.out.DeactivateStaleDevicePort;
 import com.runiverse.running_service.application.device.port.out.LoadPushTargetPort;
 import com.runiverse.running_service.application.device.port.out.PushMessage;
-import com.runiverse.running_service.application.device.port.out.PushSendResult;
+import com.runiverse.running_service.application.device.port.out.PushSendStatus;
 import com.runiverse.running_service.application.device.port.out.PushTarget;
 import com.runiverse.running_service.application.device.port.out.SendPushPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
@@ -60,7 +60,7 @@ public class SendPushHandlerTest {
         givenTarget();
         givenUser(true);
         givenSession();
-        when(sendPushPort.send(any(), any())).thenReturn(PushSendResult.SENT);
+        when(sendPushPort.send(any(), any())).thenReturn(PushSendStatus.SENT);
 
         // when
         handler.handle(command);
@@ -133,7 +133,7 @@ public class SendPushHandlerTest {
         givenTarget();
         givenUser(true);
         givenSession();
-        when(sendPushPort.send(any(), any())).thenReturn(PushSendResult.UNREGISTERED);
+        when(sendPushPort.send(any(), any())).thenReturn(PushSendStatus.UNREGISTERED);
 
         // when
         handler.handle(command);
@@ -149,7 +149,7 @@ public class SendPushHandlerTest {
         givenTarget();
         givenUser(true);
         givenSession();
-        when(sendPushPort.send(any(), any())).thenReturn(PushSendResult.FAILED);
+        when(sendPushPort.send(any(), any())).thenReturn(PushSendStatus.FAILED);
 
         // when
         handler.handle(command);

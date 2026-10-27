@@ -9,7 +9,7 @@ import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.MessagingErrorCode;
 import com.google.firebase.messaging.Notification;
 import com.runiverse.running_service.application.device.port.out.PushMessage;
-import com.runiverse.running_service.application.device.port.out.PushSendResult;
+import com.runiverse.running_service.application.device.port.out.PushSendStatus;
 import com.runiverse.running_service.application.device.port.out.SendPushPort;
 import com.runiverse.running_service.domain.device.vo.PushToken;
 import lombok.RequiredArgsConstructor;
@@ -29,20 +29,20 @@ public class FcmPushClient implements SendPushPort {
     private final FirebaseMessaging firebaseMessaging;
 
     @Override
-    public PushSendResult send(PushToken pushToken, PushMessage message) {
+    public PushSendStatus send(PushToken pushToken, PushMessage message) {
         try {
             firebaseMessaging.send(toMessage(pushToken, message));
-            return PushSendResult.SENT;
+            return PushSendStatus.SENT;
         } catch (FirebaseMessagingException e) {
             // 앱 삭제·토큰 만료는 서버 문제가 아니다 — 기기를 끄는 쪽(유스케이스)이 남긴다
             if (e.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED) {
-                return PushSendResult.UNREGISTERED;
+                return PushSendStatus.UNREGISTERED;
             }
             // 원인 예외에 FCM 응답 본문이 담겨 온다 — 예외 객체 대신 종류만 남긴다
             log.error("[기기] 푸시 발송 실패: FCM 오류 - errorCode={}, messagingErrorCode={}, cause={}",
                     e.getErrorCode(), e.getMessagingErrorCode(),
                     e.getCause() == null ? null : e.getCause().getClass().getSimpleName());
-            return PushSendResult.FAILED;
+            return PushSendStatus.FAILED;
         }
     }
 

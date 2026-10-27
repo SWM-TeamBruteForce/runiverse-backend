@@ -8,7 +8,7 @@ import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.MessagingErrorCode;
 import com.runiverse.running_service.application.device.port.out.PushMessage;
-import com.runiverse.running_service.application.device.port.out.PushSendResult;
+import com.runiverse.running_service.application.device.port.out.PushSendStatus;
 import com.runiverse.running_service.domain.device.vo.PushToken;
 import com.runiverse.running_service.infrastructure.push.FcmPushClient;
 import com.runiverse.running_service.support.LogCapture;
@@ -62,10 +62,10 @@ public class FcmPushClientTest {
         ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
 
         // when
-        PushSendResult result = client.send(TOKEN, MESSAGE);
+        PushSendStatus status = client.send(TOKEN, MESSAGE);
 
         // then -> Message에 공개 getter가 없어 FCM에 실리는 JSON으로 본다
-        assertThat(result).isEqualTo(PushSendResult.SENT);
+        assertThat(status).isEqualTo(PushSendStatus.SENT);
         verify(firebaseMessaging).send(captor.capture());
         String json = toJson(captor.getValue());
         assertThat(json)
@@ -85,10 +85,10 @@ public class FcmPushClientTest {
         when(firebaseMessaging.send(any())).thenThrow(exception);
 
         // when
-        PushSendResult result = client.send(TOKEN, MESSAGE);
+        PushSendStatus status = client.send(TOKEN, MESSAGE);
 
         // then -> 앱 삭제·토큰 만료는 서버 문제가 아니다
-        assertThat(result).isEqualTo(PushSendResult.UNREGISTERED);
+        assertThat(status).isEqualTo(PushSendStatus.UNREGISTERED);
         assertThat(log.messages(Level.ERROR)).isEmpty();
     }
 
@@ -101,10 +101,10 @@ public class FcmPushClientTest {
         when(firebaseMessaging.send(any())).thenThrow(exception);
 
         // when
-        PushSendResult result = client.send(TOKEN, MESSAGE);
+        PushSendStatus status = client.send(TOKEN, MESSAGE);
 
         // then -> 원인 예외에 FCM 응답 본문이 담겨 와서 예외 객체를 넘기지 않는다
-        assertThat(result).isEqualTo(PushSendResult.FAILED);
+        assertThat(status).isEqualTo(PushSendStatus.FAILED);
         assertThat(log.messages(Level.ERROR)).singleElement().asString()
                 .contains("[기기] 푸시 발송 실패: FCM 오류")
                 .contains("messagingErrorCode=UNAVAILABLE")
