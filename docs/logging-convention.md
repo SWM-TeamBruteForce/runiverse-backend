@@ -139,8 +139,7 @@ java.lang.NullPointerException: Cannot invoke "RunningRoom.getStatus()" because 
 - 이메일 원문 — 사용자를 특정할 수 없어 이메일이 유일한 단서일 때만 마스킹해서 남긴다(`a***@b.com`). 사용자를 찾았으면 `userId`를 쓴다.
 - 원본 GPS 좌표
 - 요청·응답 바디 전체
-
-local 프로필에서 발송 대신 로그만 남기는 어댑터는 예외다 — 확인용으로 보낸 내용(받는 주소·인증 코드)을 남긴다. 운영에서는 돌지 않는다.
+- 예외: local 프로필의 발송 대체 어댑터는 받는 주소·인증 코드를 남긴다 — 운영에서는 돌지 않는다.
 
 ## 전환 중
 
