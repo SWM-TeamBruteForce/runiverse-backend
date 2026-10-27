@@ -19,6 +19,6 @@ public class PushListener {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void send(PushRequestedEvent event) {
-        sendPushUsecase.handle(event.command());
+        sendPushUsecase.handle(new SendPushCommand(event.userId(), event.title(), event.body(), event.data()));
     }
 }
