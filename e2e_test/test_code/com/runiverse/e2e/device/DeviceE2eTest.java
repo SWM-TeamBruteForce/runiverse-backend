@@ -94,6 +94,25 @@ class DeviceE2eTest extends E2eTestSupport {
     }
 
     @Test
+    @DisplayName("다시 로그인하면 그 유저의 기기가 전부 꺼지고, 비밀번호가 틀리면 그대로다")
+    void loginDeactivatesDevices() {
+        // given - 예전 폰에 등록해 둔 기기가 켜져 있다
+        TestUser user = signUpAndOnboard();
+        String oldDevice = uniqueDeviceId();
+        assertThat(register(oldDevice, "token-1", user.accessToken())).isEqualTo(204);
+
+        // when & then - 비밀번호가 틀리면 기기를 끄지 않는다
+        assertThat(post("/auth/login", Map.of("email", user.email(), "password", "WrongPassword1!")).status())
+                .isEqualTo(401);
+        assertActiveDevices(user.userId(), oldDevice);
+
+        // when & then - 새 폰에서 로그인하면 등록 전이라도 예전 폰이 꺼진다
+        assertThat(post("/auth/login", Map.of("email", user.email(), "password", user.password())).status())
+                .isEqualTo(200);
+        assertActiveDevices(user.userId());
+    }
+
+    @Test
     @DisplayName("탈퇴하면 꺼진 기기까지 그 유저의 기기 행이 지워진다")
     void accountDeletionRemovesDevices() {
         // given - 하나는 꺼지고 하나는 켜진 상태다
