@@ -87,7 +87,7 @@
 | platform | enum | NOT NULL | `X-App-Platform` 헤더 값 |
 | device_id | varchar(100) | UNIQUE, NOT NULL | 앱이 설치 때 만드는 기기 식별자 (`POST /users/me/devices` upsert 키). 형식은 보지 않는다 |
 | app_version | varchar(30) | NOT NULL | `X-App-Version` 헤더 값 — 등록할 때의 앱 버전 |
-| is_active | boolean | NOT NULL | 푸시를 받는 기기인가. 등록하면 이 기기만 true(유저당 하나), 로그인·로그아웃하면 그 유저의 기기 전부 false |
+| is_active | boolean | NOT NULL | 푸시를 받는 기기인가. 등록하면 이 기기만 true(유저당 하나), 로그인·로그아웃하면 그 유저의 기기 전부 false, FCM이 등록 해제된 토큰이라고 답하면 그 기기 false(그사이 토큰이 바뀌었으면 그대로) |
 | created_at / updated_at | timestamp | NOT NULL | |
 
 > CHECK `ck_user_device_platform`: `platform in ('IOS', 'ANDROID')`
