@@ -16,7 +16,7 @@ import java.util.Base64;
 @Profile("!local")
 public class FcmClientConfig {
 
-    // 커밋 뒤 요청 스레드에서 보내므로 응답이 이만큼 늦어질 수 있다
+    // 요청 한 번의 제한이다 — 재시도까지 합친 전체 상한은 FcmPushClient가 건다
     private static final int CONNECT_TIMEOUT_MILLIS = 2_000;
     private static final int READ_TIMEOUT_MILLIS = 3_000;
 

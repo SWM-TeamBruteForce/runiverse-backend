@@ -1,6 +1,8 @@
 package com.runiverse.running_service.unit_test.infrastructure.push;
 
 import ch.qos.logback.classic.Level;
+import com.google.api.core.ApiFutures;
+import com.google.api.core.SettableApiFuture;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.firebase.ErrorCode;
 import com.google.firebase.messaging.FirebaseMessaging;
@@ -60,13 +62,14 @@ public class FcmPushClientTest {
     void sendBuildsMessage() throws Exception {
         // given
         ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
+        when(firebaseMessaging.sendAsync(any())).thenReturn(ApiFutures.immediateFuture("message-id"));
 
         // when
         PushSendStatus status = client.send(TOKEN, MESSAGE);
 
         // then -> Message에 공개 getter가 없어 FCM에 실리는 JSON으로 본다
         assertThat(status).isEqualTo(PushSendStatus.SENT);
-        verify(firebaseMessaging).send(captor.capture());
+        verify(firebaseMessaging).sendAsync(captor.capture());
         String json = toJson(captor.getValue());
         assertThat(json)
                 .contains("\"token\":\"token-1\"")
@@ -79,10 +82,10 @@ public class FcmPushClientTest {
 
     @Test
     @DisplayName("등록 해제된 토큰이면 UNREGISTERED를 돌려주고 ERROR를 남기지 않는다")
-    void unregisteredTokenIsNotServerError() throws Exception {
+    void unregisteredTokenIsNotServerError() {
         // given
         FirebaseMessagingException exception = fcmException(MessagingErrorCode.UNREGISTERED);
-        when(firebaseMessaging.send(any())).thenThrow(exception);
+        when(firebaseMessaging.sendAsync(any())).thenReturn(ApiFutures.immediateFailedFuture(exception));
 
         // when
         PushSendStatus status = client.send(TOKEN, MESSAGE);
@@ -94,11 +97,11 @@ public class FcmPushClientTest {
 
     @Test
     @DisplayName("그 밖의 FCM 오류는 FAILED를 돌려주고 ERROR를 남긴다")
-    void otherErrorIsLogged() throws Exception {
+    void otherErrorIsLogged() {
         // given
         FirebaseMessagingException exception = fcmException(MessagingErrorCode.UNAVAILABLE);
         when(exception.getCause()).thenReturn(new IOException("response body with token-1"));
-        when(firebaseMessaging.send(any())).thenThrow(exception);
+        when(firebaseMessaging.sendAsync(any())).thenReturn(ApiFutures.immediateFailedFuture(exception));
 
         // when
         PushSendStatus status = client.send(TOKEN, MESSAGE);
@@ -115,10 +118,10 @@ public class FcmPushClientTest {
 
     @Test
     @DisplayName("FCM 오류에 원인 예외가 없으면 잡은 예외의 종류를 남긴다")
-    void errorWithoutCauseLogsCaughtType() throws Exception {
+    void errorWithoutCauseLogsCaughtType() {
         // given -> 라이브러리가 원인 없이 FCM 오류만 던졌다
         FirebaseMessagingException exception = fcmException(MessagingErrorCode.INTERNAL);
-        when(firebaseMessaging.send(any())).thenThrow(exception);
+        when(firebaseMessaging.sendAsync(any())).thenReturn(ApiFutures.immediateFailedFuture(exception));
 
         // when
         client.send(TOKEN, MESSAGE);
@@ -126,6 +129,24 @@ public class FcmPushClientTest {
         // then
         assertThat(log.messages(Level.ERROR)).singleElement().asString()
                 .contains("cause=FirebaseMessagingException");
+    }
+
+    @Test
+    @DisplayName("응답이 상한 안에 오지 않으면 기다리지 않고 FAILED를 돌려주고 재시도를 멈춘다")
+    void timeoutIsFailed() {
+        // given -> 라이브러리가 503 재시도로 응답을 붙잡고 있는 상황이다
+        SettableApiFuture<String> future = SettableApiFuture.create();
+        when(firebaseMessaging.sendAsync(any())).thenReturn(future);
+
+        // when
+        PushSendStatus status = client.send(TOKEN, MESSAGE);
+
+        // then
+        assertThat(status).isEqualTo(PushSendStatus.FAILED);
+        assertThat(future.isCancelled()).isTrue();
+        assertThat(log.messages(Level.ERROR)).singleElement().asString()
+                .contains("[기기] 푸시 발송 실패: FCM 응답 지연")
+                .contains("timeoutMs=3000");
     }
 
     // 생성자가 공개돼 있지 않아 mock으로 만든다
