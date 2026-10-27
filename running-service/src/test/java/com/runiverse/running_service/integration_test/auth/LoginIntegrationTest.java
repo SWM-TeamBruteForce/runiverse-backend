@@ -1,11 +1,14 @@
 package com.runiverse.running_service.integration_test.auth;
 
+import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.auth.command.login.LoginCommand;
 import com.runiverse.running_service.application.auth.command.login.LoginHandler;
 import com.runiverse.running_service.application.auth.command.login.LoginResult;
 import com.runiverse.running_service.application.auth.command.signup.SignUpCommand;
 import com.runiverse.running_service.application.auth.command.signup.SignUpHandler;
 import com.runiverse.running_service.application.auth.exception.InvalidCredentialsException;
+import com.runiverse.running_service.domain.common.vo.Platform;
+import com.runiverse.running_service.domain.device.UserDevice;
 import com.runiverse.running_service.integration_test.IntegrationTestSupport;
 import com.runiverse.running_service.support.LogCapture;
 import ch.qos.logback.classic.Level;
@@ -36,7 +39,8 @@ public class LoginIntegrationTest extends IntegrationTestSupport {
                 passwordHasher,
                 tokenProvider,
                 tokenProvider,
-                refreshTokenStore
+                refreshTokenStore,
+                userDeviceStore
         );
         loginLog = LogCapture.of(LoginHandler.class);
     }
@@ -113,6 +117,35 @@ public class LoginIntegrationTest extends IntegrationTestSupport {
         String secondHash = refreshTokenStore.loadById(userId).orElseThrow();
         assertThat(secondHash).isNotEqualTo(firstHash);
         assertThat(tokenProvider.matches(first.refreshToken(), secondHash)).isFalse();
+    }
+
+    @Test
+    @DisplayName("로그인하면 그 유저의 기기가 전부 꺼지고 다른 유저의 기기는 그대로다")
+    void loginDeactivatesOwnDevices() {
+        // given - 예전 폰에 등록해 둔 기기가 켜져 있다
+        UUID userId = signUp();
+        UUID otherUserId = UuidCreator.getTimeOrderedEpoch();
+        userDeviceStore.upsert(UserDevice.register(userId, "device-old", "token-old", Platform.ANDROID, "1.1.0"));
+        userDeviceStore.upsert(UserDevice.register(otherUserId, "device-other", "token-other", Platform.IOS, "1.1.0"));
+        // when - 새 폰에서 로그인한다
+        loginHandler.handle(new LoginCommand(EMAIL, PASSWORD));
+        // then — 새 폰이 등록에 실패해도 세션이 끝난 예전 폰으로 푸시가 가지 않는다. 행은 남는다
+        assertThat(userDeviceStore.activeDeviceIds(userId)).isEmpty();
+        assertThat(userDeviceStore.find("device-old")).isPresent();
+        assertThat(userDeviceStore.activeDeviceIds(otherUserId)).containsExactly("device-other");
+    }
+
+    @Test
+    @DisplayName("비밀번호가 틀리면 기기를 끄지 않는다")
+    void wrongPasswordKeepsDevices() {
+        // given
+        UUID userId = signUp();
+        userDeviceStore.upsert(UserDevice.register(userId, "device-old", "token-old", Platform.ANDROID, "1.1.0"));
+        // when
+        assertThatThrownBy(() -> loginHandler.handle(new LoginCommand(EMAIL, "WrongPassword1!")))
+                .isInstanceOf(InvalidCredentialsException.class);
+        // then — 남이 틀린 비밀번호로 시도해도 내 폰의 푸시가 꺼지지 않는다
+        assertThat(userDeviceStore.activeDeviceIds(userId)).containsExactly("device-old");
     }
 
     @Test

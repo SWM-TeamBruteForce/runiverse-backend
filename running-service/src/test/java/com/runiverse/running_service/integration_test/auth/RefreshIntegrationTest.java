@@ -37,7 +37,7 @@ public class RefreshIntegrationTest extends IntegrationTestSupport {
         signUpHandler = newSignUpHandler();
         loginHandler = new LoginHandler(
                 userStore, passwordHasher, tokenProvider,
-                tokenProvider, refreshTokenStore);
+                tokenProvider, refreshTokenStore, userDeviceStore);
         refreshHandler = new RefreshHandler(
                 tokenProvider,      // ParseRefreshTokenPort
                 refreshTokenStore,  // LoadRefreshTokenPort

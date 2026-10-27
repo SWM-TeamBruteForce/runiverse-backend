@@ -7,6 +7,7 @@ import com.runiverse.running_service.application.auth.port.out.LoadUserByEmailPo
 import com.runiverse.running_service.application.auth.port.out.RefreshTokenHashPort;
 import com.runiverse.running_service.application.auth.port.out.SaveRefreshTokenHashPort;
 import com.runiverse.running_service.application.common.port.out.PasswordHashPort;
+import com.runiverse.running_service.application.device.port.out.DeactivateUserDevicesPort;
 import com.runiverse.running_service.domain.user.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +18,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
+@Transactional
 @Slf4j
 public class LoginHandler implements LoginUsecase {
 
@@ -26,6 +27,7 @@ public class LoginHandler implements LoginUsecase {
     private final GenerateTokenPort generateTokenPort;
     private final RefreshTokenHashPort refreshTokenHashPort;
     private final SaveRefreshTokenHashPort saveRefreshTokenPort;
+    private final DeactivateUserDevicesPort deactivateUserDevicesPort;
 
     @Override
     public LoginResult handle(LoginCommand command) {
@@ -46,18 +48,22 @@ public class LoginHandler implements LoginUsecase {
             throw new InvalidCredentialsException();
         }
 
-        // 3. jwt 토큰 생성
+        // 3. 다른 기기에서 쓰던 세션이 이 로그인으로 끝난다 — 그 기기들로 푸시가 가지 않게 끈다.
+        //    토큰 저장보다 먼저 해야 저장이 실패했을 때 함께 되돌아간다
+        deactivateUserDevicesPort.deactivateAll(user.getUserId());
+
+        // 4. jwt 토큰 생성
         String accessToken = generateTokenPort.generateAccessToken(user.getUserId());
         String refreshToken = generateTokenPort.generateRefreshToken(user.getUserId());
 
-        // 4. refresh token 해시화
+        // 5. refresh token 해시화
         String hashedRefreshToken = refreshTokenHashPort.hash(refreshToken);
 
-        // 5. refresh token redis 저장
+        // 6. refresh token redis 저장
         saveRefreshTokenPort.save(user.getUserId(), hashedRefreshToken);
         log.info("[인증] 로그인 성공 - userId={}", user.getUserId().value());
 
-        // 6. 반환
+        // 7. 반환
         return new LoginResult(user.getUserId().value(), accessToken, refreshToken);
     }
 }

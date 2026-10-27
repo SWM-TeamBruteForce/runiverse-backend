@@ -13,7 +13,6 @@ import com.runiverse.running_service.application.auth.exception.InvalidRefreshTo
 import com.runiverse.running_service.application.device.command.register.RegisterDeviceCommand;
 import com.runiverse.running_service.application.device.command.register.RegisterDeviceHandler;
 import com.runiverse.running_service.integration_test.IntegrationTestSupport;
-import com.runiverse.running_service.integration_test.fake.InMemoryUserDeviceStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,12 +33,10 @@ public class LogoutIntegrationTest extends IntegrationTestSupport {
     private LoginHandler loginHandler;
     private RefreshHandler refreshHandler;
     private LogoutHandler logoutHandler;
-    private InMemoryUserDeviceStore userDeviceStore;
     private RegisterDeviceHandler registerDeviceHandler;
 
     @BeforeEach
     void setUp() {
-        userDeviceStore = new InMemoryUserDeviceStore();
         signUpHandler = newSignUpHandler();
         registerDeviceHandler = new RegisterDeviceHandler(
                 userId -> { },     // LockUserPort — 한 스레드라 줄 세울 일이 없다
@@ -49,7 +46,7 @@ public class LogoutIntegrationTest extends IntegrationTestSupport {
         );
         loginHandler = new LoginHandler(
                 userStore, passwordHasher, tokenProvider,
-                tokenProvider, refreshTokenStore);
+                tokenProvider, refreshTokenStore, userDeviceStore);
         refreshHandler = new RefreshHandler(
                 tokenProvider, refreshTokenStore, tokenProvider,
                 refreshTokenStore, tokenProvider, refreshTokenStore);
