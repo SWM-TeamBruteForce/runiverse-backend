@@ -57,6 +57,12 @@ dependencies {
 	implementation 'software.amazon.awssdk:sesv2'
 	implementation 'software.amazon.awssdk:s3'
 
+	// 푸시 — FCM 발송
+	implementation('com.google.firebase:firebase-admin:9.11.0') {
+		// 안 쓰는 Cloud Storage가 끌고 온다 — 있으면 Accept: application/xml 요청에 XML로 응답한다
+		exclude group: 'com.fasterxml.jackson.dataformat', module: 'jackson-dataformat-xml'
+	}
+
 	// 메트릭
 	runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
