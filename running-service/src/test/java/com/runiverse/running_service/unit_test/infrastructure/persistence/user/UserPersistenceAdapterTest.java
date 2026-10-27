@@ -429,6 +429,36 @@ public class UserPersistenceAdapterTest {
     }
 
     @Test
+    @DisplayName("유저 행이 있으면 true를 반환한다")
+    void existsByIdReturnsTrue() {
+        // given
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+
+        givenCountQueryReturns("userId", userId, 1L);
+
+        // when
+        boolean result = userPersistenceAdapter.existsById(new UserId(userId));
+
+        // then
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    @DisplayName("유저 행이 없으면 false를 반환한다")
+    void existsByIdReturnsFalse() {
+        // given
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+
+        givenCountQueryReturns("userId", userId, 0L);
+
+        // when
+        boolean result = userPersistenceAdapter.existsById(new UserId(userId));
+
+        // then -> 탈퇴로 행이 지워지면 false다
+        assertThat(result).isFalse();
+    }
+
+    @Test
     @DisplayName("온보딩 행이 있으면 true를 반환한다")
     void existsByUserIdReturnsTrue() {
         // given
