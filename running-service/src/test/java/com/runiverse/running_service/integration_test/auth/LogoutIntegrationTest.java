@@ -43,7 +43,7 @@ public class LogoutIntegrationTest extends IntegrationTestSupport {
         signUpHandler = newSignUpHandler();
         registerDeviceHandler = new RegisterDeviceHandler(
                 userId -> { },     // LockUserPort — 한 스레드라 줄 세울 일이 없다
-                userStore,         // LoadUserByIdPort
+                userStore,         // ExistsUserPort
                 userDeviceStore,   // UpsertUserDevicePort
                 userDeviceStore    // DeactivateUserDevicesPort
         );

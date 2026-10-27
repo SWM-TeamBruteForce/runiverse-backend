@@ -1,6 +1,6 @@
 package com.runiverse.running_service.application.device.command.register;
 
-import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
+import com.runiverse.running_service.application.common.port.out.ExistsUserPort;
 import com.runiverse.running_service.application.common.port.out.LockUserPort;
 import com.runiverse.running_service.application.device.port.in.RegisterDeviceUsecase;
 import com.runiverse.running_service.application.device.port.out.DeactivateUserDevicesPort;
@@ -20,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class RegisterDeviceHandler implements RegisterDeviceUsecase {
 
     private final LockUserPort lockUserPort;
-    private final LoadUserByIdPort loadUserByIdPort;
+    private final ExistsUserPort existsUserPort;
     private final UpsertUserDevicePort upsertUserDevicePort;
     private final DeactivateUserDevicesPort deactivateUserDevicesPort;
 
@@ -34,7 +34,7 @@ public class RegisterDeviceHandler implements RegisterDeviceUsecase {
         lockUserPort.lock(userDevice.getUserId());
         // 2. 기다리는 사이 탈퇴가 끝났으면 넣지 않는다 — 넣으면 FK 오류(500)나 주인 없는 행이 된다.
         //    앱은 이미 로그아웃된 상태라 응답을 쓸 데가 없어 204로 끝낸다
-        if (loadUserByIdPort.loadById(userDevice.getUserId()).isEmpty()) {
+        if (!existsUserPort.existsById(userDevice.getUserId())) {
             log.info("[기기] 등록 건너뜀: 탈퇴한 유저");
             return;
         }
