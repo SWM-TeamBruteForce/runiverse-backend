@@ -32,7 +32,7 @@ public class NotifyRunningReminderHandler implements NotifyRunningReminderUsecas
     private static final String TITLE = "러닝 시작 %d분 전이에요";
     private static final String BODY = "%s에 출발해요. 로비에서 기다려주세요";
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
-    private static final long MINUTE_MILLIS = Duration.ofMinutes(1).toMillis();
+    private static final long MINUTE_NANOS = Duration.ofMinutes(1).toNanos();
 
     private final LoadRunningRoomPort loadRunningRoomPort;
     private final ApplicationEventPublisher eventPublisher;
@@ -74,7 +74,7 @@ public class NotifyRunningReminderHandler implements NotifyRunningReminderUsecas
     // 유효 시간은 시작까지다 — 꺼져 있던 폰이 시작 뒤에 켜져 지난 알림을 받지 않게 한다
     private static PushMessage reminderOf(RunningRoomId roomId, LocalDateTime startAt, Duration untilStart) {
         return new PushMessage(PushType.RUNNING_REMINDER,
-                TITLE.formatted(Math.ceilDiv(untilStart.toMillis(), MINUTE_MILLIS)),
+                TITLE.formatted(Math.ceilDiv(untilStart.toNanos(), MINUTE_NANOS)),
                 BODY.formatted(startAt.format(TIME_FORMAT)),
                 Map.of("runningRoomId", String.valueOf(roomId.value())),
                 untilStart);
