@@ -156,7 +156,7 @@ public abstract class E2eTestSupport {
     }
 
     protected MatchStream openMatchStream(String accessToken) {
-        return MatchStream.open(HTTP_CLIENT, BASE_URL + "/running-matches/stream", accessToken,
+        return MatchStream.open(HTTP_CLIENT, BASE_URL + "/match-rooms/stream", accessToken,
                 SUPPORTED_APP_VERSION);
     }
 

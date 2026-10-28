@@ -19,7 +19,14 @@ public enum RunningRoomErrorCode implements ErrorCode {
     ROOM_IS_EMPTY("ROOM_IS_EMPTY", "남은 참가자가 없습니다."),
     ROOM_NOT_JOINABLE("ROOM_NOT_JOINABLE", "지금은 합류할 수 없는 방입니다."),
     ALREADY_ROOM_PLAYER("ALREADY_ROOM_PLAYER", "이미 이 방의 참가자입니다."),
-    ALREADY_LEFT_ROOM("ALREADY_LEFT_ROOM", "이미 이 방에서 나간 참가자입니다.");
+    ALREADY_LEFT_ROOM("ALREADY_LEFT_ROOM", "이미 이 방에서 나간 참가자입니다."),
+    // 초대는 방의 자식이라 방 코드에 둔다
+    ROOM_NOT_INVITABLE("ROOM_NOT_INVITABLE", "초대를 받을 수 없는 방입니다."),
+    SELF_INVITATION("SELF_INVITATION", "자기 자신은 초대할 수 없습니다."),
+    NOT_INVITED("NOT_INVITED", "이 방에서 받은 초대가 없습니다."),
+    INVALID_INVITE_COUNT("INVALID_INVITE_COUNT", "초대 횟수는 1 이상이어야 합니다."),
+    INVITE_COUNT_REACHED("INVITE_COUNT_REACHED", "이 사람에게 보낼 수 있는 초대 횟수를 넘었습니다."),
+    INVALID_INVITATION_STATUS_TRANSITION("INVALID_INVITATION_STATUS_TRANSITION", "허용되지 않는 초대 상태 변경입니다.");
     private final String code;
     private final String message;
 }

@@ -8,7 +8,10 @@ import com.runiverse.running_service.application.match.command.apply.ApplyMatchH
 import com.runiverse.running_service.application.match.command.apply.MatchRoomAssigner;
 import com.runiverse.running_service.application.match.command.broadcast.BroadMatchEventHandler;
 import com.runiverse.running_service.application.match.command.broadcast.BroadcastMatchEventCommand;
+import com.runiverse.running_service.application.match.common.InviteProperties;
+import com.runiverse.running_service.application.match.common.InviteStartPolicy;
 import com.runiverse.running_service.application.match.common.MatchProperties;
+import com.runiverse.running_service.application.match.common.RecruitmentClosePolicy;
 import com.runiverse.running_service.application.match.common.MatchSlotPolicy;
 import com.runiverse.running_service.application.match.common.MatchRoomChangedEvent;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
@@ -76,6 +79,8 @@ public class ApplyMatchIntegrationTest extends IntegrationTestSupport {
     private static final MatchProperties MATCH_PROPERTIES = new MatchProperties(
             CLOSE_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET, 10, COOLDOWN,
             LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
+    private static final InviteProperties INVITE_PROPERTIES = new InviteProperties(
+            Duration.ofMinutes(10), Duration.ofMinutes(1), 1_000, 42_195, 5);
 
     private SignUpHandler signUpHandler;
     private CompleteOnboardingHandler completeOnboardingHandler;
@@ -114,7 +119,8 @@ public class ApplyMatchIntegrationTest extends IntegrationTestSupport {
                 matchStore,                                                 // LoadMatchPlayersPort
                 new InMemoryPlayerProfileStore(userStore, onboardingStore), // LoadPlayerProfilesPort
                 new FakeViewUrlGenerator(),                                 // GenerateViewUrlPort
-                MATCH_PROPERTIES,
+                new RecruitmentClosePolicy(MATCH_PROPERTIES, new InviteStartPolicy(
+                        INVITE_PROPERTIES, MATCH_PROPERTIES)),               // 모집 마감 계산
                 runningStore,                                               // LoadActiveApplicationPort
                 matchStore,                                                 // LoadMatchRoomPort
                 runningStore                                                // LoadMatchRoomDetailPort

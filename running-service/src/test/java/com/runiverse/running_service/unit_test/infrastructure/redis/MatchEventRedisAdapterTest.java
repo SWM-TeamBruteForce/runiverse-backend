@@ -51,7 +51,7 @@ class MatchEventRedisAdapterTest {
         // given
         willThrow(new RedisConnectionFailureException("redis down"))
                 .given(redisTemplate).convertAndSend(anyString(), any());
-        MatchStreamEvent event = new MatchStreamEvent(MatchEventType.MATCH_ROOM_UPDATED, ROOM_ID, null, null);
+        MatchStreamEvent event = new MatchStreamEvent(MatchEventType.MATCH_ROOM_UPDATED, ROOM_ID, null, null, null);
 
         // when -> 이미 커밋된 뒤라 되돌릴 것이 없고, 다음 갱신이나 재연결 스냅샷이 복구한다
         assertThatCode(() -> adapter.publish(event)).doesNotThrowAnyException();

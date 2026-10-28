@@ -1,7 +1,10 @@
 package com.runiverse.running_service.unit_test.running.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.match.common.InviteProperties;
+import com.runiverse.running_service.application.match.common.InviteStartPolicy;
 import com.runiverse.running_service.application.match.common.MatchProperties;
+import com.runiverse.running_service.application.match.common.RecruitmentClosePolicy;
 import com.runiverse.running_service.application.match.port.out.MatchCooldownPort;
 import com.runiverse.running_service.application.running.port.out.LoadUserStatusPort;
 import com.runiverse.running_service.application.running.port.out.UserStatusRow;
@@ -42,6 +45,8 @@ class GetUserStatusHandlerTest {
             Duration.ofMinutes(10), Duration.ofSeconds(10), Duration.ofHours(6),
             10, Duration.ofMinutes(20),
             LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
+    private static final InviteProperties INVITE_PROPERTIES = new InviteProperties(
+            Duration.ofMinutes(10), Duration.ofMinutes(1), 1_000, 42_195, 5);
 
     @Mock
     private LoadUserStatusPort loadUserStatusPort;
@@ -55,7 +60,8 @@ class GetUserStatusHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new GetUserStatusHandler(
-                loadUserStatusPort, matchCooldownPort, MATCH_PROPERTIES);
+                loadUserStatusPort, matchCooldownPort,
+                new RecruitmentClosePolicy(MATCH_PROPERTIES, new InviteStartPolicy(INVITE_PROPERTIES, MATCH_PROPERTIES)));
         userId = UuidCreator.getTimeOrderedEpoch();
     }
 
@@ -111,6 +117,39 @@ class GetUserStatusHandlerTest {
         assertThat(result.runningRoomId()).isEqualTo(125L);
         assertThat(result.scheduledStartAt()).isEqualTo(START_AT);
         assertThat(result.targetDistanceMeters()).isEqualTo(5_000);
+    }
+
+    @Test
+    @DisplayName("초대 방은 매칭 마감(10분 전)이 지나도 초대 마감(1분 전) 전이면 대기 중이다")
+    void inviteRoomWaitsUntilInviteClose() {
+        // given -> 시작 5분 전. 매칭 오프셋으로 판정하면 이미 READY가 된다
+        given(loadUserStatusPort.loadStatus(any(UserId.class))).willReturn(Optional.of(
+                new UserStatusRow(130L, RunningRoomType.INVITE,
+                        RunningRoomStatus.MATCHING, LocalDateTime.now().plusMinutes(5), 7_000)));
+        given(matchCooldownPort.until(any(UserId.class))).willReturn(Optional.empty());
+
+        // when
+        GetUserStatusResult result = handler.handle(new GetUserStatusQuery(userId));
+
+        // then
+        assertThat(result.status()).isEqualTo(UserRunningStatus.WAITING);
+        assertThat(result.type()).isEqualTo(RunningRoomType.INVITE);
+    }
+
+    @Test
+    @DisplayName("매칭 방은 같은 시각에 이미 확정으로 본다")
+    void matchRoomIsReadyAfterMatchClose() {
+        // given -> 위와 같은 시작 5분 전 — 방 종류만 다르다
+        given(loadUserStatusPort.loadStatus(any(UserId.class))).willReturn(Optional.of(
+                new UserStatusRow(125L, RunningRoomType.MATCH,
+                        RunningRoomStatus.MATCHING, LocalDateTime.now().plusMinutes(5), 5_000)));
+        given(matchCooldownPort.until(any(UserId.class))).willReturn(Optional.empty());
+
+        // when
+        GetUserStatusResult result = handler.handle(new GetUserStatusQuery(userId));
+
+        // then
+        assertThat(result.status()).isEqualTo(UserRunningStatus.READY);
     }
 
     @Test

@@ -24,7 +24,8 @@ import java.util.UUID;
 
 @Slf4j
 @RestController
-@RequestMapping("running-matches")
+// 매칭 방·초대 방이 함께 쓰는 방 상태 스트림 — 방 종류는 이벤트 이름(MATCH_*·INVITE_ROOM_*)이 가른다.
+@RequestMapping("match-rooms")
 @RequiredArgsConstructor
 public class MatchStreamController {
 

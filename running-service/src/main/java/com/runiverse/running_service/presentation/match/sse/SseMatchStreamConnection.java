@@ -1,8 +1,8 @@
 package com.runiverse.running_service.presentation.match.sse;
 
-import com.runiverse.running_service.application.match.port.out.MatchEventType;
 import com.runiverse.running_service.application.match.port.out.MatchStreamConnection;
 import com.runiverse.running_service.application.match.port.out.MatchStreamEvent;
+import com.runiverse.running_service.presentation.match.response.InviteRoomEntranceResponse;
 import com.runiverse.running_service.presentation.match.response.RoomInfoResponse;
 import com.runiverse.running_service.presentation.match.response.RunningReadyResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -54,10 +54,13 @@ public class SseMatchStreamConnection implements MatchStreamConnection {
                 .data(bodyOf(event), MediaType.APPLICATION_JSON));
     }
 
+    // 초대 방 입장만 남은 시간을 더 싣는다 — 나머지 방 상태 이벤트는 모두 같은 RoomInfo다
     private Object bodyOf(MatchStreamEvent event) {
-        return event.type() == MatchEventType.RUNNING_READY
-                ? RunningReadyResponse.from(event.ready())
-                : RoomInfoResponse.from(event.room());
+        return switch (event.type()) {
+            case RUNNING_READY -> RunningReadyResponse.from(event.ready());
+            case INVITE_ROOM_ENTRANCE -> InviteRoomEntranceResponse.from(event);
+            case MATCH_STARTED, MATCH_ROOM_UPDATED, INVITE_ROOM_UPDATED -> RoomInfoResponse.from(event.room());
+        };
     }
 
     private void send(SseEmitter.SseEventBuilder event) {

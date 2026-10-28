@@ -26,6 +26,7 @@ import com.runiverse.running_service.domain.running.metric.vo.Distance;
 import com.runiverse.running_service.domain.running.metric.vo.Pace;
 import com.runiverse.running_service.domain.running.player.RunningPlayer;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerStatus;
+import com.runiverse.running_service.domain.running.room.InvitationDraft;
 import com.runiverse.running_service.domain.running.room.RunningRoom;
 import com.runiverse.running_service.domain.running.room.SessionDraft;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
@@ -219,6 +220,11 @@ public class InMemoryRunningStore implements CreateRunningPlayerPort, CreateRunn
         room.getSessions().forEach(session -> sessions.add(new SessionDraft(
                 session.getUserId(), session.getRunningPlayerId(),
                 session.getLeaveCount().value(), session.isConnected())));
+        // 초대도 분리해 복사한다 — 저장본을 그대로 주면 update()를 빼먹어도 변경이 새어 반영된다
+        List<InvitationDraft> invitations = new ArrayList<>();
+        room.getInvitations().forEach(invitation -> invitations.add(new InvitationDraft(
+                invitation.getInviterId(), invitation.getInviteeId(),
+                invitation.getStatus(), invitation.getInviteCount().value())));
         return RunningRoom.builder()
                 .runningRoomId(id)
                 .type(room.getType())
@@ -230,6 +236,7 @@ public class InMemoryRunningStore implements CreateRunningPlayerPort, CreateRunn
                 .currentPlayerCount(room.getPlayerCount().current())
                 .maxPlayerCount(room.getPlayerCount().max())
                 .sessions(sessions)
+                .invitations(invitations)
                 .build();
     }
 

@@ -12,17 +12,22 @@ import com.runiverse.running_service.application.user.port.out.GenerateViewUrlPo
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.metric.vo.Distance;
 import com.runiverse.running_service.domain.running.metric.vo.Pace;
+import com.runiverse.running_service.domain.running.room.RoomInvitation;
 import com.runiverse.running_service.domain.running.room.RunningRoom;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
+import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-// 스트림의 MATCH_STARTED·MATCH_ROOM_UPDATED가 같은 RoomInfo를 쓴다 — 조립은 여기 한 곳에서만 한다
+// 스트림의 방 상태 이벤트(MATCH_*·INVITE_ROOM_*)가 같은 RoomInfo를 쓴다 — 조립은 여기 한 곳에서만 한다
 @Component
 @RequiredArgsConstructor
 public class RoomInfoAssembler {
@@ -31,7 +36,7 @@ public class RoomInfoAssembler {
     private final LoadMatchPlayersPort loadMatchPlayersPort;
     private final LoadPlayerProfilesPort loadPlayerProfilesPort;
     private final GenerateViewUrlPort generateViewUrlPort;
-    private final MatchProperties matchProperties;
+    private final RecruitmentClosePolicy recruitmentClosePolicy;
     private final LoadActiveApplicationPort loadActiveApplicationPort;
     private final LoadMatchRoomPort loadMatchRoomPort;
     private final LoadMatchRoomDetailPort loadMatchRoomDetailPort;   // 잠금 없는 조회
@@ -40,18 +45,41 @@ public class RoomInfoAssembler {
         RunningRoomId roomId = room.getRunningRoomId()
                 .orElseThrow(() -> new IllegalStateException("저장되지 않은 방은 조립할 수 없다"));
         List<MatchPlayer> players = loadMatchPlayersPort.loadPlayers(roomId);
-        // 프로필은 한 번에 읽는다 — 참가자마다 조회하면 인원수만큼 쿼리가 나간다
+        List<RoomInvitation> invitees = shownInvitees(room);
+        // 프로필은 참가자·초대 대상을 합쳐 한 번에 읽는다 — 사람마다 조회하면 인원수만큼 쿼리가 나간다
         Map<UUID, PlayerProfile> profiles = loadPlayerProfilesPort.loadProfiles(
-                players.stream().map(MatchPlayer::userId).toList());
+                profileTargets(players, invitees));
         return new RoomInfo(
                 roomId.value(),
+                room.getType(),
                 room.getStatus(),
                 room.getStartAt(),
                 // 저장값이 아니라 계산값이다 — 오프셋을 바꾸면 진행 중인 방의 마감도 함께 움직인다
-                room.getStartAt().minus(matchProperties.closeOffset()),
+                recruitmentClosePolicy.closeAt(room.getType(), room.getStartAt()),
                 room.getTargetDistance().map(Distance::meters).orElse(null),
                 room.getAvgPace().map(Pace::secondsPerKm).orElse(null),
-                players.stream().map(player -> toPlayer(player, profiles)).toList());
+                players.stream().map(player -> toPlayer(player, profiles)).toList(),
+                invitees.stream().map(invitee -> toInvitee(invitee, profiles)).toList());
+    }
+
+    // 응답 전인(PENDING) 초대만 받는 사람마다 한 건 — 보낸 사람별 행은 상태가 같아 첫 행만 쓴다.
+    // 수락은 players로 옮겨 가고, 거절·나감은 현황에서 빠지며(다시 초대하면 돌아온다), 만료는 마감 뒤라 그리지 않는다.
+    // 모집이 끝나면 PENDING도 만료돼 비고, 매칭 방은 초대가 없어 언제나 빈다
+    private static List<RoomInvitation> shownInvitees(RunningRoom room) {
+        if (room.getStatus() != RunningRoomStatus.MATCHING) {
+            return List.of();
+        }
+        Map<UserId, RoomInvitation> byInvitee = new LinkedHashMap<>();
+        room.getInvitations().stream()
+                .filter(RoomInvitation::isPending)
+                .forEach(invitation -> byInvitee.putIfAbsent(invitation.getInviteeId(), invitation));
+        return List.copyOf(byInvitee.values());
+    }
+
+    private static Collection<UUID> profileTargets(List<MatchPlayer> players, List<RoomInvitation> invitees) {
+        List<UUID> targets = new ArrayList<>(players.stream().map(MatchPlayer::userId).toList());
+        invitees.forEach(invitee -> targets.add(invitee.getInviteeId().value()));
+        return targets;
     }
 
     private RoomInfo.RoomPlayer toPlayer(MatchPlayer player, Map<UUID, PlayerProfile> profiles) {
@@ -64,6 +92,19 @@ public class RoomInfoAssembler {
                 deleted ? null : profileImageUrl(profile),
                 deleted ? null : profile.introduction(),
                 player.avgPaceSecondsPerKm(),
+                deleted);
+    }
+
+    // 받는 사람이 탈퇴하면 초대 행은 FK CASCADE로 지워져 여기 오지 않는다 — 형식상 참가자와 같게 판정한다
+    private RoomInfo.RoomInvitee toInvitee(RoomInvitation invitation, Map<UUID, PlayerProfile> profiles) {
+        UUID userId = invitation.getInviteeId().value();
+        PlayerProfile profile = profiles.get(userId);
+        boolean deleted = profile == null;
+        return new RoomInfo.RoomInvitee(
+                userId,
+                deleted ? DELETED_NICKNAME : profile.nickname(),
+                deleted ? null : profileImageUrl(profile),
+                invitation.getStatus(),
                 deleted);
     }
 

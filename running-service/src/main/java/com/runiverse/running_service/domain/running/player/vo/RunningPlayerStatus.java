@@ -4,8 +4,8 @@ import com.runiverse.running_service.domain.running.player.exception.InvalidPlay
 
 import java.util.Set;
 
+// 초대 대기는 신청이 아니라 여기 없다 — running_room_invitations가 갖고, 수락할 때 JOINED로 처음 생긴다
 public enum RunningPlayerStatus {
-    INVITED,
     JOINED,
     MATCHED_LEFT_PENALTY,
     MATCHED_LEFT_NO_PENALTY,
@@ -53,7 +53,6 @@ public enum RunningPlayerStatus {
 
     private Set<RunningPlayerStatus> allowedNext() {
         return switch (this) {
-            case INVITED -> Set.of(JOINED);
             case JOINED -> Set.of(RUNNING, MATCHED_LEFT_PENALTY, MATCHED_LEFT_NO_PENALTY);
             case RUNNING -> Set.of(COMPLETED, RUNNING_LEFT_PENALTY, RUNNING_LEFT_NO_PENALTY);
             case MATCHED_LEFT_PENALTY, MATCHED_LEFT_NO_PENALTY,

@@ -11,7 +11,10 @@ import com.runiverse.running_service.application.match.command.stream.CloseMatch
 import com.runiverse.running_service.application.match.command.stream.CloseMatchStreamHandler;
 import com.runiverse.running_service.application.match.command.stream.OpenMatchStreamCommand;
 import com.runiverse.running_service.application.match.command.stream.OpenMatchStreamHandler;
+import com.runiverse.running_service.application.match.common.InviteProperties;
+import com.runiverse.running_service.application.match.common.InviteStartPolicy;
 import com.runiverse.running_service.application.match.common.MatchProperties;
+import com.runiverse.running_service.application.match.common.RecruitmentClosePolicy;
 import com.runiverse.running_service.application.match.common.MatchSlotPolicy;
 import com.runiverse.running_service.application.match.common.MatchRoomChangedEvent;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
@@ -63,6 +66,8 @@ public class MatchStreamIntegrationTest extends IntegrationTestSupport {
     private static final MatchProperties MATCH_PROPERTIES = new MatchProperties(
             CLOSE_OFFSET, Duration.ofSeconds(10), Duration.ofHours(6), 10, Duration.ofMinutes(20),
             LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
+    private static final InviteProperties INVITE_PROPERTIES = new InviteProperties(
+            Duration.ofMinutes(10), Duration.ofMinutes(1), 1_000, 42_195, 5);
 
     private SignUpHandler signUpHandler;
     private CompleteOnboardingHandler completeOnboardingHandler;
@@ -101,7 +106,8 @@ public class MatchStreamIntegrationTest extends IntegrationTestSupport {
                 matchStore,                                                 // LoadMatchPlayersPort
                 new InMemoryPlayerProfileStore(userStore, onboardingStore), // LoadPlayerProfilesPort
                 new FakeViewUrlGenerator(),                                 // GenerateViewUrlPort
-                MATCH_PROPERTIES,
+                new RecruitmentClosePolicy(MATCH_PROPERTIES, new InviteStartPolicy(
+                        INVITE_PROPERTIES, MATCH_PROPERTIES)),               // 모집 마감 계산
                 runningStore,                                               // LoadActiveApplicationPort
                 matchStore,                                                 // LoadMatchRoomPort
                 runningStore                                                // LoadMatchRoomDetailPort

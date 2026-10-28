@@ -54,6 +54,9 @@ public class UserRelationshipPersistenceAdapterTest {
     @Mock
     private TypedQuery<FriendRow> friendQuery;
 
+    @Mock
+    private TypedQuery<Long> friendCountQuery;
+
     @InjectMocks
     private UserRelationshipPersistenceAdapter adapter;
 
@@ -264,6 +267,37 @@ public class UserRelationshipPersistenceAdapterTest {
         when(friendQuery.setParameter(anyString(), any())).thenReturn(friendQuery);
         when(friendQuery.setMaxResults(anyInt())).thenReturn(friendQuery);
         when(friendQuery.getResultList()).thenReturn(rows);
+    }
+
+    @Test
+    @DisplayName("내 행이 FRIEND면 친구다")
+    void isFriendWhenMyRowIsFriend() {
+        // given
+        givenFriendCount(1L);
+
+        // when & then -> 친구는 대칭이라 내 행(user_id = 나)만 FRIEND로 거른다
+        assertThat(adapter.isFriend(new UserId(userId), new UserId(targetId))).isTrue();
+        verify(friendCountQuery).setParameter("userId", userId);
+        verify(friendCountQuery).setParameter("targetId", targetId);
+        verify(friendCountQuery).setParameter("type", RelationshipType.FRIEND);
+        // 초대는 관계를 바꾸지 않아 잠그지 않는다
+        verify(friendCountQuery, never()).setLockMode(any());
+    }
+
+    @Test
+    @DisplayName("내 행이 FRIEND가 아니면 친구가 아니다")
+    void isNotFriendWithoutFriendRow() {
+        // given -> 요청 중·없음·차단은 모두 FRIEND가 아니다
+        givenFriendCount(0L);
+
+        // when & then
+        assertThat(adapter.isFriend(new UserId(userId), new UserId(targetId))).isFalse();
+    }
+
+    private void givenFriendCount(long count) {
+        when(entityManager.createQuery(anyString(), eq(Long.class))).thenReturn(friendCountQuery);
+        when(friendCountQuery.setParameter(anyString(), any())).thenReturn(friendCountQuery);
+        when(friendCountQuery.getSingleResult()).thenReturn(count);
     }
 
     private String capturedFriendJpql() {

@@ -3,6 +3,7 @@ package com.runiverse.running_service.presentation.common.exception;
 import com.runiverse.running_service.application.common.exception.AuthErrorCode;
 import com.runiverse.running_service.application.common.exception.BusinessException;
 import com.runiverse.running_service.application.common.exception.ErrorCode;
+import com.runiverse.running_service.application.common.exception.InviteErrorCode;
 import com.runiverse.running_service.application.common.exception.MatchErrorCode;
 import com.runiverse.running_service.application.common.exception.RelationshipErrorCode;
 import com.runiverse.running_service.application.common.exception.ResourceErrorCode;
@@ -260,6 +261,7 @@ public class GlobalExceptionHandler {
             case MatchErrorCode code -> toStatus(code);
             case RelationshipErrorCode code -> toStatus(code);
             case ResourceErrorCode code -> toStatus(code);
+            case InviteErrorCode code -> toStatus(code);
         };
     }
 
@@ -337,6 +339,21 @@ public class GlobalExceptionHandler {
                  INVALID_FRIEND_CURSOR,
                  INVALID_USER_SEARCH_CURSOR -> HttpStatus.BAD_REQUEST;
             case FRIEND_REQUEST_ALREADY_EXISTS -> HttpStatus.CONFLICT;
+        };
+    }
+
+    private HttpStatus toStatus(InviteErrorCode code) {
+        return switch (code) {
+            case INVALID_INVITE_OPTION -> HttpStatus.BAD_REQUEST;
+            case INVITE_START_AT_OUT_OF_RANGE,
+                 RUNNING_INVITATION_CLOSED,
+                 NOT_FRIEND,
+                 INVITEE_ALREADY_IN_ROOM,
+                 INVITEE_IN_MATCHING,
+                 INVITEE_RUNNING,
+                 INVITE_COUNT_EXCEEDED,
+                 RUNNING_INVITATION_NOT_PENDING,
+                 RUNNING_ROOM_FULL -> HttpStatus.CONFLICT;
         };
     }
 

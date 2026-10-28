@@ -71,7 +71,7 @@ class MatchE2eTest extends E2eTestSupport {
                     .containsExactlyInAnyOrder(host.userId(), guest.userId());
 
             // 4. 마감 전 취소는 대기 취소다 — 남은 참가자에게 줄어든 인원이 간다
-            assertThat(delete("/running-matches", guest.accessToken()).status()).isEqualTo(204);
+            assertThat(post("/match-rooms/leave", null, guest.accessToken()).status()).isEqualTo(204);
             assertThat(userIdsOf(stream.await("MATCH_ROOM_UPDATED")))
                     .containsExactly(host.userId());
             assertThat(get("/users/me/status", guest.accessToken()).text("status")).isEqualTo("IDLE");
@@ -79,7 +79,7 @@ class MatchE2eTest extends E2eTestSupport {
         }
 
         // 5. 마지막 참가자가 나가면 활성 신청이 없어 IDLE이다
-        assertThat(delete("/running-matches", host.accessToken()).status()).isEqualTo(204);
+        assertThat(post("/match-rooms/leave", null, host.accessToken()).status()).isEqualTo(204);
         Response idle = get("/users/me/status", host.accessToken());
         assertThat(idle.text("status")).isEqualTo("IDLE");
         assertThat(idle.number("runningRoomId")).isNull();
@@ -95,7 +95,7 @@ class MatchE2eTest extends E2eTestSupport {
         try (MatchStream stream = openMatchStream(user.accessToken())) {
             assertThat(stream.status()).isEqualTo(404);
         }
-        Response cancelWithout = delete("/running-matches", user.accessToken());
+        Response cancelWithout = post("/match-rooms/leave", null, user.accessToken());
         assertThat(cancelWithout.status()).isEqualTo(404);
         assertThat(cancelWithout.text("code")).isEqualTo("NOT_FOUND");
 
@@ -104,9 +104,9 @@ class MatchE2eTest extends E2eTestSupport {
         assertThat(duplicated.status()).isEqualTo(409);
         assertThat(duplicated.text("code")).isEqualTo("MATCH_ALREADY_IN_PROGRESS");
 
-        assertThat(delete("/running-matches", user.accessToken()).status()).isEqualTo(204);
+        assertThat(post("/match-rooms/leave", null, user.accessToken()).status()).isEqualTo(204);
         assertThat(apply(user, GUARD_SLOT, DISTANCE).status()).isEqualTo(201);
-        assertThat(delete("/running-matches", user.accessToken()).status()).isEqualTo(204);
+        assertThat(post("/match-rooms/leave", null, user.accessToken()).status()).isEqualTo(204);
     }
 
     @Test
@@ -131,7 +131,7 @@ class MatchE2eTest extends E2eTestSupport {
         String accessToken = signUp(uniqueEmail(), "Password123!");
 
         // when
-        Response response = post("/running-matches", Map.of(
+        Response response = post("/match-rooms", Map.of(
                 "scheduledStartAt", GUARD_SLOT.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
                 "targetDistanceMeters", DISTANCE
         ), accessToken);
@@ -153,7 +153,7 @@ class MatchE2eTest extends E2eTestSupport {
             socket.await("RUNNING_STARTED");
 
             // when
-            Response response = delete("/running-matches", user.accessToken());
+            Response response = post("/match-rooms/leave", null, user.accessToken());
 
             // then - 종료는 WS RUNNING_FINISH가 맡는다
             assertThat(response.status()).isEqualTo(409);
@@ -200,9 +200,9 @@ class MatchE2eTest extends E2eTestSupport {
         assertThat(apply(third, slotDate.atTime(20, 0), 5000).status()).isEqualTo(201);
 
         // when
-        Response slots = get("/running-matches/slots?date=" + slotDate, first.accessToken());
-        Response malformed = get("/running-matches/slots?date=2026/07/25", first.accessToken());
-        Response pastDate = get("/running-matches/slots?date=" + LocalDate.now(APP_ZONE).minusDays(1),
+        Response slots = get("/match-rooms/slots?date=" + slotDate, first.accessToken());
+        Response malformed = get("/match-rooms/slots?date=2026/07/25", first.accessToken());
+        Response pastDate = get("/match-rooms/slots?date=" + LocalDate.now(APP_ZONE).minusDays(1),
                 first.accessToken());
 
         // then - 거리 오름차순, 거리마다 9개 슬롯이 오름차순이고 같은 시각이어도 거리끼리 합산하지 않는다
@@ -265,11 +265,11 @@ class MatchE2eTest extends E2eTestSupport {
                     .containsExactly(host.userId());
         }
         assertThat(get("/users/me/status", host.accessToken()).text("status")).isEqualTo("WAITING");
-        assertThat(delete("/running-matches", host.accessToken()).status()).isEqualTo(204);
+        assertThat(post("/match-rooms/leave", null, host.accessToken()).status()).isEqualTo(204);
     }
 
     private Response apply(TestUser user, LocalDateTime scheduledStartAt, int targetDistanceMeters) {
-        return post("/running-matches", Map.of(
+        return post("/match-rooms", Map.of(
                 "scheduledStartAt", scheduledStartAt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
                 "targetDistanceMeters", targetDistanceMeters
         ), user.accessToken());

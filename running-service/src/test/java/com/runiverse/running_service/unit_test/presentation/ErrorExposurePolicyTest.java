@@ -1,6 +1,7 @@
 package com.runiverse.running_service.unit_test.presentation;
 
 import com.runiverse.running_service.application.common.exception.AuthErrorCode;
+import com.runiverse.running_service.application.common.exception.InviteErrorCode;
 import com.runiverse.running_service.application.common.exception.RunningErrorCode;
 import com.runiverse.running_service.application.common.exception.UserErrorCode;
 import com.runiverse.running_service.presentation.common.exception.CommonErrorCode;
@@ -80,6 +81,32 @@ public class ErrorExposurePolicyTest {
         assertThat(ErrorExposurePolicy.isExposed(
                 HttpStatus.CONFLICT,
                 RunningErrorCode.RUNNING_ALREADY_IN_PROGRESS.getCode())).isTrue();
+    }
+
+    @Test
+    @DisplayName("초대 방 시작 시각 범위 밖은 409 그대로 노출한다")
+    void inviteStartAtOutOfRangeIsExposed() {
+        // 노출 목록에서 빠지면 500으로 바뀌어, 클라가 시각을 다시 고르게 할 수 없다
+        assertThat(ErrorExposurePolicy.isExposed(
+                HttpStatus.CONFLICT,
+                InviteErrorCode.INVITE_START_AT_OUT_OF_RANGE.getCode())).isTrue();
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = InviteErrorCode.class, names = {
+            "RUNNING_INVITATION_CLOSED",
+            "NOT_FRIEND",
+            "INVITEE_ALREADY_IN_ROOM",
+            "INVITEE_IN_MATCHING",
+            "INVITEE_RUNNING",
+            "INVITE_COUNT_EXCEEDED",
+            "RUNNING_INVITATION_NOT_PENDING",
+            "RUNNING_ROOM_FULL"
+    })
+    @DisplayName("초대·수락·거절 거부는 409 그대로 노출한다")
+    void invitationConflictsAreExposed(InviteErrorCode errorCode) {
+        // 가려지면 500으로 바뀌어, 클라가 다시 고르게 할지·버튼을 다시 그릴지 가를 수 없다
+        assertThat(ErrorExposurePolicy.isExposed(HttpStatus.CONFLICT, errorCode.getCode())).isTrue();
     }
 
     @Test

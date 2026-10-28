@@ -197,6 +197,25 @@ class ForceFinishRunningRoomHandlerTest {
     }
 
     @Test
+    @DisplayName("초대 방의 미출석은 제재하지 않는다")
+    void doesNotPenalizeNoShowInInviteRoom() {
+        // given -> 매칭 방이었으면 둘 다 제재 대상이다(2인 확정 방에서 아무도 안 나타났다)
+        givenLockedRoom(inviteRoom(RunningRoomStatus.STARTED, RUNNER, NO_SHOW));
+        givenPlayer(RUNNER, RunningPlayerStatus.JOINED);
+        givenPlayer(NO_SHOW, RunningPlayerStatus.JOINED);
+        givenReloadedRoom(inviteRoom(RunningRoomStatus.STARTED, RUNNER, NO_SHOW));
+
+        // when
+        forceFinishRunningRoomHandler.handle(new ForceFinishRunningRoomCommand(ROOM_ID));
+
+        // then
+        assertThat(updatedPlayers())
+                .extracting(RunningPlayer::getStatus)
+                .containsOnly(RunningPlayerStatus.MATCHED_LEFT_NO_PENALTY);
+        verifyNoInteractions(startMatchCooldownPort);
+    }
+
+    @Test
     @DisplayName("아무도 뛰지 않은 방은 남길 기록이 없어 취소로 닫는다")
     void cancelsRoomNobodyRanIn() {
         // given -> 전원이 채널에 붙지 않았다. 방을 닫아 줄 러닝 종료가 하나도 없다
@@ -336,15 +355,19 @@ class ForceFinishRunningRoomHandlerTest {
     }
 
     private static RunningRoom room(RunningRoomStatus status, UserId... members) {
-        return buildRoom(status, null, members);
+        return buildRoom(RunningRoomType.MATCH, status, null, members);
+    }
+
+    private static RunningRoom inviteRoom(RunningRoomStatus status, UserId... members) {
+        return buildRoom(RunningRoomType.INVITE, status, null, members);
     }
 
     // 뛴 사람이 정상 종료해 이미 닫힌 방 — 미출석자의 세션만 아직 붙어 있다
     private static RunningRoom finishedRoom(UserId... members) {
-        return buildRoom(RunningRoomStatus.FINISHED, LocalDateTime.now(), members);
+        return buildRoom(RunningRoomType.MATCH, RunningRoomStatus.FINISHED, LocalDateTime.now(), members);
     }
 
-    private static RunningRoom buildRoom(RunningRoomStatus status, LocalDateTime closeAt,
+    private static RunningRoom buildRoom(RunningRoomType type, RunningRoomStatus status, LocalDateTime closeAt,
                                          UserId... members) {
         List<SessionDraft> sessions = new ArrayList<>();
         long playerId = 7L;
@@ -353,7 +376,7 @@ class ForceFinishRunningRoomHandlerTest {
         }
         return RunningRoom.builder()
                 .runningRoomId(ROOM_ID)
-                .type(RunningRoomType.MATCH)
+                .type(type)
                 .status(status)
                 // 아무도 취소·탈퇴하지 않은 방이라 확정 인원 그대로다 — 제재 판정이 이 값을 본다
                 .currentPlayerCount(members.length)

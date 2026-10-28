@@ -14,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -40,7 +42,8 @@ public class OpenMatchStreamHandler implements OpenMatchStreamUsecase {
                 .ifPresent(MatchStreamConnection::closeSuperseded);
         // 구독을 먼저 건다 — 스냅샷을 보내는 사이에 온 갱신을 놓치지 않는다
         matchRoomMembershipPort.join(userId, room.runningRoomId());
-        // 재연결이 곧 스냅샷 재수신이다 — 놓친 이벤트를 되짚을 필요가 없다
-        connection.send(MatchStreamEvent.updated(room));
+        // 재연결이 곧 스냅샷 재수신이다 — 놓친 이벤트를 되짚을 필요가 없다.
+        // 초대 방은 입장 이벤트에 시작까지 남은 시간을 더 싣는다
+        connection.send(MatchStreamEvent.snapshot(room, LocalDateTime.now()));
     }
 }

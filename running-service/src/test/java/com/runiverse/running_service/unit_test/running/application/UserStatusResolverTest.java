@@ -21,7 +21,7 @@ class UserStatusResolverTest {
     private static final LocalDateTime START_AT = LocalDateTime.of(2026, 9, 11, 19, 0);
     // 실제 application.properties와 같은 값으로 맞춘다
     private static final Duration CLOSE_OFFSET = Duration.ofMinutes(10);
-    // 모집 마감 = start_at - 오프셋. 저장하지 않고 매번 계산한다
+    // 모집 마감 = start_at - 오프셋. 저장하지 않고 매번 계산한다 — 방 종류별 계산은 RecruitmentClosePolicy가 맡는다
     private static final LocalDateTime CLOSE_AT = START_AT.minus(CLOSE_OFFSET);
 
     @Test
@@ -95,13 +95,13 @@ class UserStatusResolverTest {
                 126L, RunningRoomType.SOLO, RunningRoomStatus.MATCHED, START_AT, null);
 
         // when & then
-        assertThat(UserStatusResolver.resolve(solo, START_AT.plusMinutes(1), CLOSE_OFFSET))
+        assertThat(UserStatusResolver.resolve(solo, START_AT.plusMinutes(1), CLOSE_AT))
                 .isEqualTo(UserRunningStatus.READY);
     }
 
     private static UserRunningStatus resolve(RunningRoomStatus roomStatus, LocalDateTime now) {
         UserStatusRow row = new UserStatusRow(
                 125L, RunningRoomType.MATCH, roomStatus, START_AT, 5_000);
-        return UserStatusResolver.resolve(row, now, CLOSE_OFFSET);
+        return UserStatusResolver.resolve(row, now, CLOSE_AT);
     }
 }

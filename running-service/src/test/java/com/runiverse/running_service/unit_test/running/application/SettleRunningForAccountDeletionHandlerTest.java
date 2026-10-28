@@ -74,8 +74,8 @@ class SettleRunningForAccountDeletionHandlerTest {
             LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
     // 조립 결과는 이 테스트의 주제가 아니다 — 발행 여부만 본다
     private static final RoomInfo ROOM_INFO = new RoomInfo(
-            ROOM_ID, RunningRoomStatus.MATCHING, LocalDateTime.now().plusHours(2),
-            LocalDateTime.now().plusHours(1), TARGET_DISTANCE, AVG_PACE, List.of());
+            ROOM_ID, RunningRoomType.MATCH, RunningRoomStatus.MATCHING, LocalDateTime.now().plusHours(2),
+            LocalDateTime.now().plusHours(1), TARGET_DISTANCE, AVG_PACE, List.of(), List.of());
 
     @Mock
     private LockMatchApplicationPort lockMatchApplicationPort;

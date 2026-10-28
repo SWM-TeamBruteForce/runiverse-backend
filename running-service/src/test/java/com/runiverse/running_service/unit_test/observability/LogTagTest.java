@@ -4,7 +4,7 @@ import com.runiverse.running_service.observability.logging.LogTag;
 import com.runiverse.running_service.presentation.app.controller.AppController;
 import com.runiverse.running_service.presentation.auth.controller.AuthController;
 import com.runiverse.running_service.presentation.common.exception.GlobalExceptionHandler;
-import com.runiverse.running_service.presentation.match.controller.RunningMatchController;
+import com.runiverse.running_service.presentation.match.controller.MatchRoomController;
 import com.runiverse.running_service.presentation.running.controller.RunningRoomController;
 import com.runiverse.running_service.presentation.user.controller.UserController;
 import org.junit.jupiter.api.DisplayName;
@@ -28,7 +28,7 @@ public class LogTagTest {
         return Stream.of(
                 Arguments.of(AuthController.class, "[인증]"),
                 Arguments.of(UserController.class, "[회원]"),
-                Arguments.of(RunningMatchController.class, "[매칭]"),
+                Arguments.of(MatchRoomController.class, "[매칭]"),
                 Arguments.of(RunningRoomController.class, "[러닝]"),
                 Arguments.of(AppController.class, "[앱]")
         );

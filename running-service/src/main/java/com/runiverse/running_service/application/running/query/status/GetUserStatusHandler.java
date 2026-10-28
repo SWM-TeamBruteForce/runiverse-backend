@@ -1,6 +1,6 @@
 package com.runiverse.running_service.application.running.query.status;
 
-import com.runiverse.running_service.application.match.common.MatchProperties;
+import com.runiverse.running_service.application.match.common.RecruitmentClosePolicy;
 import com.runiverse.running_service.application.match.port.out.MatchCooldownPort;
 import com.runiverse.running_service.application.running.port.in.GetUserStatusUsecase;
 import com.runiverse.running_service.application.running.port.out.LoadUserStatusPort;
@@ -19,7 +19,7 @@ public class GetUserStatusHandler implements GetUserStatusUsecase {
 
     private final LoadUserStatusPort loadUserStatusPort;
     private final MatchCooldownPort matchCooldownPort;
-    private final MatchProperties matchProperties;
+    private final RecruitmentClosePolicy recruitmentClosePolicy;
 
     @Override
     public GetUserStatusResult handle(GetUserStatusQuery query) {
@@ -34,8 +34,8 @@ public class GetUserStatusHandler implements GetUserStatusUsecase {
     }
 
     private GetUserStatusResult toResult(UserStatusRow row, LocalDateTime cooldownUntil) {
-        UserRunningStatus status = UserStatusResolver.resolve(
-                row, LocalDateTime.now(), matchProperties.closeOffset());
+        LocalDateTime closeAt = recruitmentClosePolicy.closeAt(row.type(), row.scheduledStartAt());
+        UserRunningStatus status = UserStatusResolver.resolve(row, LocalDateTime.now(), closeAt);
         if (status == UserRunningStatus.IDLE) {
             // 닫힌 방이 활성 신청으로 남은 어긋난 데이터 — 방 값을 실어 보내면
             // 클라가 없는 방에 붙으러 간다

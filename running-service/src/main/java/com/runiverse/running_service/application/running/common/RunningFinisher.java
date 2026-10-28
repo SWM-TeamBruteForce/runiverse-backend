@@ -38,6 +38,7 @@ import com.runiverse.running_service.domain.running.room.RoomSession;
 import com.runiverse.running_service.domain.running.room.RunningRoom;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
+import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
 import com.runiverse.running_service.domain.user.vo.AvgPace;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -256,7 +257,9 @@ public class RunningFinisher {
             return;
         }
         double ratio = (double) totalDistanceMeters / target.get().meters();
-        boolean penalty = ratio < runningFinishProperties.penaltyDistanceRatio()
+        // 제재는 매칭 방에만 있다 — 친구끼리인 초대 방은 약속 장치가 필요 없다(취소·강제 종료와 같은 기준)
+        boolean penalty = room.getType() == RunningRoomType.MATCH
+                && ratio < runningFinishProperties.penaltyDistanceRatio()
                 && room.getPlayerCount().current() >= PENALTY_MIN_PLAYER_COUNT;
         player.leave(penalty, finishedAt);
         if (penalty) {

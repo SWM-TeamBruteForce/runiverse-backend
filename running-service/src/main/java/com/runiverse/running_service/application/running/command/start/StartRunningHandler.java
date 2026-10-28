@@ -84,8 +84,8 @@ public class StartRunningHandler implements StartRunningUsecase {
                 room.getTargetDistance().map(Distance::meters).orElse(null));
     }
 
-    // 러닝을 시작할 수 있는 신청인가 — INVITED는 아직 수락하지 않았고,
-    // 그 밖의 값은 끝난 신청인데 deleted_at이 안 찍힌 데이터 이상이다
+    // 러닝을 시작할 수 있는 신청인가 — JOINED·RUNNING 밖의 값은
+    // 끝난 신청인데 deleted_at이 안 찍힌 데이터 이상이다
     private void ensureStartable(RunningPlayer player) {
         if (player.getStatus() != RunningPlayerStatus.JOINED
                 && player.getStatus() != RunningPlayerStatus.RUNNING) {

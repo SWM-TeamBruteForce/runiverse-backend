@@ -4,7 +4,7 @@ import com.runiverse.running_service.observability.RequestDomain;
 import com.runiverse.running_service.presentation.app.controller.AppController;
 import com.runiverse.running_service.presentation.auth.controller.AuthController;
 import com.runiverse.running_service.presentation.common.exception.GlobalExceptionHandler;
-import com.runiverse.running_service.presentation.match.controller.RunningMatchController;
+import com.runiverse.running_service.presentation.match.controller.MatchRoomController;
 import com.runiverse.running_service.presentation.running.controller.RunningRoomController;
 import com.runiverse.running_service.presentation.user.controller.UserController;
 import org.junit.jupiter.api.DisplayName;
@@ -28,7 +28,7 @@ class RequestDomainTest {
         return Stream.of(
                 Arguments.of(AuthController.class, "auth"),
                 Arguments.of(UserController.class, "user"),
-                Arguments.of(RunningMatchController.class, "match"),
+                Arguments.of(MatchRoomController.class, "match"),
                 Arguments.of(RunningRoomController.class, "running"),
                 Arguments.of(AppController.class, "app")
         );

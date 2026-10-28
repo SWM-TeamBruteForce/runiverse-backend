@@ -28,7 +28,7 @@ import java.util.UUID;
         indexes = @Index(name = "idx_running_player_user", columnList = "user_id, deleted_at")
 )
 @Check(name = "ck_running_player_status",
-        constraints = "status in ('INVITED', 'JOINED', 'RUNNING', 'COMPLETED',"
+        constraints = "status in ('JOINED', 'RUNNING', 'COMPLETED',"
                 + " 'MATCHED_LEFT_PENALTY', 'MATCHED_LEFT_NO_PENALTY',"
                 + " 'RUNNING_LEFT_PENALTY', 'RUNNING_LEFT_NO_PENALTY')")
 @Check(name = "ck_running_player_avg_pace", constraints = "avg_pace between 120 and 3600")

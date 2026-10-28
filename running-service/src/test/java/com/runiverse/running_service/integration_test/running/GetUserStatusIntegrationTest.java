@@ -2,7 +2,10 @@ package com.runiverse.running_service.integration_test.running;
 
 import com.runiverse.running_service.application.auth.command.signup.SignUpCommand;
 import com.runiverse.running_service.application.auth.command.signup.SignUpHandler;
+import com.runiverse.running_service.application.match.common.InviteProperties;
+import com.runiverse.running_service.application.match.common.InviteStartPolicy;
 import com.runiverse.running_service.application.match.common.MatchProperties;
+import com.runiverse.running_service.application.match.common.RecruitmentClosePolicy;
 import com.runiverse.running_service.application.running.command.finish.FinishRunningCommand;
 import com.runiverse.running_service.application.running.command.finish.FinishRunningHandler;
 import com.runiverse.running_service.application.running.command.location.UpdateRunningFinishJudge;
@@ -67,6 +70,8 @@ public class GetUserStatusIntegrationTest extends IntegrationTestSupport {
     private static final MatchProperties MATCH_PROPERTIES = new MatchProperties(
             CLOSE_OFFSET, Duration.ofSeconds(10), Duration.ofHours(6), 10, COOLDOWN,
             LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
+    private static final InviteProperties INVITE_PROPERTIES = new InviteProperties(
+            Duration.ofMinutes(10), Duration.ofMinutes(1), 1_000, 42_195, 5);
     private static final RunningFinishProperties FINISH_PROPERTIES = new RunningFinishProperties(
             0.8, 10, 100, 60, 3.0, COOLDOWN);
 
@@ -145,7 +150,8 @@ public class GetUserStatusIntegrationTest extends IntegrationTestSupport {
         handler = new GetUserStatusHandler(
                 runningStore,        // LoadUserStatusPort
                 matchCooldownStore,  // MatchCooldownPort
-                MATCH_PROPERTIES
+                new RecruitmentClosePolicy(MATCH_PROPERTIES, new InviteStartPolicy(
+                        INVITE_PROPERTIES, MATCH_PROPERTIES))   // 모집 마감 계산
         );
     }
 

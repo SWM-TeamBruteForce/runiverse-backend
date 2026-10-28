@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+// 모집 단계(매칭 신청·나가기·초대)는 /match-rooms — presentation/match MatchRoomController에 있다
 @RestController
 @RequestMapping("running-rooms")
 @RequiredArgsConstructor

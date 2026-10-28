@@ -70,8 +70,8 @@ class CancelMatchHandlerTest {
     private static final Duration COOLDOWN = Duration.ofMinutes(20);
     // 조립 결과는 이 테스트의 주제가 아니다 — 발행 여부만 본다
     private static final RoomInfo ROOM_INFO = new RoomInfo(
-            ROOM_ID, RunningRoomStatus.MATCHING, LocalDateTime.now().plusHours(2),
-            LocalDateTime.now().plusHours(1), TARGET_DISTANCE, AVG_PACE, List.of());
+            ROOM_ID, RunningRoomType.MATCH, RunningRoomStatus.MATCHING, LocalDateTime.now().plusHours(2),
+            LocalDateTime.now().plusHours(1), TARGET_DISTANCE, AVG_PACE, List.of(), List.of());
 
     @Mock
     private LockMatchApplicationPort lockMatchApplicationPort;
@@ -147,7 +147,7 @@ class CancelMatchHandlerTest {
     @Test
     @DisplayName("혼자 남은 방에서는 마감이 지났어도 제재하지 않는다")
     void leavingAloneIsExempt() {
-        // given -> 1인으로 확정된 방. 혼자 뛰기를 강제하지 않기 위한 출구다(feature-spec)
+        // given -> 1인으로 확정된 방. 혼자 뛰기를 강제하지 않기 위한 출구다
         givenActiveMatch(room(startAfter(Duration.ofMinutes(5)), 1));
 
         // when
@@ -162,7 +162,7 @@ class CancelMatchHandlerTest {
     @Test
     @DisplayName("마감 정각부터 제재 구간이다")
     void penaltyStartsExactlyAtCloseTime() {
-        // given -> 그 시점에 확정 판정이 돈다. 유예는 두지 않는다(feature-spec)
+        // given -> 그 시점에 확정 판정이 돈다. 유예는 두지 않는다
         givenActiveMatch(room(LocalDateTime.now().plus(CLOSE_OFFSET), 3));
 
         // when
@@ -176,7 +176,7 @@ class CancelMatchHandlerTest {
     @Test
     @DisplayName("솔로 방에서 나가는 것은 제재하지 않는다")
     void leavingSoloRoomIsExempt() {
-        // given -> 확정 후 방 이탈 제재는 MATCH에만 적용한다(feature-spec)
+        // given -> 확정 후 방 이탈 제재는 MATCH에만 적용한다
         givenActiveMatch(soloRoom(startAfter(Duration.ofMinutes(5))));
 
         // when
@@ -189,9 +189,24 @@ class CancelMatchHandlerTest {
     }
 
     @Test
+    @DisplayName("초대 방에서는 마감이 지나 2명 이상 남은 방을 나가도 제재하지 않는다")
+    void leavingInviteRoomIsExempt() {
+        // given -> 매칭 방이었으면 제재받는 조건이다(마감이 지났고 나 말고도 참가자가 있다)
+        givenActiveMatch(inviteRoom(startAfter(Duration.ofMinutes(5)), 3));
+
+        // when
+        cancelMatchHandler.handle(new CancelMatchCommand(USER_ID));
+
+        // then -> 제재는 모르는 사람끼리 모이는 매칭에만 있다
+        assertThat(leftPlayer().getStatus())
+                .isEqualTo(RunningPlayerStatus.MATCHED_LEFT_NO_PENALTY);
+        verifyNoInteractions(matchCooldownPort);
+    }
+
+    @Test
     @DisplayName("마지막 참가자가 나가면 방이 취소된다")
     void lastPlayerLeavingCancelsRoom() {
-        // given -> 참가자가 0이 된 방은 후보 스캔에 계속 걸리므로 닫아야 한다(feature-spec)
+        // given -> 참가자가 0이 된 방은 후보 스캔에 계속 걸리므로 닫아야 한다
         givenActiveMatch(room(startAfter(Duration.ofHours(2)), 1));
 
         // when
@@ -207,7 +222,7 @@ class CancelMatchHandlerTest {
     @Test
     @DisplayName("남은 사람이 있으면 방은 유지된다")
     void roomSurvivesWhenOthersRemain() {
-        // given -> 혼자 남아도 방은 취소하지 않는다(api-spec 5-A)
+        // given -> 혼자 남아도 방은 취소하지 않는다
         givenActiveMatch(room(startAfter(Duration.ofHours(2)), 2));
 
         // when
@@ -357,6 +372,10 @@ class CancelMatchHandlerTest {
 
     private static RunningRoom soloRoom(LocalDateTime startAt) {
         return matchRoom(RunningRoomType.SOLO, startAt, 1, 1);
+    }
+
+    private static RunningRoom inviteRoom(LocalDateTime startAt, int currentPlayerCount) {
+        return matchRoom(RunningRoomType.INVITE, startAt, currentPlayerCount, 4);
     }
 
     // 나 말고 나머지 인원은 다른 유저의 세션으로 채운다 — 세션 키가 유저다

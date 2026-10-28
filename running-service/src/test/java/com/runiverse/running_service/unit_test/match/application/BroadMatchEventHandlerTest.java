@@ -11,6 +11,7 @@ import com.runiverse.running_service.application.match.port.out.RoomInfo;
 import com.runiverse.running_service.application.match.port.out.RunningReady;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
+import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
 import ch.qos.logback.classic.Level;
 import com.runiverse.running_service.support.LogCapture;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,8 +39,8 @@ class BroadMatchEventHandlerTest {
     private static final UserId USER_A = new UserId(UuidCreator.getTimeOrderedEpoch());
     private static final UserId USER_B = new UserId(UuidCreator.getTimeOrderedEpoch());
     private static final RoomInfo ROOM_INFO = new RoomInfo(
-            ROOM_ID, RunningRoomStatus.MATCHED, LocalDateTime.now().plusMinutes(10),
-            LocalDateTime.now(), 5_000, 360, List.of());
+            ROOM_ID, RunningRoomType.MATCH, RunningRoomStatus.MATCHED, LocalDateTime.now().plusMinutes(10),
+            LocalDateTime.now(), 5_000, 360, List.of(), List.of());
 
     @Mock
     private LoadMatchRoomMembersPort loadMatchRoomMembersPort;

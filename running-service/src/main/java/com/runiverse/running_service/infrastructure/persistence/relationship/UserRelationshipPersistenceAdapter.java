@@ -1,5 +1,6 @@
 package com.runiverse.running_service.infrastructure.persistence.relationship;
 
+import com.runiverse.running_service.application.match.port.out.CheckFriendPort;
 import com.runiverse.running_service.application.relationship.port.out.EnsureUserRelationshipPairPort;
 import com.runiverse.running_service.application.relationship.port.out.FriendKeyset;
 import com.runiverse.running_service.application.relationship.port.out.FriendRow;
@@ -26,7 +27,7 @@ import java.util.stream.Stream;
 @Component
 @RequiredArgsConstructor
 public class UserRelationshipPersistenceAdapter implements LoadUserRelationshipPort, SaveUserRelationshipPort,
-        EnsureUserRelationshipPairPort, LoadFriendsPort {
+        EnsureUserRelationshipPairPort, LoadFriendsPort, CheckFriendPort {
 
     // JPQL에는 ON CONFLICT가 없어 네이티브로 쓴다. 이미 있는 행은 건드리지 않고, 다른 트랜잭션이 막 넣은 행이면
     // 그 커밋을 기다렸다 지나간다 — UNIQUE 위반이 나지 않는다
@@ -82,6 +83,24 @@ public class UserRelationshipPersistenceAdapter implements LoadUserRelationshipP
         return new UserRelationshipPair(
                 findOwnedBy(rows, userId.value()),
                 findOwnedBy(rows, targetId.value()));
+    }
+
+    // 초대 대상이 친구인지 본다 — 친구는 대칭이라 내 행만 보면 된다.
+    // 잠그지 않는다 — 보낸 뒤에 관계가 바뀌어도 초대는 이미 사건이라 되돌리지 않는다.
+    // uk_user_relationship_user_target(user_id, target_id)를 탄다
+    @Override
+    public boolean isFriend(UserId userId, UserId targetId) {
+        return entityManager.createQuery("""
+                        SELECT COUNT(r)
+                        FROM UserRelationshipJpaEntity r
+                        WHERE r.userId = :userId
+                          AND r.targetId = :targetId
+                          AND r.type = :type
+                        """, Long.class)
+                .setParameter("userId", userId.value())
+                .setParameter("targetId", targetId.value())
+                .setParameter("type", RelationshipType.FRIEND)
+                .getSingleResult() > 0;
     }
 
     @Override

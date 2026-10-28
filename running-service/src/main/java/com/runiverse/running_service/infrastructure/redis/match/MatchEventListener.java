@@ -34,6 +34,6 @@ public class MatchEventListener implements MessageListener {
         }
         broadcastMatchEventUsecase.handle(new BroadcastMatchEventCommand(
                 new MatchStreamEvent(payload.type(), payload.runningRoomId(),
-                        payload.room(), payload.ready())));
+                        payload.room(), payload.ready(), null)));
     }
 }

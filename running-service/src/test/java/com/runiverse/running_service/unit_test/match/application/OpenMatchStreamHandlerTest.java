@@ -13,19 +13,23 @@ import com.runiverse.running_service.application.match.port.out.MatchStreamPort;
 import com.runiverse.running_service.application.match.port.out.RoomInfo;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
+import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
@@ -39,8 +43,8 @@ class OpenMatchStreamHandlerTest {
     private static final UUID USER_ID = UuidCreator.getTimeOrderedEpoch();
     private static final long ROOM_ID = 125L;
     private static final RoomInfo ROOM_INFO = new RoomInfo(
-            ROOM_ID, RunningRoomStatus.MATCHING, LocalDateTime.now().plusHours(2),
-            LocalDateTime.now().plusHours(1), 5_000, 360, List.of());
+            ROOM_ID, RunningRoomType.MATCH, RunningRoomStatus.MATCHING, LocalDateTime.now().plusHours(2),
+            LocalDateTime.now().plusHours(1), 5_000, 360, List.of(), List.of());
 
     @Mock
     private MatchStreamPort matchStreamPort;
@@ -63,7 +67,7 @@ class OpenMatchStreamHandlerTest {
     @Test
     @DisplayName("방 채널을 구독하고 스냅샷을 보낸다")
     void subscribesAndSendsSnapshot() {
-        // given -> 재연결이 곧 스냅샷 재수신이다(feature-spec)
+        // given -> 재연결이 곧 스냅샷 재수신이다
         givenActiveMatch();
         given(matchStreamPort.register(new UserId(USER_ID), newConnection))
                 .willReturn(Optional.empty());
@@ -76,6 +80,28 @@ class OpenMatchStreamHandlerTest {
         order.verify(matchRoomMembershipPort).join(new UserId(USER_ID), ROOM_ID);
         order.verify(newConnection)
                 .send(MatchStreamEvent.updated(ROOM_INFO));
+    }
+
+    @Test
+    @DisplayName("초대 방이면 시작까지 남은 시간을 실은 입장 스냅샷을 보낸다")
+    void sendsEntranceSnapshotForInviteRoom() {
+        // given -> 시작 1시간 전 방이다
+        RoomInfo inviteRoom = new RoomInfo(
+                ROOM_ID, RunningRoomType.INVITE, RunningRoomStatus.MATCHING, LocalDateTime.now().plusHours(1),
+                LocalDateTime.now().plusHours(1).minusMinutes(1), 7_000, 360, List.of(), List.of());
+        given(roomInfoAssembler.assembleFor(new UserId(USER_ID))).willReturn(Optional.of(inviteRoom));
+        given(matchStreamPort.register(new UserId(USER_ID), newConnection)).willReturn(Optional.empty());
+
+        // when
+        openMatchStreamHandler.handle(new OpenMatchStreamCommand(USER_ID, newConnection));
+
+        // then -> 매칭 방의 MATCH_ROOM_UPDATED 대신 INVITE_ROOM_ENTRANCE다. 남은 시간은 보낸 시점 기준이다
+        ArgumentCaptor<MatchStreamEvent> sent = ArgumentCaptor.forClass(MatchStreamEvent.class);
+        verify(newConnection).send(sent.capture());
+        assertThat(sent.getValue().type()).isEqualTo(MatchEventType.INVITE_ROOM_ENTRANCE);
+        assertThat(sent.getValue().room()).isEqualTo(inviteRoom);
+        assertThat(sent.getValue().startsInMs()).isBetween(
+                Duration.ofMinutes(59).toMillis(), Duration.ofHours(1).toMillis());
     }
 
     @Test
@@ -112,7 +138,7 @@ class OpenMatchStreamHandlerTest {
     @DisplayName("활성 신청이 없으면 연결을 거절한다")
     void rejectsWhenNoActiveApplication() {
         // given -> 열어주면 붙을 방이 없어 어느 채널도 구독하지 못하고,
-        //          그 뒤에 신청해도 이벤트가 영영 오지 않는 연결이 된다(api-spec 5-A)
+        //          그 뒤에 신청해도 이벤트가 영영 오지 않는 연결이 된다
         given(roomInfoAssembler.assembleFor(new UserId(USER_ID))).willReturn(Optional.empty());
 
         // when & then

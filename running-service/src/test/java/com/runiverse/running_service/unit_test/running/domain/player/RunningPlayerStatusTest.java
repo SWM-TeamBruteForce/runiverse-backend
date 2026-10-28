@@ -25,8 +25,6 @@ public class RunningPlayerStatusTest {
     // 명세로서의 전이표 — 구현과 따로 적어 둔다. 둘이 어긋나면 테스트가 깨진다.
     private static final Map<RunningPlayerStatus, Set<RunningPlayerStatus>> ALLOWED =
             new EnumMap<>(Map.of(
-                    RunningPlayerStatus.INVITED,
-                    EnumSet.of(RunningPlayerStatus.JOINED),
                     RunningPlayerStatus.JOINED,
                     EnumSet.of(RunningPlayerStatus.RUNNING,
                             RunningPlayerStatus.MATCHED_LEFT_PENALTY,
@@ -88,16 +86,6 @@ public class RunningPlayerStatusTest {
         void transitionToSelfFails(RunningPlayerStatus current) {
             // when & then -> 중복 이벤트가 같은 상태를 다시 쓰지 않게 한다
             assertThatThrownBy(() -> current.transitionTo(current))
-                    .isInstanceOf(InvalidPlayerStatusTransitionException.class);
-        }
-
-        @Test
-        @DisplayName("초대는 수락으로만 참가로 이어진다")
-        void invitedOnlyMovesToJoined() {
-            // when & then -> 거절은 상태를 바꾸지 않고 deleted_at으로만 남는다
-            assertThat(RunningPlayerStatus.INVITED.transitionTo(RunningPlayerStatus.JOINED))
-                    .isEqualTo(RunningPlayerStatus.JOINED);
-            assertThatThrownBy(() -> RunningPlayerStatus.INVITED.transitionTo(RunningPlayerStatus.RUNNING))
                     .isInstanceOf(InvalidPlayerStatusTransitionException.class);
         }
     }
@@ -193,7 +181,7 @@ public class RunningPlayerStatusTest {
         }
 
         @ParameterizedTest
-        @EnumSource(value = RunningPlayerStatus.class, names = {"INVITED", "JOINED", "RUNNING"},
+        @EnumSource(value = RunningPlayerStatus.class, names = {"JOINED", "RUNNING"},
                 mode = EnumSource.Mode.EXCLUDE)
         @DisplayName("이탈·완주는 종착 상태다")
         void terminalStatuses(RunningPlayerStatus current) {
@@ -202,7 +190,7 @@ public class RunningPlayerStatusTest {
         }
 
         @ParameterizedTest
-        @EnumSource(value = RunningPlayerStatus.class, names = {"INVITED", "JOINED", "RUNNING"})
+        @EnumSource(value = RunningPlayerStatus.class, names = {"JOINED", "RUNNING"})
         @DisplayName("진행 중인 상태는 종착 상태가 아니다")
         void nonTerminalStatuses(RunningPlayerStatus current) {
             // when & then

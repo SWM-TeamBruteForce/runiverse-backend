@@ -57,6 +57,10 @@ public class RunningRoomTest {
         return RunningRoom.openSolo(HOST_USER, HOST, HOST_PACE, TARGET_DISTANCE, START);
     }
 
+    private static RunningRoom inviteRoom() {
+        return RunningRoom.openInvite(HOST_USER, HOST, HOST_PACE, TARGET_DISTANCE, START);
+    }
+
     // DB 복원 경로 — 어댑터가 builder로 조립하는 모양 그대로다
     private static RunningRoom restoredRoom(RunningRoomStatus status, LocalDateTime closeAt) {
         return RunningRoom.builder()
@@ -111,11 +115,32 @@ public class RunningRoomTest {
         }
 
         @Test
+        @DisplayName("초대 방은 만든 사람 혼자 4자리 MATCHING 상태로 태어난다")
+        void openInviteStartsRecruiting() {
+            // when
+            RunningRoom room = inviteRoom();
+
+            // then -> 시각·거리는 입력값 그대로, 방 평균은 만든 사람 페이스다
+            assertThat(room.getType()).isEqualTo(RunningRoomType.INVITE);
+            assertThat(room.getStatus()).isEqualTo(RunningRoomStatus.MATCHING);
+            assertThat(room.getStartAt()).isEqualTo(START);
+            assertThat(room.getTargetDistance()).hasValueSatisfying(
+                    distance -> assertThat(distance.meters()).isEqualTo(TARGET_DISTANCE));
+            assertThat(room.getAvgPace()).hasValueSatisfying(
+                    pace -> assertThat(pace.secondsPerKm()).isEqualTo(HOST_PACE));
+            assertThat(room.getPlayerCount().current()).isEqualTo(1);
+            assertThat(room.getPlayerCount().max()).isEqualTo(4);
+            assertThat(room.getSessions()).hasSize(1);
+            assertThat(sessionOf(room, HOST_USER).isConnected()).isTrue();
+        }
+
+        @Test
         @DisplayName("갓 태어난 방은 종류와 무관하게 닫힌 시각이 없다")
         void newRoomIsOpen() {
             // when & then -> close_at은 모집 마감이 아니라 방이 닫힌 시각이다
             assertThat(soloRoom().getCloseAt()).isEmpty();
             assertThat(matchRoom().getCloseAt()).isEmpty();
+            assertThat(inviteRoom().getCloseAt()).isEmpty();
         }
 
         @Test
