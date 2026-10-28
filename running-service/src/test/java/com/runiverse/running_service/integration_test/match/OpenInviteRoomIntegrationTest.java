@@ -137,8 +137,8 @@ public class OpenInviteRoomIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("예약 네 가지가 저장되고 마감은 시작 1분 전이다")
-    void storesFourScheduledJobs() {
+    @DisplayName("예약 다섯 가지가 저장되고 마감은 시작 1분 전이다")
+    void storesFiveScheduledJobs() {
         // given
         UUID userId = onboardedUser(EMAIL, NICKNAME);
 
@@ -146,8 +146,9 @@ public class OpenInviteRoomIntegrationTest extends IntegrationTestSupport {
         Long roomId = open(userId).runningRoomId();
 
         // then
-        assertThat(scheduledJobStore.jobCount()).isEqualTo(4);
+        assertThat(scheduledJobStore.jobCount()).isEqualTo(5);
         assertThat(executeAtOf(ScheduledJobType.MATCH_CLOSE, roomId)).isEqualTo(START.minus(CLOSE_OFFSET));
+        assertThat(executeAtOf(ScheduledJobType.RUNNING_REMINDER, roomId)).isEqualTo(START.minus(REMINDER_OFFSET));
         assertThat(executeAtOf(ScheduledJobType.RUNNING_READY, roomId)).isEqualTo(START.minus(READY_OFFSET));
         assertThat(executeAtOf(ScheduledJobType.RUNNING_START, roomId)).isEqualTo(START);
         assertThat(executeAtOf(ScheduledJobType.RUNNING_FORCE_FINISH, roomId))
@@ -165,7 +166,7 @@ public class OpenInviteRoomIntegrationTest extends IntegrationTestSupport {
         assertThatThrownBy(() -> open(userId)).isInstanceOf(AlreadyRunningException.class);
 
         assertThat(runningStore.roomCount()).isEqualTo(1);
-        assertThat(scheduledJobStore.jobCount()).isEqualTo(4);
+        assertThat(scheduledJobStore.jobCount()).isEqualTo(5);
     }
 
     @Test

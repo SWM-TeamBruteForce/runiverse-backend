@@ -203,8 +203,8 @@ class OpenInviteRoomHandlerTest {
     }
 
     @Test
-    @DisplayName("예약 네 가지를 걸고 마감만 초대 오프셋을 쓴다")
-    void schedulesFourJobsWithInviteCloseOffset() {
+    @DisplayName("예약 다섯 가지를 걸고 마감만 초대 오프셋을 쓴다")
+    void schedulesFiveJobsWithInviteCloseOffset() {
         // given
         LocalDateTime startAt = START;
         givenOpenable(startAt);
@@ -212,8 +212,9 @@ class OpenInviteRoomHandlerTest {
         // when
         handler.handle(commandAt(userId, startAt));
 
-        // then -> 마감은 시작 1분 전, 통지·시작·강제 종료는 매칭과 같은 시점이다
+        // then -> 마감은 시작 1분 전, 리마인더·통지·시작·강제 종료는 매칭과 같은 시점이다
         verify(scheduleJobPort).schedule(ScheduledJobType.MATCH_CLOSE, ROOM_ID, startAt.minus(CLOSE_OFFSET));
+        verify(scheduleJobPort).schedule(ScheduledJobType.RUNNING_REMINDER, ROOM_ID, startAt.minus(REMINDER_OFFSET));
         verify(scheduleJobPort).schedule(ScheduledJobType.RUNNING_READY, ROOM_ID, startAt.minus(READY_OFFSET));
         verify(scheduleJobPort).schedule(ScheduledJobType.RUNNING_START, ROOM_ID, startAt);
         verify(scheduleJobPort).schedule(
