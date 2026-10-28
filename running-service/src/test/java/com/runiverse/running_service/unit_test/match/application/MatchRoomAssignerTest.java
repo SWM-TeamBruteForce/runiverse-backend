@@ -411,6 +411,21 @@ class MatchRoomAssignerTest {
     }
 
     @Test
+    @DisplayName("방을 새로 열면 러닝 리마인더도 함께 예약한다")
+    void schedulesRunningReminderForNewRoom() {
+        // given -> 이 예약이 없으면 앱을 닫아 둔 참가자가 시작을 놓친다
+        givenCandidates();
+        given(createMatchRoomPort.create(any())).willReturn(savedRoom(NEW_ROOM_ID));
+
+        // when
+        assign();
+
+        // then -> 마감 뒤·통지 앞이다. 받는 사람은 발화 때 남은 참가자라 합류자도 받는다
+        verify(scheduleJobPort).schedule(
+                ScheduledJobType.RUNNING_REMINDER, NEW_ROOM_ID, START_AT.minus(REMINDER_OFFSET));
+    }
+
+    @Test
     @DisplayName("방을 새로 열면 시작 통지도 함께 예약한다")
     void schedulesRunningReadyForNewRoom() {
         // given -> 이 예약이 없으면 클라가 발사 기준을 못 받아 기기 시각에만 의존한다
