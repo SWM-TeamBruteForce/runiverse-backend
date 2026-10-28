@@ -19,6 +19,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -31,6 +32,8 @@ import java.util.concurrent.TimeoutException;
 public class FcmPushClient implements SendPushPort {
 
     private static final String DEFAULT_SOUND = "default";
+    private static final String TYPE_KEY = "type";
+    private static final String APNS_EXPIRATION_HEADER = "apns-expiration";
     // 라이브러리는 503이면 최대 4번, 매번 최대 60초씩 기다려 다시 보낸다.
     // 커밋 뒤 요청 스레드에서 보내므로 응답이 늦어지지 않게 전체를 이 시간으로 묶는다
     private static final Duration SEND_TIMEOUT = Duration.ofSeconds(3);
@@ -77,6 +80,17 @@ public class FcmPushClient implements SendPushPort {
 
     // 안드로이드는 앱이 백그라운드여도 바로 띄우게 HIGH, iOS는 소리가 기본으로 꺼져 있어 켠다
     private Message toMessage(PushToken pushToken, PushMessage message) {
+        AndroidConfig.Builder android = AndroidConfig.builder()
+                .setPriority(AndroidConfig.Priority.HIGH);
+        ApnsConfig.Builder apns = ApnsConfig.builder()
+                .setAps(Aps.builder().setSound(DEFAULT_SOUND).build());
+        // 꺼져 있던 폰이 유효 시간이 지나 켜지면 받지 않는다.
+        // 안드로이드는 남은 시간을, APNs는 만료 시각(epoch 초)을 받는다
+        if (message.ttl() != null) {
+            android.setTtl(message.ttl().toMillis());
+            apns.putHeader(APNS_EXPIRATION_HEADER,
+                    String.valueOf(Instant.now().plus(message.ttl()).getEpochSecond()));
+        }
         return Message.builder()
                 .setToken(pushToken.value())
                 .setNotification(Notification.builder()
@@ -84,12 +98,9 @@ public class FcmPushClient implements SendPushPort {
                         .setBody(message.body())
                         .build())
                 .putAllData(message.data())
-                .setAndroidConfig(AndroidConfig.builder()
-                        .setPriority(AndroidConfig.Priority.HIGH)
-                        .build())
-                .setApnsConfig(ApnsConfig.builder()
-                        .setAps(Aps.builder().setSound(DEFAULT_SOUND).build())
-                        .build())
+                .putData(TYPE_KEY, message.type().name())
+                .setAndroidConfig(android.build())
+                .setApnsConfig(apns.build())
                 .build();
     }
 }
