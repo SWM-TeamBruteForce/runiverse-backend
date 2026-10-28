@@ -27,6 +27,10 @@ public class InviteStartPolicy {
         if (inviteProperties.closeOffset().compareTo(matchProperties.readyOffset()) <= 0) {
             throw new IllegalStateException("invite.close-offset은 match.ready-offset보다 커야 한다");
         }
+        // 같거나 길면 가장 이른 시각으로 연 방은 리마인더 시각이 이미 지나 있어 열자마자 나간다
+        if (matchProperties.reminderOffset().compareTo(inviteProperties.minLeadTime()) >= 0) {
+            throw new IllegalStateException("match.reminder-offset은 invite.min-lead-time보다 작아야 한다");
+        }
         this.inviteProperties = inviteProperties;
     }
 
