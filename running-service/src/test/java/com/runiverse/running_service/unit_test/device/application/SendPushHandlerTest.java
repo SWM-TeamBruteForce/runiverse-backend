@@ -10,6 +10,7 @@ import com.runiverse.running_service.application.device.port.out.LoadPushTargetP
 import com.runiverse.running_service.application.device.port.out.PushMessage;
 import com.runiverse.running_service.application.device.port.out.PushSendStatus;
 import com.runiverse.running_service.application.device.port.out.PushTarget;
+import com.runiverse.running_service.application.device.port.out.PushType;
 import com.runiverse.running_service.application.device.port.out.SendPushPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.device.vo.DeviceId;
@@ -22,6 +23,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -51,7 +53,8 @@ public class SendPushHandlerTest {
 
     private final UUID userId = UuidCreator.getTimeOrderedEpoch();
     private final PushTarget target = new PushTarget(new DeviceId("device-1"), new PushToken("token-1"));
-    private final PushMessage message = new PushMessage("제목", "본문", Map.of("type", "TEST"));
+    private final PushMessage message = new PushMessage(
+            PushType.RUNNING_REMINDER, "제목", "본문", Map.of("runningRoomId", "125"), Duration.ofMinutes(5));
     private final SendPushCommand command = new SendPushCommand(userId, message);
 
     @Test

@@ -11,6 +11,7 @@ import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.MessagingErrorCode;
 import com.runiverse.running_service.application.device.port.out.PushMessage;
 import com.runiverse.running_service.application.device.port.out.PushSendStatus;
+import com.runiverse.running_service.application.device.port.out.PushType;
 import com.runiverse.running_service.domain.device.vo.PushToken;
 import com.runiverse.running_service.infrastructure.push.FcmPushClient;
 import com.runiverse.running_service.support.LogCapture;
@@ -37,7 +38,8 @@ import static org.mockito.Mockito.when;
 public class FcmPushClientTest {
 
     private static final PushToken TOKEN = new PushToken("token-1");
-    private static final PushMessage MESSAGE = new PushMessage("제목", "본문", Map.of("type", "TEST"));
+    private static final PushMessage MESSAGE = new PushMessage(
+            PushType.RUNNING_REMINDER, "제목", "본문", Map.of("runningRoomId", "125"), null);
 
     @Mock
     private FirebaseMessaging firebaseMessaging;
@@ -75,7 +77,7 @@ public class FcmPushClientTest {
                 .contains("\"token\":\"token-1\"")
                 .contains("\"title\":\"제목\"")
                 .contains("\"body\":\"본문\"")
-                .contains("\"type\":\"TEST\"")
+                .contains("\"runningRoomId\":\"125\"")
                 .contains("\"priority\":\"high\"")
                 .contains("\"sound\":\"default\"");
     }
