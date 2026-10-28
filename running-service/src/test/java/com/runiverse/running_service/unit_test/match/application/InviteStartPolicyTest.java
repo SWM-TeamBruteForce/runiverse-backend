@@ -34,14 +34,19 @@ class InviteStartPolicyTest {
     private static final Duration MIN_LEAD_TIME = Duration.ofMinutes(10);
     private static final Duration CLOSE_OFFSET = Duration.ofMinutes(1);
     private static final Duration READY_OFFSET = Duration.ofSeconds(10);
+    private static final Duration REMINDER_OFFSET = Duration.ofMinutes(5);
     // 400 응답 문구
     private static final String START_AT_MESSAGE = "시작 시각은 분 단위로만 선택할 수 있습니다.";
     private static final String DISTANCE_MESSAGE = "목표 거리는 1000m 이상 42195m 이하여야 합니다.";
 
     private static InviteStartPolicy policyOf(Duration closeOffset, Duration readyOffset) {
+        return policyOf(closeOffset, readyOffset, REMINDER_OFFSET);
+    }
+
+    private static InviteStartPolicy policyOf(Duration closeOffset, Duration readyOffset, Duration reminderOffset) {
         InviteProperties inviteProperties = new InviteProperties(MIN_LEAD_TIME, closeOffset, 1_000, 42_195, 5);
         MatchProperties matchProperties = new MatchProperties(
-                Duration.ofMinutes(10), Duration.ofMinutes(5), readyOffset, Duration.ofHours(6),
+                Duration.ofMinutes(10), reminderOffset, readyOffset, Duration.ofHours(6),
                 10, Duration.ofMinutes(20),
                 LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
         return new InviteStartPolicy(inviteProperties, matchProperties);
@@ -250,6 +255,17 @@ class InviteStartPolicyTest {
             // when & then
             assertThatThrownBy(() -> policyOf(Duration.ofSeconds(5), Duration.ofSeconds(10)))
                     .isInstanceOf(IllegalStateException.class);
+        }
+
+        @ParameterizedTest(name = "{0}분")
+        @ValueSource(ints = {10, 15})
+        @DisplayName("리마인더 오프셋이 최소 준비 시간보다 짧지 않으면 기동하지 않는다")
+        void reminderOffsetNotShorterThanMinLeadTimeFails(int reminderMinutes) {
+            // when & then -> 가장 이른 시각으로 연 방은 리마인더 시각이 이미 지나 열자마자 나간다.
+            //    마감 검사도 같은 예외라 문구로 가른다
+            assertThatThrownBy(() -> policyOf(CLOSE_OFFSET, READY_OFFSET, Duration.ofMinutes(reminderMinutes)))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("match.reminder-offset은 invite.min-lead-time보다 작아야 한다");
         }
     }
 }
