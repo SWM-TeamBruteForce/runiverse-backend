@@ -45,7 +45,6 @@ public class UserNotificationController {
         return ResponseEntity.ok(UserNotificationsResponse.from(result));
     }
 
-
     // 알림함을 열 때 한 번 부른다 — 목록을 먼저 그린 뒤 불러야 새 알림을 표시할 수 있다
     @PostMapping("/me/notifications/read")
     public ResponseEntity<Void> readAllNotifications(@AuthenticationPrincipal Jwt jwt) {

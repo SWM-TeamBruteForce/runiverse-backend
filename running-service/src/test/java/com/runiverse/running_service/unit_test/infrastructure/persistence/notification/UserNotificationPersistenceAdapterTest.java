@@ -380,7 +380,7 @@ class UserNotificationPersistenceAdapterTest {
             assertThat(count).isEqualTo(3L);
             ArgumentCaptor<String> jpql = ArgumentCaptor.forClass(String.class);
             verify(entityManager).createQuery(jpql.capture(), eq(Long.class));
-            assertThat(jpql.getValue()).contains("n.read = false").contains("n.createdAt >= :since");
+            assertThat(jpql.getValue()).contains("n.read = FALSE").contains("n.createdAt >= :since");
             verify(countQuery).setParameter("userId", RECIPIENT_ID);
             verify(countQuery).setParameter("since", SINCE);
         }
@@ -410,9 +410,9 @@ class UserNotificationPersistenceAdapterTest {
             ArgumentCaptor<String> jpql = ArgumentCaptor.forClass(String.class);
             verify(entityManager).createQuery(jpql.capture());
             assertThat(jpql.getValue())
-                    .contains("SET n.read = true, n.updatedAt = :now")
+                    .contains("SET n.read = TRUE, n.updatedAt = :now")
                     .contains("n.userId = :userId")
-                    .contains("n.read = false")
+                    .contains("n.read = FALSE")
                     .doesNotContain("createdAt");
             verify(updateQuery).setParameter("userId", RECIPIENT_ID);
             verify(updateQuery).setParameter("now", now);

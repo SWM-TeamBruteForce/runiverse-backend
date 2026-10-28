@@ -41,7 +41,7 @@ public class UserNotificationPersistenceAdapter implements SaveUserNotificationP
     private static final String COUNT_UNREAD = """
             SELECT COUNT(n) FROM UserNotificationJpaEntity n
             WHERE n.userId = :userId
-              AND n.read = false
+              AND n.read = FALSE
               AND n.createdAt >= :since
             """;
 
@@ -49,9 +49,9 @@ public class UserNotificationPersistenceAdapter implements SaveUserNotificationP
     // 부분 인덱스(user_id) WHERE is_read = false로 바꿀 행만 찾는다
     private static final String MARK_ALL_READ = """
             UPDATE UserNotificationJpaEntity n
-            SET n.read = true, n.updatedAt = :now
+            SET n.read = TRUE, n.updatedAt = :now
             WHERE n.userId = :userId
-              AND n.read = false
+              AND n.read = FALSE
             """;
 
     private final EntityManager entityManager;
@@ -91,7 +91,7 @@ public class UserNotificationPersistenceAdapter implements SaveUserNotificationP
                 .toList();
         return new UserNotificationPage(rows, nextBeforeId);
     }
-    
+
     @Override
     public Optional<UserNotificationRow> loadOne(UserId userId, Long userNotificationId) {
         // PK로 찾는다. 받는 사람이 다르면 없는 것과 같다 — 남의 알림을 밀어 주지 않는다

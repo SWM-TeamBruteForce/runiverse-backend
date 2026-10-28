@@ -6,8 +6,8 @@ import com.runiverse.running_service.application.app.command.stream.OpenAppStrea
 import com.runiverse.running_service.application.app.port.in.CloseAppStreamUsecase;
 import com.runiverse.running_service.application.app.port.in.OpenAppStreamUsecase;
 import com.runiverse.running_service.presentation.app.controller.AppStreamController;
-import com.runiverse.running_service.presentation.app.sse.SseAppStreamConnection;
 import com.runiverse.running_service.presentation.app.sse.AppStreamProperties;
+import com.runiverse.running_service.presentation.app.sse.SseAppStreamConnection;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

@@ -34,7 +34,6 @@ final class UserNotificationPayloadMapper {
         };
     }
 
-
     // 저장할 때와 같은 생성자를 거친다 — 키가 빠졌거나 값이 틀린 행은 여기서 예외로 걸러진다.
     // 어떤 예외든 "되살리지 못한 행"이라 어댑터가 잡아 그 행만 뺀다
     static UserNotificationPayload fromJson(UserNotificationType type, Map<String, Object> json) {
