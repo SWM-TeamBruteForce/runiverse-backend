@@ -5,7 +5,6 @@ import com.runiverse.running_service.application.common.port.out.LoadUserByIdPor
 import com.runiverse.running_service.application.device.port.in.SendPushUsecase;
 import com.runiverse.running_service.application.device.port.out.DeactivateStaleDevicePort;
 import com.runiverse.running_service.application.device.port.out.LoadPushTargetPort;
-import com.runiverse.running_service.application.device.port.out.PushMessage;
 import com.runiverse.running_service.application.device.port.out.PushSendStatus;
 import com.runiverse.running_service.application.device.port.out.PushTarget;
 import com.runiverse.running_service.application.device.port.out.SendPushPort;
@@ -58,8 +57,7 @@ public class SendPushHandler implements SendPushUsecase {
             return;
         }
         // 4. 보낸다. 실패 원인은 발송 어댑터가 남긴다
-        PushSendStatus status = sendPushPort.send(target.get().pushToken(),
-                new PushMessage(command.title(), command.body(), command.data()));
+        PushSendStatus status = sendPushPort.send(target.get().pushToken(), command.message());
         // 5. 다시 보내도 닿지 않는 토큰이면 기기를 끈다
         switch (status) {
             case SENT -> log.info("[기기] 푸시 발송 성공 - targetUserId={}", userId.value());

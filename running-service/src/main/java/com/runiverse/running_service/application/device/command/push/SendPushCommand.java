@@ -1,13 +1,9 @@
 package com.runiverse.running_service.application.device.command.push;
 
-import java.util.Map;
+import com.runiverse.running_service.application.device.port.out.PushMessage;
+
 import java.util.UUID;
 
-public record SendPushCommand(
-        UUID userId,
-        String title,
-        String body,
-        Map<String, String> data
-) {
+public record SendPushCommand(UUID userId, PushMessage message) {
 
 }

@@ -51,7 +51,8 @@ public class SendPushHandlerTest {
 
     private final UUID userId = UuidCreator.getTimeOrderedEpoch();
     private final PushTarget target = new PushTarget(new DeviceId("device-1"), new PushToken("token-1"));
-    private final SendPushCommand command = new SendPushCommand(userId, "제목", "본문", Map.of("type", "TEST"));
+    private final PushMessage message = new PushMessage("제목", "본문", Map.of("type", "TEST"));
+    private final SendPushCommand command = new SendPushCommand(userId, message);
 
     @Test
     @DisplayName("켜진 기기·알림 동의·로그인 세션이 모두 있으면 그 기기의 토큰으로 보낸다")
@@ -66,7 +67,7 @@ public class SendPushHandlerTest {
         handler.handle(command);
 
         // then
-        verify(sendPushPort).send(new PushToken("token-1"), new PushMessage("제목", "본문", Map.of("type", "TEST")));
+        verify(sendPushPort).send(new PushToken("token-1"), message);
         verifyNoInteractions(deactivateStaleDevicePort);
     }
 
