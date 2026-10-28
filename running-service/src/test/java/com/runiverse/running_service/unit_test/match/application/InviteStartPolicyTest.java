@@ -41,7 +41,8 @@ class InviteStartPolicyTest {
     private static InviteStartPolicy policyOf(Duration closeOffset, Duration readyOffset) {
         InviteProperties inviteProperties = new InviteProperties(MIN_LEAD_TIME, closeOffset, 1_000, 42_195, 5);
         MatchProperties matchProperties = new MatchProperties(
-                Duration.ofMinutes(10), readyOffset, Duration.ofHours(6), 10, Duration.ofMinutes(20),
+                Duration.ofMinutes(10), Duration.ofMinutes(5), readyOffset, Duration.ofHours(6),
+                10, Duration.ofMinutes(20),
                 LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
         return new InviteStartPolicy(inviteProperties, matchProperties);
     }

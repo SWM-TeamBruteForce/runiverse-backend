@@ -57,7 +57,7 @@ class ForceFinishRunningRoomHandlerTest {
     private static final Duration MATCH_COOLDOWN = Duration.ofMinutes(20);
     // 강제 종료는 예약이 시각을 이미 판단했다 — 핸들러는 오프셋을 보지 않는다
     private static final MatchProperties PROPERTIES = new MatchProperties(
-            Duration.ofMinutes(10), Duration.ofSeconds(10), Duration.ofHours(6),
+            Duration.ofMinutes(10), Duration.ofMinutes(5), Duration.ofSeconds(10), Duration.ofHours(6),
             10, MATCH_COOLDOWN,
             LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
 

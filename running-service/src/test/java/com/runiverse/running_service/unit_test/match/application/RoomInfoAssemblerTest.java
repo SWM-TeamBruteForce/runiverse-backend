@@ -86,8 +86,8 @@ class RoomInfoAssemblerTest {
     @BeforeEach
     void setUp() {
         // 페이스 동점 임계는 후보 배정(11번)에서만 쓴다 — 조립에는 마감 오프셋만 걸린다
-        MatchProperties matchProperties = new MatchProperties(CLOSE_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET,
-                PACE_TIE_TOLERANCE, COOLDOWN,
+        MatchProperties matchProperties = new MatchProperties(CLOSE_OFFSET, Duration.ofMinutes(5), READY_OFFSET,
+                FORCE_FINISH_OFFSET, PACE_TIE_TOLERANCE, COOLDOWN,
                 LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
         RecruitmentClosePolicy recruitmentClosePolicy = new RecruitmentClosePolicy(matchProperties,
                 new InviteStartPolicy(new InviteProperties(

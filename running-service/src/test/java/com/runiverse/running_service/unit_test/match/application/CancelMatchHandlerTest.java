@@ -107,7 +107,7 @@ class CancelMatchHandlerTest {
         cancelMatchHandler = new CancelMatchHandler(
                 lockMatchApplicationPort, loadMatchRoomPort, lockMatchRoomPort,
                 loadMatchPlayersPort, updateMatchApplicationPort, updateMatchRoomPort, matchCooldownPort,
-                new MatchProperties(CLOSE_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET,
+                new MatchProperties(CLOSE_OFFSET, Duration.ofMinutes(5), READY_OFFSET, FORCE_FINISH_OFFSET,
                         PACE_TIE_TOLERANCE, COOLDOWN,
                         LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000)),
                 roomInfoAssembler, eventPublisher);

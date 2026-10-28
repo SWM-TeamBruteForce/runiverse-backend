@@ -109,8 +109,8 @@ class ApplyMatchHandlerTest {
 
     @BeforeEach
     void setUp() {
-        matchSlotPolicy = spy(new MatchSlotPolicy(new MatchProperties(CLOSE_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET,
-                PACE_TIE_TOLERANCE, COOLDOWN,
+        matchSlotPolicy = spy(new MatchSlotPolicy(new MatchProperties(CLOSE_OFFSET, Duration.ofMinutes(5), READY_OFFSET,
+                FORCE_FINISH_OFFSET, PACE_TIE_TOLERANCE, COOLDOWN,
                 LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000))));
         // 선택지 위반을 일부러 던지는 테스트는 이 스텁을 덮어써 쓰지 않으므로 lenient다
         lenient().doNothing().when(matchSlotPolicy).validate(any(), anyInt());

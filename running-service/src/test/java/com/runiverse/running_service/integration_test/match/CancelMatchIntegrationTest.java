@@ -73,7 +73,7 @@ public class CancelMatchIntegrationTest extends IntegrationTestSupport {
     private static final Duration CLOSE_OFFSET = Duration.ofMinutes(10);
     private static final Duration COOLDOWN = Duration.ofMinutes(20);
     private static final MatchProperties MATCH_PROPERTIES = new MatchProperties(
-            CLOSE_OFFSET, Duration.ofSeconds(10), Duration.ofHours(6), 10, COOLDOWN,
+            CLOSE_OFFSET, Duration.ofMinutes(5), Duration.ofSeconds(10), Duration.ofHours(6), 10, COOLDOWN,
             LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
     private static final InviteProperties INVITE_PROPERTIES = new InviteProperties(
             Duration.ofMinutes(10), Duration.ofMinutes(1), 1_000, 42_195, 5);

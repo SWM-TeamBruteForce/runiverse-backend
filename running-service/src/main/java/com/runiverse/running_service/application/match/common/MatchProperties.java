@@ -18,6 +18,8 @@ public record MatchProperties(
         // 모집 마감 = start_at - 이 값. 컬럼에 저장하지 않는다 —
         // 오프셋을 바꾸는 건 곧 정책을 바꾸는 것이라 진행 중인 방만 옛 마감을 유지할 이유가 없다
         @NotNull Duration closeOffset,
+        // 러닝 리마인더 푸시 = start_at - 이 값. 초대 방도 이 값을 쓴다
+        @NotNull Duration reminderOffset,
         // 시작 통지 = start_at - 이 값. 정각에 보내면 클라의 발사 시점과 겹쳐 늘 늦게 도착한다 —
         // 클라가 타이머를 걸 여유만 주면 되므로 WS 연결 시간까지 덮을 필요는 없다
         @NotNull Duration readyOffset,
@@ -64,5 +66,12 @@ public record MatchProperties(
         }
         return Duration.between(allowedFirstStartTime, allowedLastStartTime).toNanos()
                 % allowedStartTimeInterval.toNanos() == 0;
+    }
+
+    // 마감보다 먼저 보내면 그 뒤에 들어온 참가자가 못 받고, 시작 통지보다 늦으면 이미 카운트다운 중이다
+    @AssertTrue(message = "리마인더 오프셋은 시작 통지 오프셋보다 크고 마감 오프셋보다 작아야 한다")
+    public boolean isReminderBetweenReadyAndClose() {
+        return readyOffset == null || reminderOffset == null || closeOffset == null
+                || (reminderOffset.compareTo(readyOffset) > 0 && reminderOffset.compareTo(closeOffset) < 0);
     }
 }
