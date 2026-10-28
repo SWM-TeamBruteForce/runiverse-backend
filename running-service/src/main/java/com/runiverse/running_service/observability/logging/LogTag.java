@@ -11,8 +11,10 @@ public final class LogTag {
     private static final Map<String, String> TAGS = Map.of(
             "auth", "[인증]",
             "user", "[회원]",
+            "relationship", "[관계]",
             "match", "[매칭]",
             "running", "[러닝]",
+            "notification", "[알림]",
             "app", "[앱]",
             RequestDomain.COMMON, "[공통]"
     );
