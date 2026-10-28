@@ -16,9 +16,9 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-// 조회 API(2-4)가 아직 없어 쌓인 행을 DB에서 직접 읽는다.
+// 쌓인 행은 응답으로 조립되기 전의 저장값을 보려고 DB에서 직접 읽는다.
 // 엔티티로 만든 실제 스키마(jsonb·CHECK·FK)를 통과하는지가 함께 확인된다
-@DisplayName("배포 이미지 대상 인앱 알림 쌓기 E2E 테스트")
+@DisplayName("배포 이미지 대상 인앱 알림 쌓기·목록·모두 읽음·푸시 E2E 테스트")
 class UserNotificationE2eTest extends E2eTestSupport {
 
     private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");   // 호스트 시간대로 만들면 시작 시각이 어긋난다

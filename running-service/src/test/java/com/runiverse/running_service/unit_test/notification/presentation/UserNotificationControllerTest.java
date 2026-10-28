@@ -87,7 +87,7 @@ class UserNotificationControllerTest {
     }
 
     @Test
-    @DisplayName("api-spec 2-4의 키 이름으로 항목·관계·초대·다음 커서·안 읽은 수를 내보낸다")
+    @DisplayName("항목·관계·초대·다음 커서·안 읽은 수를 명세 키 이름으로 내보낸다")
     void writesSpecShape() throws Exception {
         // given
         given(getUserNotificationsUsecase.handle(new GetUserNotificationsQuery(ME, null, 20)))

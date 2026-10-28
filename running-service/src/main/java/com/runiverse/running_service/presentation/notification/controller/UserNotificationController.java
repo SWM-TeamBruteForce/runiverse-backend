@@ -24,13 +24,13 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UserNotificationController {
 
-    // 초과값은 거절하지 않고 상한으로 줄인다(api-convention 페이지네이션)
+    // 초과값은 거절하지 않고 상한으로 줄인다
     private static final int MAX_LIMIT = 50;
 
     private final GetUserNotificationsUsecase getUserNotificationsUsecase;
     private final ReadAllUserNotificationsUsecase readAllUserNotificationsUsecase;
 
-    // 앱 진입 때 첫 페이지를 불러 배지(unreadCount)까지 그린다. 읽음 처리는 하지 않는다 — 2-5가 한다
+    // 앱 진입 때 첫 페이지를 불러 배지(unreadCount)까지 그린다. 읽음 처리는 하지 않는다 — 모두 읽음 API가 한다
     @GetMapping("/me/notifications")
     public ResponseEntity<UserNotificationsResponse> getNotifications(
             @AuthenticationPrincipal Jwt jwt,
@@ -46,7 +46,7 @@ public class UserNotificationController {
     }
 
 
-    // 알림함을 열 때 한 번 부른다 — 목록(2-4)을 먼저 그린 뒤 불러야 새 알림을 표시할 수 있다
+    // 알림함을 열 때 한 번 부른다 — 목록을 먼저 그린 뒤 불러야 새 알림을 표시할 수 있다
     @PostMapping("/me/notifications/read")
     public ResponseEntity<Void> readAllNotifications(@AuthenticationPrincipal Jwt jwt) {
         readAllUserNotificationsUsecase.handle(new ReadAllUserNotificationsCommand(UUID.fromString(jwt.getSubject())));

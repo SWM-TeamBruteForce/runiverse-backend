@@ -146,7 +146,7 @@ class UserNotificationItemAssemblerTest {
         // when
         List<GetUserNotificationsResult.Item> items = assembler.assemble(ME, List.of(friendRequested(912L)));
 
-        // then -> 알림은 남고 사람만 §0 탈퇴 유저 형식이다
+        // then -> 알림은 남고 사람만 탈퇴 유저 형식이다
         assertThat(items).singleElement().extracting(GetUserNotificationsResult.Item::actor)
                 .isEqualTo(new GetUserNotificationsResult.Actor(CHULSU, "탈퇴한 사용자", null, true, null));
     }

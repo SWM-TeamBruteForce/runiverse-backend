@@ -4,7 +4,7 @@ import com.runiverse.running_service.application.notification.query.list.GetUser
 
 import java.time.LocalDateTime;
 
-// 앱 스트림 알림 이벤트의 data — 목록(2-4) 항목에서 type만 뺀 모양이다.
+// 앱 스트림 알림 이벤트의 data — 알림 목록 항목에서 type만 뺀 모양이다.
 // 종류는 SSE event 이름(FRIEND_REQUESTED 등)이 말한다(매칭 스트림과 같다). 사람·초대는 목록과 같은 변환을 쓴다
 public record NotificationEventResponse(
         Long notificationId,

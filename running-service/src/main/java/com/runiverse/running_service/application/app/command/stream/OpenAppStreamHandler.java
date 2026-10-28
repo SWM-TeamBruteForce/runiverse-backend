@@ -22,6 +22,6 @@ public class OpenAppStreamHandler implements OpenAppStreamUsecase {
         // 앱 재시작처럼 끊긴 줄 모르고 남아 있는 옛 연결이 있다 — 마지막 연결만 남긴다
         appStreamPort.register(userId, connection)
                 .ifPresent(AppStreamConnection::closeSuperseded);
-        log.info("[앱] 스트림 연결 성공 - userId={}, connectionId={}", command.userId(), connection.id());
+        log.info("[앱] 스트림 연결 성공 - connectionId={}", connection.id());
     }
 }

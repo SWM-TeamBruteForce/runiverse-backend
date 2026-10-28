@@ -85,7 +85,7 @@ class SseAppStreamConnectionTest {
     }
 
     @Test
-    @DisplayName("새 알림은 알림 종류를 이벤트 이름으로, 2-4 목록 항목에서 type만 뺀 JSON을 싣는다")
+    @DisplayName("새 알림은 알림 종류를 이벤트 이름으로, 알림 목록 항목에서 type만 뺀 JSON을 싣는다")
     void notificationCreatedUsesListItemShape() throws Exception {
         // given
         UUID chulsu = UuidCreator.getTimeOrderedEpoch();
@@ -98,7 +98,7 @@ class SseAppStreamConnectionTest {
         // when
         connection.send(AppStreamEvent.notification(item));
 
-        // then -> 클라가 받은 그대로 목록 맨 위에 붙인다
+        // then -> 클라가 이벤트 이름을 type으로 붙여 목록 맨 위에 넣는다
         ArgumentCaptor<SseEmitter.SseEventBuilder> sent = ArgumentCaptor.forClass(SseEmitter.SseEventBuilder.class);
         verify(emitter).send(sent.capture());
         Set<ResponseBodyEmitter.DataWithMediaType> parts = sent.getValue().build();
