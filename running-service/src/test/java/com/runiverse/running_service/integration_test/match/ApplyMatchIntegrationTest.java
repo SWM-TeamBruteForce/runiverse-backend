@@ -168,6 +168,8 @@ public class ApplyMatchIntegrationTest extends IntegrationTestSupport {
         assertThat(room.getAvgPace()).contains(new Pace(330));
         assertThat(executeAtOf(ScheduledJobType.MATCH_CLOSE, runningRoomId))
                 .isEqualTo(SLOT.minus(CLOSE_OFFSET));
+        assertThat(executeAtOf(ScheduledJobType.RUNNING_REMINDER, runningRoomId))
+                .isEqualTo(SLOT.minus(REMINDER_OFFSET));
         assertThat(executeAtOf(ScheduledJobType.RUNNING_READY, runningRoomId))
                 .isEqualTo(SLOT.minus(READY_OFFSET));
         assertThat(executeAtOf(ScheduledJobType.RUNNING_START, runningRoomId)).isEqualTo(SLOT);
@@ -202,7 +204,7 @@ public class ApplyMatchIntegrationTest extends IntegrationTestSupport {
                 .containsExactly(hostId, guestId);
         assertThat(updated.teamAveragePaceSecondsPerKm()).isEqualTo(360);
         // 예약은 방이 생길 때만 건다 — 합류로 늘지 않는다
-        assertThat(scheduledJobStore.jobCount()).isEqualTo(4);
+        assertThat(scheduledJobStore.jobCount()).isEqualTo(5);
     }
 
     @Test
