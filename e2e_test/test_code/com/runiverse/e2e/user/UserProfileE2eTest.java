@@ -32,6 +32,37 @@ class UserProfileE2eTest extends E2eTestSupport {
         assertThat(summary.status()).isEqualTo(200);
         assertThat(summary.bool("isMe")).isTrue();
         assertThat(summary.text("nickname")).isEqualTo(user.nickname());
+        // 본인에게는 관계가 없어 NONE이 아니라 null이다
+        assertThat(summary.body()).containsEntry("relationshipType", null).doesNotContainKey("friendStatus");
+    }
+
+    @Test
+    @DisplayName("다른 사람의 프로필 요약은 조회자 기준 지금 관계를 싣는다")
+    void otherProfileCarriesCurrentRelationship() {
+        // given
+        TestUser viewer = signUpAndOnboard();
+        TestUser other = signUpAndOnboard();
+        assertThat(get("/users/" + other.userId(), viewer.accessToken()).text("relationshipType")).isEqualTo("NONE");
+
+        // when -> 상대가 나에게 요청을 보냈다
+        assertThat(post("/users/" + viewer.userId() + "/friend-request", null, other.accessToken()).status())
+                .isEqualTo(201);
+
+        // then -> 보는 사람마다 자기 관점의 값이다
+        assertThat(get("/users/" + other.userId(), viewer.accessToken()).text("relationshipType"))
+                .isEqualTo("FRIEND_REQUEST_RECEIVED");
+        assertThat(get("/users/" + viewer.userId(), other.accessToken()).text("relationshipType"))
+                .isEqualTo("FRIEND_REQUEST_SENT");
+
+        // 요청은 아직 친구가 아니라 세지 않는다
+        assertThat(get("/users/" + other.userId(), viewer.accessToken()).number("friendCount")).isZero();
+
+        // 수락하면 두 사람의 친구 수가 하나씩 오르고 관계는 FRIEND다
+        assertThat(put("/users/" + other.userId() + "/friend-request", viewer.accessToken()).status()).isEqualTo(200);
+        Response otherProfile = get("/users/" + other.userId(), viewer.accessToken());
+        assertThat(otherProfile.text("relationshipType")).isEqualTo("FRIEND");
+        assertThat(otherProfile.number("friendCount")).isEqualTo(1);
+        assertThat(get("/users/" + viewer.userId(), viewer.accessToken()).number("friendCount")).isEqualTo(1);
     }
 
     @Test

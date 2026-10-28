@@ -67,13 +67,16 @@ public class SearchUsersIntegrationTest extends IntegrationTestSupport {
                 onboardingStore,  // CheckNicknameDuplicatePort
                 onboardingStore   // SaveOnboardingPort
         );
-        FriendRequestAcceptor acceptor = new FriendRequestAcceptor(relationshipStore);  // SaveUserRelationshipPort
+        FriendRequestAcceptor acceptor = new FriendRequestAcceptor(
+                relationshipStore,          // SaveUserRelationshipPort
+                (userId, payload) -> { });  // SendUserNotificationPort — 알림 저장은 이 테스트의 관심사가 아니다
         requestFriendHandler = new RequestFriendHandler(
                 userStore,          // LoadUserByIdPort
                 relationshipStore,  // EnsureUserRelationshipPairPort
                 relationshipStore,  // LoadUserRelationshipPort
                 relationshipStore,  // SaveUserRelationshipPort
-                acceptor
+                acceptor,
+                (userId, payload) -> { }   // SendUserNotificationPort — 알림 저장은 이 테스트의 관심사가 아니다
         );
         acceptFriendRequestHandler = new AcceptFriendRequestHandler(
                 relationshipStore,  // LoadUserRelationshipPort

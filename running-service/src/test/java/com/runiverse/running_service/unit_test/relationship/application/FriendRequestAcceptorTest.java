@@ -1,8 +1,11 @@
 package com.runiverse.running_service.unit_test.relationship.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.common.port.out.SendUserNotificationPort;
 import com.runiverse.running_service.application.relationship.common.FriendRequestAcceptor;
 import com.runiverse.running_service.application.relationship.port.out.SaveUserRelationshipPort;
+import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.domain.notification.vo.FriendAcceptedPayload;
 import com.runiverse.running_service.domain.relationship.UserRelationship;
 import com.runiverse.running_service.domain.relationship.exception.InvalidRelationshipTransitionException;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
@@ -29,6 +32,9 @@ class FriendRequestAcceptorTest {
 
     @Mock
     private SaveUserRelationshipPort saveUserRelationshipPort;
+
+    @Mock
+    private SendUserNotificationPort sendUserNotificationPort;
 
     @InjectMocks
     private FriendRequestAcceptor acceptor;
@@ -60,6 +66,20 @@ class FriendRequestAcceptorTest {
     }
 
     @Test
+    @DisplayName("요청했던 사람에게 수락한 사람을 담은 친구 수락 알림을 보낸다")
+    void acceptSendsFriendAcceptedNotification() {
+        // given
+        UserRelationship mine = relationship(1L, userId, requesterId, RelationshipType.FRIEND_REQUEST_RECEIVED);
+        UserRelationship theirs = relationship(2L, requesterId, userId, RelationshipType.FRIEND_REQUEST_SENT);
+
+        // when
+        acceptor.accept(mine, theirs);
+
+        // then -> 받는 사람은 요청했던 쪽(theirs), 일으킨 사람은 수락한 쪽(mine)이다
+        verify(sendUserNotificationPort).send(new UserId(requesterId), new FriendAcceptedPayload(new UserId(userId)));
+    }
+
+    @Test
     @DisplayName("상대 행이 없으면 짝이 깨진 데이터라 바꾸지도 저장하지도 않는다")
     void missingCounterpartIsServerError() {
         // given
@@ -69,7 +89,7 @@ class FriendRequestAcceptorTest {
         assertThatThrownBy(() -> acceptor.accept(mine, null))
                 .isInstanceOf(IllegalStateException.class);
         assertThat(mine.getType()).isEqualTo(RelationshipType.FRIEND_REQUEST_RECEIVED);
-        verifyNoInteractions(saveUserRelationshipPort);
+        verifyNoInteractions(saveUserRelationshipPort, sendUserNotificationPort);
     }
 
     @ParameterizedTest
@@ -85,7 +105,7 @@ class FriendRequestAcceptorTest {
                 .isInstanceOf(IllegalStateException.class);
         assertThat(mine.getType()).isEqualTo(RelationshipType.FRIEND_REQUEST_RECEIVED);
         assertThat(theirs.getType()).isEqualTo(theirType);
-        verifyNoInteractions(saveUserRelationshipPort);
+        verifyNoInteractions(saveUserRelationshipPort, sendUserNotificationPort);
     }
 
     @Test
@@ -98,7 +118,7 @@ class FriendRequestAcceptorTest {
         // when & then
         assertThatThrownBy(() -> acceptor.accept(mine, theirs))
                 .isInstanceOf(InvalidRelationshipTransitionException.class);
-        verifyNoInteractions(saveUserRelationshipPort);
+        verifyNoInteractions(saveUserRelationshipPort, sendUserNotificationPort);
     }
 
     private UserRelationship relationship(Long id, UUID owner, UUID target, RelationshipType type) {

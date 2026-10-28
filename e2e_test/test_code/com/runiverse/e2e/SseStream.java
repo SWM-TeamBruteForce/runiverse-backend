@@ -19,8 +19,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
 
-/** 매칭 이벤트 스트림(SSE) 테스트 클라이언트. 줄 단위 텍스트라 JDK HttpClient만으로 읽는다. */
-public final class MatchStream implements AutoCloseable {
+/** SSE 스트림(매칭·유저) 테스트 클라이언트. 줄 단위 텍스트라 JDK HttpClient만으로 읽는다. */
+public final class SseStream implements AutoCloseable {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(10);
@@ -32,13 +32,13 @@ public final class MatchStream implements AutoCloseable {
     private final Stream<String> lines;
     private final BlockingQueue<Map<String, Object>> received;
 
-    private MatchStream(int status, Stream<String> lines, BlockingQueue<Map<String, Object>> received) {
+    private SseStream(int status, Stream<String> lines, BlockingQueue<Map<String, Object>> received) {
         this.status = status;
         this.lines = lines;
         this.received = received;
     }
 
-    static MatchStream open(HttpClient httpClient, String url, String accessToken,
+    static SseStream open(HttpClient httpClient, String url, String accessToken,
                             Map<String, String> headers) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -53,12 +53,12 @@ public final class MatchStream implements AutoCloseable {
         BlockingQueue<Map<String, Object>> received = new LinkedBlockingQueue<>();
         Stream<String> lines = response.body();
         if (response.statusCode() == 200) {
-            Thread reader = new Thread(() -> collect(lines, received), "match-stream-reader");
+            Thread reader = new Thread(() -> collect(lines, received), "sse-stream-reader");
             // 닫지 못한 스트림이 테스트 JVM 종료를 붙잡지 않게 한다
             reader.setDaemon(true);
             reader.start();
         }
-        return new MatchStream(response.statusCode(), lines, received);
+        return new SseStream(response.statusCode(), lines, received);
     }
 
     public int status() {
@@ -84,6 +84,21 @@ public final class MatchStream implements AutoCloseable {
             }
             if (event.equals(message.get("event"))) {
                 return parse((String) message.get("data"));
+            }
+        }
+    }
+
+    /** 서버가 스트림을 닫을 때까지 기다린다. 그 사이 온 이벤트는 흘려보낸다. */
+    public void awaitClosed() {
+        long deadline = System.nanoTime() + DEFAULT_TIMEOUT.toNanos();
+        while (true) {
+            long remaining = deadline - System.nanoTime();
+            if (remaining <= 0) {
+                throw new IllegalStateException("서버가 %s 안에 스트림을 닫지 않았습니다".formatted(DEFAULT_TIMEOUT));
+            }
+            Map<String, Object> message = poll(remaining);
+            if (message != null && STREAM_ENDED.equals(message.get("event"))) {
+                return;
             }
         }
     }

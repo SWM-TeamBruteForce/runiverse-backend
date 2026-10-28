@@ -1,7 +1,7 @@
 package com.runiverse.e2e.match;
 
 import com.runiverse.e2e.E2eTestSupport;
-import com.runiverse.e2e.MatchStream;
+import com.runiverse.e2e.SseStream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -60,7 +60,7 @@ class InviteRoomE2eTest extends E2eTestSupport {
 
         // 연결 직후 스냅샷은 초대 방 전용 입장 이벤트다 — 모집 마감은 매칭 오프셋(10분)이 아니라 초대 오프셋(1분)이고,
         // 시작까지 남은 시간을 함께 싣는다
-        try (MatchStream stream = openMatchStream(host.accessToken())) {
+        try (SseStream stream = openMatchStream(host.accessToken())) {
             assertThat(stream.status()).isEqualTo(200);
             Map<String, Object> snapshot = stream.await("INVITE_ROOM_ENTRANCE");
             assertThat(((Number) snapshot.get("runningRoomId")).intValue()).isEqualTo(runningRoomId);

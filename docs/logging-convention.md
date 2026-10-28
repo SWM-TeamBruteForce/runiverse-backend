@@ -72,6 +72,7 @@
 | `match` | `[매칭]` |
 | `running` | `[러닝]` |
 | `scheduling` | `[예약]` |
+| `notification` | `[알림]` |
 | `app` | `[앱]` |
 | 기능을 알 수 없음 | `[공통]` |
 

@@ -5,6 +5,7 @@ import com.runiverse.running_service.application.common.exception.BusinessExcept
 import com.runiverse.running_service.application.common.exception.ErrorCode;
 import com.runiverse.running_service.application.common.exception.InviteErrorCode;
 import com.runiverse.running_service.application.common.exception.MatchErrorCode;
+import com.runiverse.running_service.application.common.exception.NotificationErrorCode;
 import com.runiverse.running_service.application.common.exception.RelationshipErrorCode;
 import com.runiverse.running_service.application.common.exception.ResourceErrorCode;
 import com.runiverse.running_service.application.common.exception.RunningErrorCode;
@@ -262,6 +263,7 @@ public class GlobalExceptionHandler {
             case RelationshipErrorCode code -> toStatus(code);
             case ResourceErrorCode code -> toStatus(code);
             case InviteErrorCode code -> toStatus(code);
+            case NotificationErrorCode code -> toStatus(code);
         };
     }
 
@@ -354,6 +356,12 @@ public class GlobalExceptionHandler {
                  INVITE_COUNT_EXCEEDED,
                  RUNNING_INVITATION_NOT_PENDING,
                  RUNNING_ROOM_FULL -> HttpStatus.CONFLICT;
+        };
+    }
+    
+    private HttpStatus toStatus(NotificationErrorCode code) {
+        return switch (code) {
+            case INVALID_NOTIFICATION_CURSOR -> HttpStatus.BAD_REQUEST;
         };
     }
 

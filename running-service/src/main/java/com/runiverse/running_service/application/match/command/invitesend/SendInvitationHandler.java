@@ -1,5 +1,6 @@
 package com.runiverse.running_service.application.match.command.invitesend;
 
+import com.runiverse.running_service.application.common.port.out.SendUserNotificationPort;
 import com.runiverse.running_service.application.match.common.InviteProperties;
 import com.runiverse.running_service.application.match.common.InviteStartPolicy;
 import com.runiverse.running_service.application.match.common.MatchRoomChangedEvent;
@@ -19,6 +20,7 @@ import com.runiverse.running_service.application.match.port.out.UpdateMatchRoomP
 import com.runiverse.running_service.application.running.port.out.LoadUserStatusPort;
 import com.runiverse.running_service.application.running.port.out.UserStatusRow;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.domain.notification.vo.RunningInvitedPayload;
 import com.runiverse.running_service.domain.running.room.RunningRoom;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
@@ -44,6 +46,7 @@ public class SendInvitationHandler implements SendInvitationUsecase {
     private final InviteStartPolicy inviteStartPolicy;
     private final InviteProperties inviteProperties;
     private final RoomInfoAssembler roomInfoAssembler;
+    private final SendUserNotificationPort sendUserNotificationPort;
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -77,6 +80,10 @@ public class SendInvitationHandler implements SendInvitationUsecase {
         }
         room.invite(inviterId, inviteeId, maxInviteCount);
         updateMatchRoomPort.update(room);
+        // 받은 사람에게 초대가 왔다고 알린다 — 다시 초대도 새 사건이라 새로 쌓는다.
+        // 같은 트랜잭션이라 초대만 남거나 알림만 남지 않는다
+        sendUserNotificationPort.send(inviteeId,
+                new RunningInvitedPayload(inviterId, new RunningRoomId(command.runningRoomId())));
         // 방 참가자에게 초대 현황을 알린다 — 조립은 트랜잭션 안에서 한다(자기 쓰기를 본다)
         eventPublisher.publishEvent(new MatchRoomChangedEvent(
                 MatchStreamEvent.updated(roomInfoAssembler.assemble(room))));

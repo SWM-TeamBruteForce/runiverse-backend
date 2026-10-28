@@ -1,7 +1,7 @@
 package com.runiverse.e2e.match;
 
 import com.runiverse.e2e.E2eTestSupport;
-import com.runiverse.e2e.MatchStream;
+import com.runiverse.e2e.SseStream;
 import com.runiverse.e2e.RunningWebSocket;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -47,7 +47,7 @@ class MatchE2eTest extends E2eTestSupport {
         assertThat(waiting.number("targetDistanceMeters")).isEqualTo(DISTANCE);
         assertThat(waiting.text("cooldownUntil")).isNull();
 
-        try (MatchStream stream = openMatchStream(host.accessToken())) {
+        try (SseStream stream = openMatchStream(host.accessToken())) {
             // when - 2. 연결 직후 스냅샷이 방 정보를 나른다
             assertThat(stream.status()).isEqualTo(200);
             Map<String, Object> snapshot = stream.await("MATCH_ROOM_UPDATED");
@@ -92,7 +92,7 @@ class MatchE2eTest extends E2eTestSupport {
         TestUser user = signUpAndOnboard();
 
         // when - then - 신청 전에는 붙을 방이 없어 스트림이 본문 없이 거절된다
-        try (MatchStream stream = openMatchStream(user.accessToken())) {
+        try (SseStream stream = openMatchStream(user.accessToken())) {
             assertThat(stream.status()).isEqualTo(404);
         }
         Response cancelWithout = post("/match-rooms/leave", null, user.accessToken());
@@ -253,7 +253,7 @@ class MatchE2eTest extends E2eTestSupport {
         assertThat(apply(leaver, DELETION_SLOT, DISTANCE).number("runningRoomId"))
                 .isEqualTo(runningRoomId);
 
-        try (MatchStream stream = openMatchStream(host.accessToken())) {
+        try (SseStream stream = openMatchStream(host.accessToken())) {
             assertThat(userIdsOf(stream.await("MATCH_ROOM_UPDATED")))
                     .containsExactlyInAnyOrder(host.userId(), leaver.userId());
 

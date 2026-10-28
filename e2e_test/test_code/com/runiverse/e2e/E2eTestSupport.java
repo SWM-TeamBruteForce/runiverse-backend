@@ -13,6 +13,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -155,8 +156,13 @@ public abstract class E2eTestSupport {
         return RunningWebSocket.connect(HTTP_CLIENT, RUNNING_WEBSOCKET_URL, accessToken, headers);
     }
 
-    protected MatchStream openMatchStream(String accessToken) {
-        return MatchStream.open(HTTP_CLIENT, BASE_URL + "/match-rooms/stream", accessToken,
+    protected SseStream openMatchStream(String accessToken) {
+        return SseStream.open(HTTP_CLIENT, BASE_URL + "/match-rooms/stream", accessToken,
+                SUPPORTED_APP_VERSION);
+    }
+
+    protected SseStream openAppStream(String accessToken) {
+        return SseStream.open(HTTP_CLIENT, BASE_URL + "/app/stream", accessToken,
                 SUPPORTED_APP_VERSION);
     }
 
@@ -263,10 +269,26 @@ public abstract class E2eTestSupport {
      * 운영처럼 손으로 쓴 SQL이 실제 스키마의 제약을 통과하는지도 함께 확인된다.
      */
     protected void executeSql(String sql) {
+        runPsql(sql);
+    }
+
+    /**
+     * API로 볼 수 없는 저장 결과를 DB에서 직접 읽는다 — 행마다 한 줄, 열은 '|'로 잇는다.
+     * 조회 API가 아직 없는 기능(인앱 알림 쌓기)이 실제 스키마에 들어갔는지 확인할 때 쓴다.
+     */
+    protected List<String> querySql(String sql) {
+        String output = runPsql(sql, "--tuples-only", "--no-align");
+        return output.lines().filter(line -> !line.isBlank()).toList();
+    }
+
+    private String runPsql(String sql, String... options) {
+        List<String> command = new ArrayList<>(List.of("docker", "exec", "-i", POSTGRES_CONTAINER,
+                "psql", "--quiet", "--username=runiverse", "--dbname=runiverse_e2e",
+                "--set", "ON_ERROR_STOP=1"));
+        command.addAll(List.of(options));
+        command.add("--file=-");
         try {
-            Process process = new ProcessBuilder("docker", "exec", "-i", POSTGRES_CONTAINER,
-                    "psql", "--quiet", "--username=runiverse", "--dbname=runiverse_e2e",
-                    "--set", "ON_ERROR_STOP=1", "--file=-")
+            Process process = new ProcessBuilder(command)
                     .redirectErrorStream(true)
                     .start();
             process.getOutputStream().write(sql.getBytes(StandardCharsets.UTF_8));
@@ -275,6 +297,7 @@ public abstract class E2eTestSupport {
             if (process.waitFor() != 0) {
                 throw new IllegalStateException("SQL 실행에 실패했습니다: " + output);
             }
+            return output;
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         } catch (InterruptedException e) {

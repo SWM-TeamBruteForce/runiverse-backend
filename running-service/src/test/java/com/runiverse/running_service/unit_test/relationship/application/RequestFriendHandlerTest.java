@@ -2,6 +2,7 @@ package com.runiverse.running_service.unit_test.relationship.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
+import com.runiverse.running_service.application.common.port.out.SendUserNotificationPort;
 import com.runiverse.running_service.application.relationship.command.request.RequestFriendCommand;
 import com.runiverse.running_service.application.relationship.command.request.RequestFriendHandler;
 import com.runiverse.running_service.application.relationship.command.request.RequestFriendResult;
@@ -14,6 +15,8 @@ import com.runiverse.running_service.application.relationship.port.out.LoadUserR
 import com.runiverse.running_service.application.relationship.port.out.SaveUserRelationshipPort;
 import com.runiverse.running_service.application.relationship.port.out.UserRelationshipPair;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.domain.notification.vo.FriendAcceptedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestedPayload;
 import com.runiverse.running_service.domain.relationship.UserRelationship;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 import com.runiverse.running_service.domain.user.User;
@@ -32,9 +35,11 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -54,6 +59,9 @@ class RequestFriendHandlerTest {
     @Mock
     private SaveUserRelationshipPort saveUserRelationshipPort;
 
+    @Mock
+    private SendUserNotificationPort sendUserNotificationPort;
+
     private RequestFriendHandler handler;
 
     private UUID userId;
@@ -67,7 +75,8 @@ class RequestFriendHandlerTest {
                 ensureUserRelationshipPairPort,
                 loadUserRelationshipPort,
                 saveUserRelationshipPort,
-                new FriendRequestAcceptor(saveUserRelationshipPort));
+                new FriendRequestAcceptor(saveUserRelationshipPort, sendUserNotificationPort),
+                sendUserNotificationPort);
         userId = UuidCreator.getTimeOrderedEpoch();
         targetId = UuidCreator.getTimeOrderedEpoch();
     }
@@ -97,6 +106,21 @@ class RequestFriendHandlerTest {
     }
 
     @Test
+    @DisplayName("새 요청이면 받는 사람에게 요청한 사람을 담은 친구 요청 알림을 보낸다")
+    void requestSendsFriendRequestedNotification() {
+        // given
+        givenTargetExists();
+        givenPair(relationship(1L, userId, targetId, RelationshipType.NONE),
+                relationship(2L, targetId, userId, RelationshipType.NONE));
+
+        // when
+        handler.handle(command());
+
+        // then -> 받는 사람은 대상, 일으킨 사람은 요청한 본인이다
+        verify(sendUserNotificationPort).send(new UserId(targetId), new FriendRequestedPayload(new UserId(userId)));
+    }
+
+    @Test
     @DisplayName("상대가 먼저 요청해 뒀으면 새 요청 없이 바로 친구가 된다")
     void mutualRequestBecomesFriend() {
         // given
@@ -114,6 +138,9 @@ class RequestFriendHandlerTest {
         assertThat(theirs.getType()).isEqualTo(RelationshipType.FRIEND);
         verify(saveUserRelationshipPort).save(mine);
         verify(saveUserRelationshipPort).save(theirs);
+        // 요청이 아니라 수락으로 끝났으므로 요청 알림 대신 먼저 요청했던 상대에게 수락 알림을 보낸다
+        verify(sendUserNotificationPort, never()).send(any(), any(FriendRequestedPayload.class));
+        verify(sendUserNotificationPort).send(new UserId(targetId), new FriendAcceptedPayload(new UserId(userId)));
     }
 
     @ParameterizedTest
@@ -130,7 +157,7 @@ class RequestFriendHandlerTest {
         assertThatThrownBy(() -> handler.handle(command()))
                 .isInstanceOf(FriendRequestAlreadyExistsException.class);
         assertThat(mine.getType()).isEqualTo(type);
-        verifyNoInteractions(saveUserRelationshipPort);
+        verifyNoInteractions(saveUserRelationshipPort, sendUserNotificationPort);
     }
 
     @Test
@@ -140,7 +167,7 @@ class RequestFriendHandlerTest {
         assertThatThrownBy(() -> handler.handle(new RequestFriendCommand(userId, userId)))
                 .isInstanceOf(CannotFriendSelfException.class);
         verifyNoInteractions(loadUserByIdPort, ensureUserRelationshipPairPort,
-                loadUserRelationshipPort, saveUserRelationshipPort);
+                loadUserRelationshipPort, saveUserRelationshipPort, sendUserNotificationPort);
     }
 
     @Test
@@ -152,7 +179,8 @@ class RequestFriendHandlerTest {
         // when & then
         assertThatThrownBy(() -> handler.handle(command()))
                 .isInstanceOf(FriendTargetNotFoundException.class);
-        verifyNoInteractions(ensureUserRelationshipPairPort, loadUserRelationshipPort, saveUserRelationshipPort);
+        verifyNoInteractions(ensureUserRelationshipPairPort, loadUserRelationshipPort, saveUserRelationshipPort,
+                sendUserNotificationPort);
     }
 
     @Test
@@ -165,7 +193,7 @@ class RequestFriendHandlerTest {
         // when & then
         assertThatThrownBy(() -> handler.handle(command()))
                 .isInstanceOf(IllegalStateException.class);
-        verifyNoInteractions(saveUserRelationshipPort);
+        verifyNoInteractions(saveUserRelationshipPort, sendUserNotificationPort);
     }
 
     @Test
@@ -179,7 +207,7 @@ class RequestFriendHandlerTest {
         // when & then
         assertThatThrownBy(() -> handler.handle(command()))
                 .isInstanceOf(IllegalStateException.class);
-        verifyNoInteractions(saveUserRelationshipPort);
+        verifyNoInteractions(saveUserRelationshipPort, sendUserNotificationPort);
     }
 
     private RequestFriendCommand command() {

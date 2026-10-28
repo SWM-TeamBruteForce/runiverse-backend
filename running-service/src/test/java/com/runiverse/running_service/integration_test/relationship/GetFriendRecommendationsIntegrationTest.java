@@ -59,7 +59,8 @@ public class GetFriendRecommendationsIntegrationTest extends IntegrationTestSupp
                 relationshipStore,  // EnsureUserRelationshipPairPort
                 relationshipStore,  // LoadUserRelationshipPort
                 relationshipStore,  // SaveUserRelationshipPort
-                new FriendRequestAcceptor(relationshipStore)
+                new FriendRequestAcceptor(relationshipStore, (userId, payload) -> { }),
+                (userId, payload) -> { }   // SendUserNotificationPort — 알림 저장은 이 테스트의 관심사가 아니다
         );
         handler = new GetFriendRecommendationsHandler(
                 recommendationStore,         // LoadFriendRecommendationsPort

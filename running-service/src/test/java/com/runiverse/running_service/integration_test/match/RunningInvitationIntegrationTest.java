@@ -143,7 +143,9 @@ public class RunningInvitationIntegrationTest extends IntegrationTestSupport {
                 runningStore,        // UpdateMatchRoomPort
                 relationshipStore,   // CheckFriendPort
                 runningStore,        // LoadUserStatusPort — 친구의 지금 상태
-                inviteStartPolicy, INVITE_PROPERTIES, roomInfoAssembler, eventPublisher);
+                inviteStartPolicy, INVITE_PROPERTIES, roomInfoAssembler,
+                (userId, payload) -> { },   // SendUserNotificationPort — 알림 저장은 이 테스트의 관심사가 아니다
+                eventPublisher);
         acceptHandler = new AcceptInvitationHandler(
                 runningStore,        // LockMatchRoomPort
                 runningStore,        // UpdateMatchRoomPort

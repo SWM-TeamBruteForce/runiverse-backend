@@ -174,7 +174,7 @@ public class UserController {
                 result.profileImageUrl(),
                 result.introduction(),
                 result.friendCount(),
-                result.friendStatus()
+                result.relationshipType()
         ));
     }
 

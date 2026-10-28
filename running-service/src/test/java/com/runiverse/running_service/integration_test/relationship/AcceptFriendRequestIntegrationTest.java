@@ -32,7 +32,9 @@ public class AcceptFriendRequestIntegrationTest extends IntegrationTestSupport {
         relationshipStore = new InMemoryUserRelationshipStore();
         acceptFriendRequestHandler = new AcceptFriendRequestHandler(
                 relationshipStore,                              // LoadUserRelationshipPort
-                new FriendRequestAcceptor(relationshipStore)    // SaveUserRelationshipPort
+                new FriendRequestAcceptor(
+                        relationshipStore,                      // SaveUserRelationshipPort
+                        (userId, payload) -> { })               // SendUserNotificationPort — 알림 저장은 이 테스트의 관심사가 아니다
         );
         requesterId = UuidCreator.getTimeOrderedEpoch();
         receiverId = UuidCreator.getTimeOrderedEpoch();

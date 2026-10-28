@@ -1,6 +1,7 @@
 package com.runiverse.running_service.application.relationship.command.request;
 
 import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
+import com.runiverse.running_service.application.common.port.out.SendUserNotificationPort;
 import com.runiverse.running_service.application.relationship.common.FriendRequestAcceptor;
 import com.runiverse.running_service.application.relationship.exception.CannotFriendSelfException;
 import com.runiverse.running_service.application.relationship.exception.FriendRequestAlreadyExistsException;
@@ -11,6 +12,7 @@ import com.runiverse.running_service.application.relationship.port.out.LoadUserR
 import com.runiverse.running_service.application.relationship.port.out.SaveUserRelationshipPort;
 import com.runiverse.running_service.application.relationship.port.out.UserRelationshipPair;
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestedPayload;
 import com.runiverse.running_service.domain.relationship.UserRelationship;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +31,7 @@ public class RequestFriendHandler implements RequestFriendUsecase {
     private final LoadUserRelationshipPort loadUserRelationshipPort;
     private final SaveUserRelationshipPort saveUserRelationshipPort;
     private final FriendRequestAcceptor friendRequestAcceptor;
+    private final SendUserNotificationPort sendUserNotificationPort;
 
     @Override
     public RequestFriendResult handle(RequestFriendCommand command) {
@@ -62,6 +65,8 @@ public class RequestFriendHandler implements RequestFriendUsecase {
                 theirs.receiveRequest();
                 saveUserRelationshipPort.save(mine);
                 saveUserRelationshipPort.save(theirs);
+                // 받는 사람에게 요청이 왔다고 알린다 — 같은 트랜잭션이라 요청만 남거나 알림만 남지 않는다
+                sendUserNotificationPort.send(targetId, new FriendRequestedPayload(userId));
                 log.info("[관계] 친구 요청 성공 - targetUserId={}", targetId.value());
                 yield new RequestFriendResult(RelationshipType.FRIEND_REQUEST_SENT);
             }

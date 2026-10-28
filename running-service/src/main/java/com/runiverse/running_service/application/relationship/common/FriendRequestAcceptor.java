@@ -1,6 +1,8 @@
 package com.runiverse.running_service.application.relationship.common;
 
+import com.runiverse.running_service.application.common.port.out.SendUserNotificationPort;
 import com.runiverse.running_service.application.relationship.port.out.SaveUserRelationshipPort;
+import com.runiverse.running_service.domain.notification.vo.FriendAcceptedPayload;
 import com.runiverse.running_service.domain.relationship.UserRelationship;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Component;
 public class FriendRequestAcceptor {
 
     private final SaveUserRelationshipPort saveUserRelationshipPort;
+    private final SendUserNotificationPort sendUserNotificationPort;
 
     // mine이 받은 요청인지는 호출하는 쪽이 이미 봤다 — 결과가 404인지 수락인지 유스케이스마다 달라서다
     public void accept(UserRelationship mine, UserRelationship theirs) {
@@ -24,5 +27,7 @@ public class FriendRequestAcceptor {
         theirs.accept();
         saveUserRelationshipPort.save(mine);
         saveUserRelationshipPort.save(theirs);
+        // 요청했던 사람에게 수락됐다고 알린다 — mine이 수락한 쪽, theirs가 요청했던 쪽이다
+        sendUserNotificationPort.send(theirs.getUserId(), new FriendAcceptedPayload(mine.getUserId()));
     }
 }

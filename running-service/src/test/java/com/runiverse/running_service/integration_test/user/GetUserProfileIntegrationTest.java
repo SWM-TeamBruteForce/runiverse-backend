@@ -12,6 +12,8 @@ import com.runiverse.running_service.application.user.exception.ProfileNotFoundE
 import com.runiverse.running_service.application.user.query.profile.GetUserProfileHandler;
 import com.runiverse.running_service.application.user.query.profile.GetUserProfileQuery;
 import com.runiverse.running_service.application.user.query.profile.GetUserProfileResult;
+import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
+import com.runiverse.running_service.integration_test.fake.InMemoryUserRelationshipStore;
 import com.runiverse.running_service.integration_test.IntegrationTestSupport;
 import com.runiverse.running_service.integration_test.fake.FakeViewUrlGenerator;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,11 +46,13 @@ public class GetUserProfileIntegrationTest extends IntegrationTestSupport {
     private ChangeMyProfileHandler changeMyProfileHandler;
     private GetUserProfileHandler getUserProfileHandler;
     private FakeViewUrlGenerator viewUrlGenerator;
+    private InMemoryUserRelationshipStore relationshipStore;
 
     @BeforeEach
     void setUp() {
         signUpHandler = newSignUpHandler();
         viewUrlGenerator = new FakeViewUrlGenerator();
+        relationshipStore = new InMemoryUserRelationshipStore();
         completeOnboardingHandler = new CompleteOnboardingHandler(
                 userStore,        // LoadUserByIdPort
                 onboardingStore,  // ExistsOnboardingPort
@@ -64,7 +68,9 @@ public class GetUserProfileIntegrationTest extends IntegrationTestSupport {
         getUserProfileHandler = new GetUserProfileHandler(
                 userStore,        // LoadUserByIdPort
                 onboardingStore,  // LoadNicknamePort
-                new UserImageUrlResolver(viewUrlGenerator)  // GenerateViewUrlPort
+                new UserImageUrlResolver(viewUrlGenerator),  // GenerateViewUrlPort
+                relationshipStore,  // LoadRelationshipTypesPort
+                relationshipStore   // CountFriendsPort
         );
     }
 
@@ -100,7 +106,7 @@ public class GetUserProfileIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("본인 프로필을 열면 isMe가 true이고 친구 상태가 없다")
+    @DisplayName("본인 프로필을 열면 isMe가 true이고 관계가 없다")
     void marksOwnProfile() {
         // given
         UUID userId = onboardedUser(EMAIL, NICKNAME);
@@ -110,24 +116,45 @@ public class GetUserProfileIntegrationTest extends IntegrationTestSupport {
 
         // then -> 본인에게는 친구 관계가 없어 NONE이 아니라 null이다
         assertThat(result.isMe()).isTrue();
-        assertThat(result.friendStatus()).isNull();
+        assertThat(result.relationshipType()).isNull();
         assertThat(result.nickname()).isEqualTo(NICKNAME);
     }
 
     @Test
-    @DisplayName("다른 사용자의 프로필을 열면 isMe가 false이고 친구 상태가 담긴다")
+    @DisplayName("다른 사용자의 프로필을 열면 isMe가 false이고 조회자 기준 지금 관계가 담긴다")
     void marksOtherUserProfile() {
         // given
         UUID viewerId = onboardedUser(EMAIL, NICKNAME);
         UUID otherUserId = onboardedUser(OTHER_EMAIL, OTHER_NICKNAME);
 
-        // when
+        // when -> 아직 아무 관계도 없다가, 상대가 요청을 보내면 받은 요청이 된다
+        GetUserProfileResult before = profileOf(viewerId, otherUserId);
+        relationshipStore.seedRequest(otherUserId, viewerId);
         GetUserProfileResult result = profileOf(viewerId, otherUserId);
 
-        // then -> 친구 요청 버튼을 가르는 값이 필요하다
+        // then -> 친구 버튼을 가르는 값이 필요하다
+        assertThat(before.relationshipType()).isEqualTo(RelationshipType.NONE);
         assertThat(result.isMe()).isFalse();
-        assertThat(result.friendStatus()).isNotNull();
+        assertThat(result.relationshipType()).isEqualTo(RelationshipType.FRIEND_REQUEST_RECEIVED);
+        // 요청은 아직 친구가 아니라 세지 않는다
+        assertThat(result.friendCount()).isZero();
         assertThat(result.nickname()).isEqualTo(OTHER_NICKNAME);
+    }
+
+    @Test
+    @DisplayName("친구 수는 친구가 된 사람만 세고, 본인 프로필에도 담긴다")
+    void countsOnlyFriends() {
+        // given -> 친구 둘, 받은 요청 하나
+        UUID ownerId = onboardedUser(EMAIL, NICKNAME);
+        UUID viewerId = onboardedUser(OTHER_EMAIL, OTHER_NICKNAME);
+        relationshipStore.seedFriend(ownerId, viewerId);
+        relationshipStore.seedFriend(ownerId, UuidCreator.getTimeOrderedEpoch());
+        relationshipStore.seedRequest(UuidCreator.getTimeOrderedEpoch(), ownerId);
+
+        // when & then
+        assertThat(profileOf(viewerId, ownerId).friendCount()).isEqualTo(2L);
+        assertThat(profileOf(ownerId, ownerId).friendCount()).isEqualTo(2L);
+        assertThat(profileOf(ownerId, viewerId).friendCount()).isEqualTo(1L);
     }
 
     @Test

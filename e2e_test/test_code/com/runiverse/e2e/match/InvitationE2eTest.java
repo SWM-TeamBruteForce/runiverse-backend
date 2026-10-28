@@ -1,7 +1,7 @@
 package com.runiverse.e2e.match;
 
 import com.runiverse.e2e.E2eTestSupport;
-import com.runiverse.e2e.MatchStream;
+import com.runiverse.e2e.SseStream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -74,7 +74,7 @@ class InvitationE2eTest extends E2eTestSupport {
         befriend(host, friend);
         int roomId = openRoom(host);
 
-        try (MatchStream hostStream = openMatchStream(host.accessToken())) {
+        try (SseStream hostStream = openMatchStream(host.accessToken())) {
             assertThat(hostStream.status()).isEqualTo(200);
             hostStream.await("INVITE_ROOM_ENTRANCE");
 
@@ -115,7 +115,7 @@ class InvitationE2eTest extends E2eTestSupport {
             assertThat(again.text("code")).isEqualTo("INVITEE_ALREADY_IN_ROOM");
 
             // 수락한 사람의 스트림은 초대 방 입장 스냅샷부터 받는다
-            try (MatchStream friendStream = openMatchStream(friend.accessToken())) {
+            try (SseStream friendStream = openMatchStream(friend.accessToken())) {
                 Map<String, Object> entrance = friendStream.await("INVITE_ROOM_ENTRANCE");
                 assertThat(((Number) entrance.get("runningRoomId")).intValue()).isEqualTo(roomId);
                 assertThat(((Number) entrance.get("startsInMs")).longValue()).isPositive();
@@ -300,7 +300,7 @@ class InvitationE2eTest extends E2eTestSupport {
         assertThat(invite(host, roomId, member).status()).isEqualTo(204);
         assertThat(accept(member, roomId).status()).isEqualTo(201);
 
-        try (MatchStream hostStream = openMatchStream(host.accessToken())) {
+        try (SseStream hostStream = openMatchStream(host.accessToken())) {
             hostStream.await("INVITE_ROOM_ENTRANCE");
 
             // when - 1. 둘 다 보낸다 — 현황은 받는 사람 기준이라 한 줄이다

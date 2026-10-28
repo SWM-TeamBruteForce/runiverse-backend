@@ -26,6 +26,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDateTime;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -292,6 +293,49 @@ public class UserRelationshipPersistenceAdapterTest {
 
         // when & then
         assertThat(adapter.isFriend(new UserId(userId), new UserId(targetId))).isFalse();
+    }
+
+    @Test
+    @DisplayName("알림 목록용 관계는 조회자 행만 한 번에 읽어 상대별 관계로 돌려준다")
+    void loadTypesReadsViewerRowsAtOnce() {
+        // given -> 행이 없는 사람은 결과에서 빠지고 호출자가 NONE으로 본다
+        UUID other = UuidCreator.getTimeOrderedEpoch();
+        when(entityManager.createQuery(anyString(), eq(UserRelationshipJpaEntity.class)))
+                .thenReturn(relationshipQuery);
+        when(relationshipQuery.setParameter(anyString(), any())).thenReturn(relationshipQuery);
+        when(relationshipQuery.getResultStream()).thenReturn(java.util.stream.Stream.of(
+                entity(1L, userId, targetId, RelationshipType.FRIEND_REQUEST_RECEIVED)));
+
+        // when
+        Map<UUID, RelationshipType> types = adapter.loadTypes(new UserId(userId), List.of(targetId, other));
+
+        // then -> 조회자 관점의 값이다. 상대 쪽 행(FRIEND_REQUEST_SENT)을 읽으면 버튼이 뒤집힌다
+        assertThat(types).containsExactly(Map.entry(targetId, RelationshipType.FRIEND_REQUEST_RECEIVED));
+        ArgumentCaptor<String> jpql = ArgumentCaptor.forClass(String.class);
+        verify(entityManager).createQuery(jpql.capture(), eq(UserRelationshipJpaEntity.class));
+        assertThat(jpql.getValue()).contains("r.userId = :viewerId").contains("r.targetId IN :targetIds");
+        verify(relationshipQuery).setParameter("viewerId", userId);
+        verify(relationshipQuery).setParameter("targetIds", List.of(targetId, other));
+    }
+
+    @Test
+    @DisplayName("친구 수는 프로필 주인이 주인인 FRIEND 행을 센다")
+    void countFriendsCountsOwnFriendRows() {
+        // given
+        when(entityManager.createQuery(anyString(), eq(Long.class))).thenReturn(friendCountQuery);
+        when(friendCountQuery.setParameter(anyString(), any())).thenReturn(friendCountQuery);
+        when(friendCountQuery.getSingleResult()).thenReturn(3L);
+
+        // when
+        long count = adapter.countFriends(new UserId(userId));
+
+        // then -> 친구는 대칭이라 한쪽 행만 센다
+        assertThat(count).isEqualTo(3L);
+        ArgumentCaptor<String> jpql = ArgumentCaptor.forClass(String.class);
+        verify(entityManager).createQuery(jpql.capture(), eq(Long.class));
+        assertThat(jpql.getValue()).contains("r.userId = :userId").contains("r.type = :type").doesNotContain("targetId");
+        verify(friendCountQuery).setParameter("userId", userId);
+        verify(friendCountQuery).setParameter("type", RelationshipType.FRIEND);
     }
 
     private void givenFriendCount(long count) {
