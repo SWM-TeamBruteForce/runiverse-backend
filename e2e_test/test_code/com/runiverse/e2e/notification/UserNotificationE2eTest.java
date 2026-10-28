@@ -181,6 +181,37 @@ class UserNotificationE2eTest extends E2eTestSupport {
     }
 
     @Test
+    @DisplayName("초대 알림의 상태는 쌓일 때가 아니라 지금 값이라 거절·다시 초대·수락·나가기를 따라 바뀐다")
+    void invitationStatusFollowsCurrentState() {
+        // given -> 친구가 된 뒤 그 친구가 연 초대 방에 초대받았다
+        TestUser host = signUpAndOnboard();
+        TestUser friend = signUpAndOnboard();
+        assertThat(post(friendRequestPath(friend), null, host.accessToken()).status()).isEqualTo(201);
+        assertThat(put(friendRequestPath(host), friend.accessToken()).status()).isEqualTo(200);
+        int roomId = openInviteRoom(host);
+
+        try {
+            assertThat(invite(host, roomId, friend).status()).isEqualTo(204);
+
+            // when & then - 1. 거절하면 알림은 남고 상태만 DECLINED다
+            assertThat(declineInvitation(friend, roomId).status()).isEqualTo(204);
+            assertThat(invitationStatusesOf(friend)).containsExactly("DECLINED");
+
+            // 2. 다시 초대받으면 알림이 하나 더 쌓이고, 같은 방의 초대라 둘 다 지금 상태다
+            assertThat(invite(host, roomId, friend).status()).isEqualTo(204);
+            assertThat(invitationStatusesOf(friend)).containsExactly("PENDING", "PENDING");
+
+            // 3. 수락하면 ACCEPTED, 수락한 방을 나가면 LEFT다
+            assertThat(acceptInvitation(friend, roomId).status()).isEqualTo(201);
+            assertThat(invitationStatusesOf(friend)).containsExactly("ACCEPTED", "ACCEPTED");
+            assertThat(post("/match-rooms/leave", null, friend.accessToken()).status()).isEqualTo(204);
+            assertThat(invitationStatusesOf(friend)).containsExactly("LEFT", "LEFT");
+        } finally {
+            assertThat(post("/match-rooms/leave", null, host.accessToken()).status()).isEqualTo(204);
+        }
+    }
+
+    @Test
     @DisplayName("limit만큼 잘라 다음 커서를 주고, 그 커서로 이어서 읽으면 겹치거나 빠지지 않는다")
     void pagesWithCursor() {
         // given -> 서로 다른 세 사람에게 요청을 받았다
@@ -253,6 +284,88 @@ class UserNotificationE2eTest extends E2eTestSupport {
 
         // 읽을 게 없어도 성공한다
         assertThat(post("/users/me/notifications/read", null, me.accessToken()).status()).isEqualTo(204);
+    }
+
+    @Test
+    @DisplayName("수락·초대 알림도 보관 기간이 지나면 빠지고 모두 읽음으로 읽힌다")
+    void acceptedAndInvitedFollowRetentionAndReadAll() {
+        // given -> 내가 보낸 요청이 수락됐고(수락 알림), 그 친구에게 초대받았다(초대 알림). 수락 알림은 31일 전으로 바꾼다
+        TestUser me = signUpAndOnboard();
+        TestUser host = signUpAndOnboard();
+        assertThat(post(friendRequestPath(host), null, me.accessToken()).status()).isEqualTo(201);
+        assertThat(put(friendRequestPath(me), host.accessToken()).status()).isEqualTo(200);
+        int roomId = openInviteRoom(host);
+
+        try {
+            assertThat(invite(host, roomId, me).status()).isEqualTo(204);
+            executeSql("""
+                    UPDATE user_notifications SET created_at = created_at - INTERVAL '31 days'
+                    WHERE user_id = '%s' AND type = 'FRIEND_ACCEPTED';
+                    """.formatted(me.userId()));
+
+            // when
+            Response listed = get("/users/me/notifications", me.accessToken());
+
+            // then -> 지난 수락 알림은 목록에서도 안 읽은 수에서도 빠진다
+            assertThat(listed.objects("items")).extracting(item -> item.get("type"))
+                    .containsExactly("RUNNING_INVITED");
+            assertThat(listed.number("unreadCount")).isEqualTo(1);
+
+            // 남은 초대 알림은 모두 읽음으로 읽힌다
+            assertThat(post("/users/me/notifications/read", null, me.accessToken()).status()).isEqualTo(204);
+            Response read = get("/users/me/notifications", me.accessToken());
+            assertThat(read.objects("items")).extracting(item -> item.get("isRead")).containsExactly(true);
+            assertThat(read.number("unreadCount")).isZero();
+        } finally {
+            assertThat(post("/match-rooms/leave", null, host.accessToken()).status()).isEqualTo(204);
+        }
+    }
+
+    @Test
+    @DisplayName("받는 사람이 탈퇴하면 그 사람의 알림과 받은 초대 행이 함께 지워진다")
+    void recipientDeletionRemovesNotificationsAndInvitations() {
+        // given -> 친구 요청 알림, 초대 알림과 초대 행을 받아 둔 사람
+        TestUser host = signUpAndOnboard();
+        TestUser friend = signUpAndOnboard();
+        assertThat(post(friendRequestPath(friend), null, host.accessToken()).status()).isEqualTo(201);
+        assertThat(put(friendRequestPath(host), friend.accessToken()).status()).isEqualTo(200);
+        int roomId = openInviteRoom(host);
+
+        try {
+            assertThat(invite(host, roomId, friend).status()).isEqualTo(204);
+            assertThat(receivedRowCountsOf(friend)).containsExactly("2|1");
+
+            // when
+            assertThat(delete("/users/me", friend.accessToken()).status()).isEqualTo(204);
+
+            // then -> 이 DB는 엔티티로 만든 스키마라 엔티티에 적은 CASCADE가 확인된다
+            assertThat(receivedRowCountsOf(friend)).containsExactly("0|0");
+        } finally {
+            assertThat(post("/match-rooms/leave", null, host.accessToken()).status()).isEqualTo(204);
+        }
+    }
+
+    @Test
+    @DisplayName("요청한 사람이 탈퇴해도 알림은 남고, 그 사람은 탈퇴 유저 형식으로 관계 없이 보인다")
+    void deletedActorIsShownAsDeletedUser() {
+        // given
+        TestUser requester = signUpAndOnboard();
+        TestUser target = signUpAndOnboard();
+        assertThat(post(friendRequestPath(target), null, requester.accessToken()).status()).isEqualTo(201);
+
+        // when
+        assertThat(delete("/users/me", requester.accessToken()).status()).isEqualTo(204);
+
+        // then -> 관계 행은 탈퇴로 지워져 관계는 싣지 않는다
+        Response listed = get("/users/me/notifications", target.accessToken());
+        assertThat(listed.status()).isEqualTo(200);
+        assertThat(listed.number("unreadCount")).isEqualTo(1);
+        assertThat(actorOf(listed.objects("items").getFirst()))
+                .containsEntry("userId", requester.userId())
+                .containsEntry("nickname", "탈퇴한 사용자")
+                .containsEntry("profileImageUrl", null)
+                .containsEntry("isDeleted", true)
+                .containsEntry("relationshipType", null);
     }
 
     @Test
@@ -354,6 +467,14 @@ class UserNotificationE2eTest extends E2eTestSupport {
                 inviter.accessToken());
     }
 
+    private Response acceptInvitation(TestUser invitee, int roomId) {
+        return post("/match-rooms/" + roomId + "/invitations/accept", null, invitee.accessToken());
+    }
+
+    private Response declineInvitation(TestUser invitee, int roomId) {
+        return post("/match-rooms/" + roomId + "/invitations/decline", null, invitee.accessToken());
+    }
+
     private static String friendRequestPath(TestUser target) {
         return "/users/" + target.userId() + "/friend-request";
     }
@@ -368,5 +489,21 @@ class UserNotificationE2eTest extends E2eTestSupport {
                 WHERE user_id = '%s'
                 ORDER BY user_notification_id;
                 """.formatted(user.userId()));
+    }
+
+    // 목록의 초대 알림마다 지금 초대 상태 — 최신순
+    private List<Object> invitationStatusesOf(TestUser user) {
+        return get("/users/me/notifications", user.accessToken()).objects("items").stream()
+                .filter(item -> "RUNNING_INVITED".equals(item.get("type")))
+                .map(item -> invitationOf(item).get("status"))
+                .toList();
+    }
+
+    // 받은 알림 수|받은 초대 행 수
+    private List<String> receivedRowCountsOf(TestUser user) {
+        return querySql("""
+                SELECT (SELECT count(*) FROM user_notifications WHERE user_id = '%s')
+                       || '|' || (SELECT count(*) FROM running_room_invitations WHERE invitee_id = '%s');
+                """.formatted(user.userId(), user.userId()));
     }
 }
