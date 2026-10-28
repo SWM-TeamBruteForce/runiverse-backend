@@ -32,8 +32,8 @@ import java.time.LocalDateTime;
         indexes = @Index(name = "idx_scheduled_job_pending", columnList = "is_sent, execute_at")
 )
 @Check(name = "ck_scheduled_job_type",
-        constraints = "job_type in ('MATCH_CLOSE', 'RUNNING_READY', 'RUNNING_START', "
-                + "'RUNNING_FORCE_FINISH')")
+        constraints = "job_type in ('MATCH_CLOSE', 'RUNNING_REMINDER', 'RUNNING_READY', "
+                + "'RUNNING_START', 'RUNNING_FORCE_FINISH')")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ScheduledJobJpaEntity extends BaseCreatedAtEntity {
 
