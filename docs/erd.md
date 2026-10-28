@@ -334,20 +334,20 @@
 
 ### scheduled_jobs (예약 작업)
 
-> **도메인 테이블이 아니라 기전 테이블이다** — "정해진 시각에 무엇을 실행할지"만 담고 결과는 각 도메인 테이블이 갖는다. 지금은 모집 마감·시작 통지·정각 시작·강제 종료 넷이 이 표를 쓴다. 매칭 방과 초대 방에 같게 걸고, 솔로 방에는 걸지 않는다. 도메인 B 아래 두는 것은 현재 값이 전부 매칭·러닝이기 때문이다.
+> **도메인 테이블이 아니라 기전 테이블이다** — "정해진 시각에 무엇을 실행할지"만 담고 결과는 각 도메인 테이블이 갖는다. 지금은 모집 마감·리마인더·시작 통지·정각 시작·강제 종료 다섯이 이 표를 쓴다. 매칭 방과 초대 방에 같게 걸고, 솔로 방에는 걸지 않는다. 도메인 B 아래 두는 것은 현재 값이 전부 매칭·러닝이기 때문이다.
 
 | 컬럼 | 타입 | 제약 | 비고 |
 |---|---|---|---|
 | scheduled_job_id | bigint | PK | |
 | job_type | varchar(50) | NOT NULL | 무엇을 할 것인가 — [§6 enum 사전](#6-enum-사전) |
 | target_id | varchar(100) | NOT NULL | 대상 식별자. 타입마다 가리키는 테이블이 달라(`MATCH_CLOSE`면 `running_room_id`) FK 없이 문자열로 둔다 |
-| execute_at | timestamp | NOT NULL | 실행할 시각. `MATCH_CLOSE`는 `running_rooms.start_at - 모집 마감 오프셋`, `RUNNING_READY`는 `start_at - 리드타임`, `RUNNING_START`는 `start_at` 정각, `RUNNING_FORCE_FINISH`는 `start_at + 강제 종료 유예` |
+| execute_at | timestamp | NOT NULL | 실행할 시각. `MATCH_CLOSE`는 `running_rooms.start_at - 모집 마감 오프셋`, `RUNNING_REMINDER`는 `start_at - 리마인더 오프셋`, `RUNNING_READY`는 `start_at - 리드타임`, `RUNNING_START`는 `start_at` 정각, `RUNNING_FORCE_FINISH`는 `start_at + 강제 종료 유예` |
 | is_sent | boolean | NOT NULL | 실행 완료 여부. 여러 인스턴스가 같은 예약을 들고 있어도 여기서 하나만 이긴다 |
 | sent_at | timestamp | nullable | 실제 실행 시각. `execute_at`과의 차이가 곧 지연이라 운영 지표로 쓴다 |
 | created_at | timestamp | NOT NULL | |
 
 > UNIQUE (job_type, target_id) — 한 대상에 같은 종류의 예약은 하나다. 인스턴스 여럿이 같은 예약을 넣으려 해도 DB가 막는다.
-> CHECK `ck_scheduled_job_type`: `job_type in ('MATCH_CLOSE', 'RUNNING_READY', 'RUNNING_START', 'RUNNING_FORCE_FINISH')`
+> CHECK `ck_scheduled_job_type`: `job_type in ('MATCH_CLOSE', 'RUNNING_REMINDER', 'RUNNING_READY', 'RUNNING_START', 'RUNNING_FORCE_FINISH')`
 > **정본은 이 표고 메모리 타이머는 사본이다.** 각 인스턴스가 `execute_at`에 깨도록 타이머를 걸지만 재시작하면 사라지므로, 부팅 때 `is_sent=false`를 전부 읽어 **지난 것은 즉시 실행하고 남은 것은 다시 건다**. 그래서 타이머가 여러 인스턴스에 중복으로 걸리는 것은 낭비가 아니라 이중화다 — 한 대가 죽어도 남은 대가 쏜다.
 > **실행 직전에 예약 행을 잠가 이긴 하나만 일한다** — `SELECT … FOR UPDATE`로 잠그고 `is_sent`를 다시 읽어, 이미 true면 남이 실행한 것이라 그냥 빠진다. 선점(`is_sent=true`)과 실행이 한 트랜잭션이라 실행이 실패하면 선점도 롤백되고, 잠금을 기다리던 인스턴스가 다시 시도한다. 대신 진 쪽은 이긴 쪽의 실행이 끝날 때까지 기다린다. 대상 쪽 상태 재확인은 이것과 별개로 남는다 — 예약이 아닌 경로(사용자 취소 등)로 이미 상태가 넘어가 있을 수 있다.
 > **`execute_at`을 저장하는 대가는 오프셋 변경이다** — 모집 마감 오프셋을 바꾸면 아직 실행되지 않은 `MATCH_CLOSE`의 `execute_at`을 함께 UPDATE 해야 한다. 방에서 매번 계산하지 않고 시각을 굳히는 대신 치르는 값이다.
@@ -583,7 +583,7 @@ FK 강제 없는 독립 테이블(원본 삭제/수정된 row를 참조하므로
 | running_rooms.type | SOLO / MATCH / INVITE | 솔로 러닝 / 랜덤 매칭 / 친구 초대 |
 | running_rooms.status | MATCHING / MATCHED / STARTED / FINISHED / CANCELLED | 모집 중(마감 전) / 마감 시점 확정(인원 무관, 1인도 확정) / 시작 / **유효 기록을 남기고** 종료 / 남길 기록 없이 닫힘 — 시작 전이면 항상(인원이 0이 됐거나, 한 번도 시작되지 않은 방을 강제 종료가 닫을 때 — 이때는 인원을 줄이지 않는다), 시작 후면 유효 기록이 하나도 없을 때 |
 | oauth_users.provider | GOOGLE / KAKAO / APPLE | |
-| scheduled_jobs.job_type | MATCH_CLOSE / RUNNING_READY / RUNNING_START / RUNNING_FORCE_FINISH | 모집 마감 확정(`MATCHING`→`MATCHED`. 매칭 방은 `start_at - 마감 오프셋`, 초대 방은 `start_at - 초대 마감 오프셋`) / 곧 시작 통지(`start_at - 리드타임`에 SSE `RUNNING_READY` 발행 — 방 상태는 바꾸지 않는다) / 정각 시작(`start_at`에 `MATCHED`→`STARTED`. 매칭·초대 방에만 걸고, 참가자 상태는 바꾸지 않는다) / 강제 종료(`start_at + 유예`에 남은 참가자와 방을 닫는다. 매칭·초대 방에만 건다) |
+| scheduled_jobs.job_type | MATCH_CLOSE / RUNNING_REMINDER / RUNNING_READY / RUNNING_START / RUNNING_FORCE_FINISH | 모집 마감 확정(`MATCHING`→`MATCHED`. 매칭 방은 `start_at - 마감 오프셋`, 초대 방은 `start_at - 초대 마감 오프셋`) / 시작 전 푸시(`start_at - 리마인더 오프셋`에 방에 남은 참가자에게 푸시 — 방 상태는 바꾸지 않는다) / 곧 시작 통지(`start_at - 리드타임`에 SSE `RUNNING_READY` 발행 — 방 상태는 바꾸지 않는다) / 정각 시작(`start_at`에 `MATCHED`→`STARTED`. 매칭·초대 방에만 걸고, 참가자 상태는 바꾸지 않는다) / 강제 종료(`start_at + 유예`에 남은 참가자와 방을 닫는다. 매칭·초대 방에만 건다) |
 | delete_users.gender | MALE / FEMALE | 온보딩 스냅샷 — 온보딩 전에 탈퇴하면 null |
 | delete_users.login_type | LOCAL / GOOGLE / KAKAO / APPLE | `oauth_users.provider`에 `LOCAL`을 더한 값 — 소셜 연동이 없는 계정도 표현해야 한다 |
 
