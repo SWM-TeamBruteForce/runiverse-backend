@@ -4,8 +4,6 @@ import com.runiverse.running_service.application.device.port.in.SendPushUsecase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -17,10 +15,9 @@ public class PushListener {
 
     private final SendPushUsecase sendPushUsecase;
 
-    // 커밋 뒤에는 원래 트랜잭션에 합류하면 반영되지 않는다 — 만료 토큰 정리를 위해 새 트랜잭션을 연다.
-    // FCM 응답을 요청·예약 스레드가 기다리지 않게 발송 스레드로 넘긴다
+    // FCM 응답을 요청·예약 스레드가 기다리지 않게 발송 스레드로 넘긴다.
+    // 트랜잭션은 열지 않는다 — 발송 유스케이스가 DB를 쓰는 동안만 짧게 연다
     @Async("pushExecutor")
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void send(PushRequestedEvent event) {
         sendPushUsecase.handle(new SendPushCommand(event.userId(), event.message()));

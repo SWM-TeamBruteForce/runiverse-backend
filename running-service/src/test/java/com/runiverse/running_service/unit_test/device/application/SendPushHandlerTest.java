@@ -3,8 +3,12 @@ package com.runiverse.running_service.unit_test.device.application;
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.auth.port.out.LoadRefreshTokenPort;
 import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
+import com.runiverse.running_service.application.device.command.push.PushListener;
+import com.runiverse.running_service.application.device.command.push.PushRequestedEvent;
+import com.runiverse.running_service.application.device.command.push.PushTargetReader;
 import com.runiverse.running_service.application.device.command.push.SendPushCommand;
 import com.runiverse.running_service.application.device.command.push.SendPushHandler;
+import com.runiverse.running_service.application.device.command.push.StaleDeviceDeactivator;
 import com.runiverse.running_service.application.device.port.out.DeactivateStaleDevicePort;
 import com.runiverse.running_service.application.device.port.out.LoadPushTargetPort;
 import com.runiverse.running_service.application.device.port.out.PushMessage;
@@ -16,18 +20,20 @@ import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.device.vo.DeviceId;
 import com.runiverse.running_service.domain.device.vo.PushToken;
 import com.runiverse.running_service.domain.user.User;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -48,7 +54,6 @@ public class SendPushHandlerTest {
     @Mock
     private DeactivateStaleDevicePort deactivateStaleDevicePort;
 
-    @InjectMocks
     private SendPushHandler handler;
 
     private final UUID userId = UuidCreator.getTimeOrderedEpoch();
@@ -57,6 +62,16 @@ public class SendPushHandlerTest {
             PushType.RUNNING_REMINDER, "제목", "본문", Map.of("runningRoomId", "125"),
             LocalDateTime.now().plusMinutes(5));
     private final SendPushCommand command = new SendPushCommand(userId, message);
+
+    // 읽기·기기 끄기 컴포넌트는 트랜잭션 경계만 나눈 것이라 포트 목을 감싼 진짜 객체로 넣는다
+    @BeforeEach
+    void setUp() {
+        handler = new SendPushHandler(
+                new PushTargetReader(loadPushTargetPort, loadUserByIdPort),
+                loadRefreshTokenPort,
+                sendPushPort,
+                new StaleDeviceDeactivator(deactivateStaleDevicePort));
+    }
 
     @Test
     @DisplayName("켜진 기기·알림 동의·로그인 세션이 모두 있으면 그 기기의 토큰으로 보낸다")
@@ -212,6 +227,21 @@ public class SendPushHandlerTest {
 
         // then -> 토큰은 멀쩡하다
         verifyNoInteractions(deactivateStaleDevicePort);
+    }
+
+    @Test
+    @DisplayName("발송 유스케이스는 트랜잭션을 열지 않고, DB 읽기와 기기 끄기만 각자 연다")
+    void opensTransactionOnlyAroundDbWork() throws NoSuchMethodException {
+        // when & then -> FCM을 기다리는 동안 DB 커넥션을 쥐지 않는다
+        assertThat(SendPushHandler.class.getAnnotation(Transactional.class)).isNull();
+        assertThat(SendPushHandler.class.getMethod("handle", SendPushCommand.class)
+                .getAnnotation(Transactional.class)).isNull();
+        assertThat(PushListener.class.getMethod("send", PushRequestedEvent.class)
+                .getAnnotation(Transactional.class)).isNull();
+        assertThat(PushTargetReader.class.getMethod("read", UserId.class, PushType.class)
+                .getAnnotation(Transactional.class).readOnly()).isTrue();
+        assertThat(StaleDeviceDeactivator.class.getMethod("deactivate", PushTarget.class)
+                .getAnnotation(Transactional.class)).isNotNull();
     }
 
     private void givenTarget() {
