@@ -29,7 +29,7 @@ import java.util.Optional;
 @Transactional(readOnly = true)
 public class NotifyRunningReminderHandler implements NotifyRunningReminderUsecase {
 
-    private static final String TITLE = "러닝 시작 %d분 전이에요";
+    private static final String TITLE = "출발 %d분 전이에요";
     private static final String BODY = "%s에 출발해요. 로비에서 기다려주세요";
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final long MINUTE_NANOS = Duration.ofMinutes(1).toNanos();

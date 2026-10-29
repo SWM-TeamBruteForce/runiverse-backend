@@ -82,7 +82,7 @@ class NotifyRunningReminderHandlerTest {
         assertThat(events).extracting(PushRequestedEvent::userId).containsExactly(first, second);
         PushMessage message = events.getFirst().message();
         assertThat(message.type()).isEqualTo(PushType.RUNNING_REMINDER);
-        assertThat(message.title()).isEqualTo("러닝 시작 5분 전이에요");
+        assertThat(message.title()).isEqualTo("출발 5분 전이에요");
         assertThat(message.body())
                 .isEqualTo(startAt.format(DateTimeFormatter.ofPattern("HH:mm")) + "에 출발해요. 로비에서 기다려주세요");
         assertThat(message.data()).isEqualTo(Map.of("runningRoomId", String.valueOf(ROOM_ID)));
@@ -114,7 +114,7 @@ class NotifyRunningReminderHandlerTest {
         handler.handle(new NotifyRunningReminderCommand(ROOM_ID));
 
         // then -> 내리면 정시 발화도 몇 ms 늦어 "4분 전"이 된다
-        assertThat(publishedEvents(1).getFirst().message().title()).isEqualTo("러닝 시작 5분 전이에요");
+        assertThat(publishedEvents(1).getFirst().message().title()).isEqualTo("출발 5분 전이에요");
     }
 
     @Test
