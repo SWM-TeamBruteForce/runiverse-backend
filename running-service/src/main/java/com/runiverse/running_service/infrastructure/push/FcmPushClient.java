@@ -12,6 +12,7 @@ import com.google.firebase.messaging.Notification;
 import com.runiverse.running_service.application.device.port.out.PushMessage;
 import com.runiverse.running_service.application.device.port.out.PushSendStatus;
 import com.runiverse.running_service.application.device.port.out.SendPushPort;
+import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.device.vo.PushToken;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,8 +42,9 @@ public class FcmPushClient implements SendPushPort {
 
     private final FirebaseMessaging firebaseMessaging;
 
+    // 발송 스레드에는 MDC가 없어 받는 사람·종류를 실패 로그에 직접 싣는다
     @Override
-    public PushSendStatus send(PushToken pushToken, PushMessage message) {
+    public PushSendStatus send(UserId userId, PushToken pushToken, PushMessage message) {
         // 대기 줄에서 기다린 만큼 줄어 있어 보내는 순간에 잰다
         Duration remaining = remainingOf(message);
         if (remaining != null && !remaining.isPositive()) {
@@ -53,7 +55,8 @@ public class FcmPushClient implements SendPushPort {
             future = firebaseMessaging.sendAsync(toMessage(pushToken, message, remaining));
         } catch (IllegalArgumentException | IllegalStateException e) {
             // 라이브러리가 메시지 값을 검사해 던지거나, 종료 중이라 Firebase 앱이 이미 지워졌다
-            log.error("[기기] 푸시 발송 실패: FCM 요청 오류", e);
+            log.error("[기기] 푸시 발송 실패: FCM 요청 오류 - targetUserId={}, pushType={}",
+                    userId.value(), message.type(), e);
             return PushSendStatus.FAILED;
         }
         try {
@@ -61,33 +64,38 @@ public class FcmPushClient implements SendPushPort {
             return PushSendStatus.SENT;
         } catch (ExecutionException e) {
             if (e.getCause() instanceof FirebaseMessagingException fcmException) {
-                return toStatus(fcmException);
+                return toStatus(fcmException, userId, message);
             }
             // FCM 응답이 아닌 실패 — 메시지에 무엇이 담길지 알 수 없어 종류만 남긴다
-            log.error("[기기] 푸시 발송 실패: FCM 처리 오류 - cause={}", e.getCause().getClass().getSimpleName());
+            log.error("[기기] 푸시 발송 실패: FCM 처리 오류 - targetUserId={}, pushType={}, cause={}",
+                    userId.value(), message.type(), e.getCause().getClass().getSimpleName());
             return PushSendStatus.FAILED;
         } catch (TimeoutException e) {
             // 뒤에서 계속되는 재시도도 멈춘다
             future.cancel(true);
-            log.error("[기기] 푸시 발송 실패: FCM 응답 지연 - timeoutMs={}", SEND_TIMEOUT.toMillis());
+            log.error("[기기] 푸시 발송 실패: FCM 응답 지연 - targetUserId={}, pushType={}, timeoutMs={}",
+                    userId.value(), message.type(), SEND_TIMEOUT.toMillis(), e);
             return PushSendStatus.FAILED;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             future.cancel(true);
-            log.error("[기기] 푸시 발송 실패: 응답 대기 중단");
+            log.error("[기기] 푸시 발송 실패: 응답 대기 중단 - targetUserId={}, pushType={}",
+                    userId.value(), message.type(), e);
             return PushSendStatus.FAILED;
         }
     }
 
-    private PushSendStatus toStatus(FirebaseMessagingException e) {
+    private PushSendStatus toStatus(FirebaseMessagingException e, UserId userId, PushMessage message) {
         // 앱 삭제·토큰 만료는 서버 문제가 아니다 — 기기를 끄는 쪽(유스케이스)이 남긴다
         if (e.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED) {
             return PushSendStatus.UNREGISTERED;
         }
         // 원인 예외에 FCM 응답 본문이 담겨 온다 — 예외 객체 대신 직접 원인의 종류만 남긴다
         Throwable cause = e.getCause() != null ? e.getCause() : e;
-        log.error("[기기] 푸시 발송 실패: FCM 오류 - errorCode={}, messagingErrorCode={}, cause={}",
-                e.getErrorCode(), e.getMessagingErrorCode(), cause.getClass().getSimpleName());
+        log.error("[기기] 푸시 발송 실패: FCM 오류 - targetUserId={}, pushType={}, errorCode={}, "
+                        + "messagingErrorCode={}, cause={}",
+                userId.value(), message.type(), e.getErrorCode(), e.getMessagingErrorCode(),
+                cause.getClass().getSimpleName());
         return PushSendStatus.FAILED;
     }
 

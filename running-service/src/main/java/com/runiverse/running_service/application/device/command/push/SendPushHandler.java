@@ -69,7 +69,7 @@ public class SendPushHandler implements SendPushUsecase {
             return;
         }
         // 5. 보낸다. 실패 원인은 발송 어댑터가 남긴다
-        PushSendStatus status = sendPushPort.send(target.get().pushToken(), command.message());
+        PushSendStatus status = sendPushPort.send(userId, target.get().pushToken(), command.message());
         // 6. 다시 보내도 닿지 않는 토큰이면 기기를 끈다
         switch (status) {
             case SENT -> log.info("[기기] 푸시 발송 성공 - targetUserId={}, pushType={}", userId.value(), pushType);

@@ -3,6 +3,7 @@ package com.runiverse.running_service.unit_test.infrastructure.push;
 import ch.qos.logback.classic.Level;
 import com.google.api.core.ApiFutures;
 import com.google.api.core.SettableApiFuture;
+import com.github.f4b6a3.uuid.UuidCreator;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.firebase.ErrorCode;
 import com.google.firebase.messaging.FirebaseMessaging;
@@ -12,6 +13,7 @@ import com.google.firebase.messaging.MessagingErrorCode;
 import com.runiverse.running_service.application.device.port.out.PushMessage;
 import com.runiverse.running_service.application.device.port.out.PushSendStatus;
 import com.runiverse.running_service.application.device.port.out.PushType;
+import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.device.vo.PushToken;
 import com.runiverse.running_service.infrastructure.push.FcmPushClient;
 import com.runiverse.running_service.support.LogCapture;
@@ -42,6 +44,7 @@ import static org.mockito.Mockito.when;
 @DisplayName("FCM 발송 클라이언트 단위 테스트")
 public class FcmPushClientTest {
 
+    private static final UserId USER_ID = new UserId(UuidCreator.getTimeOrderedEpoch());
     private static final PushToken TOKEN = new PushToken("token-1");
     private static final PushMessage MESSAGE = new PushMessage(
             PushType.RUNNING_REMINDER, "제목", "본문", Map.of("runningRoomId", "125"), null);
@@ -72,7 +75,7 @@ public class FcmPushClientTest {
         when(firebaseMessaging.sendAsync(any())).thenReturn(ApiFutures.immediateFuture("message-id"));
 
         // when
-        PushSendStatus status = client.send(TOKEN, MESSAGE);
+        PushSendStatus status = client.send(USER_ID, TOKEN, MESSAGE);
 
         // then -> Message에 공개 getter가 없어 FCM에 실리는 JSON으로 본다
         assertThat(status).isEqualTo(PushSendStatus.SENT);
@@ -94,7 +97,7 @@ public class FcmPushClientTest {
         when(firebaseMessaging.sendAsync(any())).thenReturn(ApiFutures.immediateFuture("message-id"));
 
         // when
-        client.send(TOKEN, MESSAGE);
+        client.send(USER_ID, TOKEN, MESSAGE);
 
         // then -> 앱이 이 값으로 눌렀을 때 갈 화면을 고른다
         assertThat(sentJson()).contains("\"type\":\"RUNNING_REMINDER\"");
@@ -110,7 +113,7 @@ public class FcmPushClientTest {
         when(firebaseMessaging.sendAsync(any())).thenReturn(ApiFutures.immediateFuture("message-id"));
 
         // when
-        client.send(TOKEN, message);
+        client.send(USER_ID, TOKEN, message);
 
         // then -> APNs는 남은 시간이 아니라 epoch 초로 받는다
         String json = sentJson();
@@ -130,7 +133,7 @@ public class FcmPushClientTest {
         when(firebaseMessaging.sendAsync(any())).thenReturn(ApiFutures.immediateFuture("message-id"));
 
         // when
-        client.send(TOKEN, MESSAGE);
+        client.send(USER_ID, TOKEN, MESSAGE);
 
         // then
         assertThat(sentJson()).doesNotContain("\"ttl\"").doesNotContain("apns-expiration");
@@ -145,7 +148,7 @@ public class FcmPushClientTest {
                 LocalDateTime.now().minusSeconds(1));
 
         // when
-        PushSendStatus status = client.send(TOKEN, message);
+        PushSendStatus status = client.send(USER_ID, TOKEN, message);
 
         // then -> 안드로이드 TTL 0은 "지금 닿으면 전달"이라 0으로 보내면 지난 알림이 간다
         assertThat(status).isEqualTo(PushSendStatus.EXPIRED);
@@ -159,7 +162,7 @@ public class FcmPushClientTest {
         when(firebaseMessaging.sendAsync(any())).thenThrow(new IllegalStateException("FirebaseApp was deleted"));
 
         // when
-        PushSendStatus status = client.send(TOKEN, MESSAGE);
+        PushSendStatus status = client.send(USER_ID, TOKEN, MESSAGE);
 
         // then
         assertThat(status).isEqualTo(PushSendStatus.FAILED);
@@ -175,7 +178,7 @@ public class FcmPushClientTest {
         when(firebaseMessaging.sendAsync(any())).thenReturn(ApiFutures.immediateFailedFuture(exception));
 
         // when
-        PushSendStatus status = client.send(TOKEN, MESSAGE);
+        PushSendStatus status = client.send(USER_ID, TOKEN, MESSAGE);
 
         // then -> 앱 삭제·토큰 만료는 서버 문제가 아니다
         assertThat(status).isEqualTo(PushSendStatus.UNREGISTERED);
@@ -191,7 +194,7 @@ public class FcmPushClientTest {
         when(firebaseMessaging.sendAsync(any())).thenReturn(ApiFutures.immediateFailedFuture(exception));
 
         // when
-        PushSendStatus status = client.send(TOKEN, MESSAGE);
+        PushSendStatus status = client.send(USER_ID, TOKEN, MESSAGE);
 
         // then -> 원인 예외에 FCM 응답 본문이 담겨 와서 예외 객체를 넘기지 않는다
         assertThat(status).isEqualTo(PushSendStatus.FAILED);
@@ -211,7 +214,7 @@ public class FcmPushClientTest {
         when(firebaseMessaging.sendAsync(any())).thenReturn(ApiFutures.immediateFailedFuture(exception));
 
         // when
-        client.send(TOKEN, MESSAGE);
+        client.send(USER_ID, TOKEN, MESSAGE);
 
         // then
         assertThat(log.messages(Level.ERROR)).singleElement().asString()
@@ -226,7 +229,7 @@ public class FcmPushClientTest {
         when(firebaseMessaging.sendAsync(any())).thenReturn(future);
 
         // when
-        PushSendStatus status = client.send(TOKEN, MESSAGE);
+        PushSendStatus status = client.send(USER_ID, TOKEN, MESSAGE);
 
         // then
         assertThat(status).isEqualTo(PushSendStatus.FAILED);

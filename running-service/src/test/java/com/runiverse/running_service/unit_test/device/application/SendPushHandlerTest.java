@@ -65,13 +65,13 @@ public class SendPushHandlerTest {
         givenTarget();
         givenUser(true);
         givenSession();
-        when(sendPushPort.send(any(), any())).thenReturn(PushSendStatus.SENT);
+        when(sendPushPort.send(any(), any(), any())).thenReturn(PushSendStatus.SENT);
 
         // when
         handler.handle(command);
 
         // then
-        verify(sendPushPort).send(new PushToken("token-1"), message);
+        verify(sendPushPort).send(new UserId(userId), new PushToken("token-1"), message);
         verifyNoInteractions(deactivateStaleDevicePort);
     }
 
@@ -138,7 +138,7 @@ public class SendPushHandlerTest {
         givenTarget();
         givenUser(true);
         givenSession();
-        when(sendPushPort.send(any(), any())).thenReturn(PushSendStatus.UNREGISTERED);
+        when(sendPushPort.send(any(), any(), any())).thenReturn(PushSendStatus.UNREGISTERED);
 
         // when
         handler.handle(command);
@@ -154,7 +154,7 @@ public class SendPushHandlerTest {
         givenTarget();
         givenUser(true);
         givenSession();
-        when(sendPushPort.send(any(), any())).thenReturn(PushSendStatus.FAILED);
+        when(sendPushPort.send(any(), any(), any())).thenReturn(PushSendStatus.FAILED);
 
         // when
         handler.handle(command);
@@ -189,13 +189,13 @@ public class SendPushHandlerTest {
         givenUser(true);
         givenSession();
         PushMessage timeless = new PushMessage(PushType.RUNNING_REMINDER, "제목", "본문", Map.of(), null);
-        when(sendPushPort.send(any(), any())).thenReturn(PushSendStatus.SENT);
+        when(sendPushPort.send(any(), any(), any())).thenReturn(PushSendStatus.SENT);
 
         // when
         handler.handle(new SendPushCommand(userId, timeless));
 
         // then
-        verify(sendPushPort).send(new PushToken("token-1"), timeless);
+        verify(sendPushPort).send(new UserId(userId), new PushToken("token-1"), timeless);
     }
 
     @Test
@@ -205,7 +205,7 @@ public class SendPushHandlerTest {
         givenTarget();
         givenUser(true);
         givenSession();
-        when(sendPushPort.send(any(), any())).thenReturn(PushSendStatus.EXPIRED);
+        when(sendPushPort.send(any(), any(), any())).thenReturn(PushSendStatus.EXPIRED);
 
         // when
         handler.handle(command);
