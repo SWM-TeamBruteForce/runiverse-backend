@@ -86,7 +86,7 @@
 | push_token | text | NOT NULL | FCM 등록 토큰. 공식 길이 상한이 없어 `text`다 |
 | platform | enum | NOT NULL | `X-App-Platform` 헤더 값 |
 | device_id | varchar(100) | UNIQUE, NOT NULL | 앱이 설치 때 만드는 기기 식별자 (`POST /users/me/devices` upsert 키). 형식은 보지 않는다 |
-| app_version | varchar(255) | NOT NULL | `X-App-Version` 헤더 값 — 등록할 때의 앱 버전 |
+| app_version | varchar(30) | NOT NULL | `X-App-Version` 헤더 값 — 등록할 때의 앱 버전 |
 | is_active | boolean | NOT NULL | 푸시를 받는 기기인가. 등록하면 이 기기만 true(유저당 하나), 로그인·로그아웃하면 그 유저의 기기 전부 false |
 | created_at / updated_at | timestamp | NOT NULL | |
 
@@ -102,8 +102,8 @@
 |---|---|---|---|
 | app_version_id | bigint | PK | |
 | platform | enum | UNIQUE, NOT NULL | 플랫폼당 한 행 |
-| minimum_version | varchar(255) | NOT NULL | 이보다 낮은 앱은 쓸 수 없다. API `minimumVersion` |
-| latest_version | varchar(255) | NOT NULL | 스토어에 공개된 최신 버전. API `latestVersion` |
+| minimum_version | varchar(30) | NOT NULL | 이보다 낮은 앱은 쓸 수 없다. API `minimumVersion` |
+| latest_version | varchar(30) | NOT NULL | 스토어에 공개된 최신 버전. API `latestVersion` |
 | created_at / updated_at | timestamp | NOT NULL | |
 
 > CHECK `ck_app_version_platform`: `platform in ('IOS', 'ANDROID')`

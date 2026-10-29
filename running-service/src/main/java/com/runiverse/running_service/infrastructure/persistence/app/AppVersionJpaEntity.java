@@ -48,9 +48,9 @@ public class AppVersionJpaEntity extends BaseTimeEntity {
     @Column(name = "platform", nullable = false, length = 10)
     private Platform platform;
 
-    @Column(name = "minimum_version", nullable = false)
+    @Column(name = "minimum_version", nullable = false, length = 30)
     private String minimumVersion;
 
-    @Column(name = "latest_version", nullable = false)
+    @Column(name = "latest_version", nullable = false, length = 30)
     private String latestVersion;
 }

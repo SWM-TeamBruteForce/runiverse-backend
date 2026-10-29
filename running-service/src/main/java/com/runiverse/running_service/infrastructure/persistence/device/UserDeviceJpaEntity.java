@@ -65,7 +65,7 @@ public class UserDeviceJpaEntity extends BaseTimeEntity {
     @Column(name = "device_id", nullable = false, updatable = false, length = 100)
     private String deviceId;
 
-    @Column(name = "app_version", nullable = false)
+    @Column(name = "app_version", nullable = false, length = 30)
     private String appVersion;
 
     // 푸시를 받는 기기인가 — 유저당 하나만 켜진다
