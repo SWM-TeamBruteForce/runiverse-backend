@@ -105,6 +105,10 @@ public class MatchRoomAssigner {
         scheduleJobPort.schedule(
                 ScheduledJobType.MATCH_CLOSE, roomId,
                 startAt.minus(matchProperties.closeOffset()));
+        // 리마인더도 통지처럼 여기서 건다 — 받는 사람은 발화 때 방에 남은 참가자다
+        scheduleJobPort.schedule(
+                ScheduledJobType.RUNNING_REMINDER, roomId,
+                startAt.minus(matchProperties.reminderOffset()));
         // 확정 시점이 아니라 여기서 함께 건다 — 어차피 방이 취소·시작됐는지는 발화 때 다시 봐야 한다
         scheduleJobPort.schedule(
                 ScheduledJobType.RUNNING_READY, roomId,

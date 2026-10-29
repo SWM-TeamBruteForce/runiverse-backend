@@ -1,0 +1,135 @@
+package com.runiverse.running_service.infrastructure.push;
+
+import com.google.api.core.ApiFuture;
+import com.google.firebase.messaging.AndroidConfig;
+import com.google.firebase.messaging.ApnsConfig;
+import com.google.firebase.messaging.Aps;
+import com.google.firebase.messaging.FirebaseMessaging;
+import com.google.firebase.messaging.FirebaseMessagingException;
+import com.google.firebase.messaging.Message;
+import com.google.firebase.messaging.MessagingErrorCode;
+import com.google.firebase.messaging.Notification;
+import com.runiverse.running_service.application.device.port.out.PushMessage;
+import com.runiverse.running_service.application.device.port.out.PushSendStatus;
+import com.runiverse.running_service.application.device.port.out.SendPushPort;
+import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.domain.device.vo.PushToken;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
+// 안드로이드·iOS 모두 FCM 하나로 보낸다 — iOS는 FCM이 APNs로 넘긴다
+@Slf4j
+@Component
+@Profile("!local")
+@RequiredArgsConstructor
+public class FcmPushClient implements SendPushPort {
+
+    private static final String DEFAULT_SOUND = "default";
+    private static final String TYPE_KEY = "type";
+    private static final String APNS_EXPIRATION_HEADER = "apns-expiration";
+    // 라이브러리는 503이면 최대 4번, 매번 최대 60초씩 기다려 다시 보낸다.
+    // 발송 스레드가 한 건에 오래 묶이지 않게 전체를 이 시간으로 묶는다
+    private static final Duration SEND_TIMEOUT = Duration.ofSeconds(3);
+
+    private final FirebaseMessaging firebaseMessaging;
+
+    // 발송 스레드에는 MDC가 없어 받는 사람·종류를 실패 로그에 직접 싣는다
+    @Override
+    public PushSendStatus send(UserId userId, PushToken pushToken, PushMessage message) {
+        // 대기 줄에서 기다린 만큼 줄어 있어 보내는 순간에 잰다
+        Duration remaining = remainingOf(message);
+        if (remaining != null && !remaining.isPositive()) {
+            return PushSendStatus.EXPIRED;
+        }
+        ApiFuture<String> future;
+        try {
+            future = firebaseMessaging.sendAsync(toMessage(pushToken, message, remaining));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            // 라이브러리가 메시지 값을 검사해 던지거나, 종료 중이라 Firebase 앱이 이미 지워졌다
+            log.error("[기기] 푸시 발송 실패: FCM 요청 오류 - targetUserId={}, pushType={}",
+                    userId.value(), message.type(), e);
+            return PushSendStatus.FAILED;
+        }
+        try {
+            future.get(SEND_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            return PushSendStatus.SENT;
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof FirebaseMessagingException fcmException) {
+                return toStatus(fcmException, userId, message);
+            }
+            // FCM 응답이 아닌 실패 — 메시지에 무엇이 담길지 알 수 없어 종류만 남긴다
+            log.error("[기기] 푸시 발송 실패: FCM 처리 오류 - targetUserId={}, pushType={}, cause={}",
+                    userId.value(), message.type(), e.getCause().getClass().getSimpleName());
+            return PushSendStatus.FAILED;
+        } catch (TimeoutException e) {
+            // 뒤에서 계속되는 재시도도 멈춘다
+            future.cancel(true);
+            log.error("[기기] 푸시 발송 실패: FCM 응답 지연 - targetUserId={}, pushType={}, timeoutMs={}",
+                    userId.value(), message.type(), SEND_TIMEOUT.toMillis(), e);
+            return PushSendStatus.FAILED;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            future.cancel(true);
+            log.error("[기기] 푸시 발송 실패: 응답 대기 중단 - targetUserId={}, pushType={}",
+                    userId.value(), message.type(), e);
+            return PushSendStatus.FAILED;
+        }
+    }
+
+    private PushSendStatus toStatus(FirebaseMessagingException e, UserId userId, PushMessage message) {
+        // 앱 삭제·토큰 만료는 서버 문제가 아니다 — 기기를 끄는 쪽(유스케이스)이 남긴다
+        if (e.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED) {
+            return PushSendStatus.UNREGISTERED;
+        }
+        // 원인 예외에 FCM 응답 본문이 담겨 온다 — 예외 객체 대신 직접 원인의 종류만 남긴다
+        Throwable cause = e.getCause() != null ? e.getCause() : e;
+        log.error("[기기] 푸시 발송 실패: FCM 오류 - targetUserId={}, pushType={}, errorCode={}, "
+                        + "messagingErrorCode={}, cause={}",
+                userId.value(), message.type(), e.getErrorCode(), e.getMessagingErrorCode(),
+                cause.getClass().getSimpleName());
+        return PushSendStatus.FAILED;
+    }
+
+    // 안드로이드는 앱이 백그라운드여도 바로 띄우게 HIGH, iOS는 소리가 기본으로 꺼져 있어 켠다
+    private Message toMessage(PushToken pushToken, PushMessage message, Duration remaining) {
+        AndroidConfig.Builder android = AndroidConfig.builder()
+                .setPriority(AndroidConfig.Priority.HIGH);
+        ApnsConfig.Builder apns = ApnsConfig.builder()
+                .setAps(Aps.builder().setSound(DEFAULT_SOUND).build());
+        // 꺼져 있던 폰이 만료 시각이 지나 켜지면 받지 않는다.
+        // 안드로이드는 남은 시간을, APNs는 만료 시각(epoch 초)을 받는다
+        if (remaining != null) {
+            android.setTtl(remaining.toMillis());
+            apns.putHeader(APNS_EXPIRATION_HEADER, String.valueOf(expiryOf(message).getEpochSecond()));
+        }
+        return Message.builder()
+                .setToken(pushToken.value())
+                .setNotification(Notification.builder()
+                        .setTitle(message.title())
+                        .setBody(message.body())
+                        .build())
+                .putAllData(message.data())
+                .putData(TYPE_KEY, message.type().name())
+                .setAndroidConfig(android.build())
+                .setApnsConfig(apns.build())
+                .build();
+    }
+
+    private static Duration remainingOf(PushMessage message) {
+        return message.expiresAt() == null ? null : Duration.between(Instant.now(), expiryOf(message));
+    }
+
+    // 만료 시각이 KST 벽시계라 JVM 기본 타임존으로 되돌린다(DefaultTimeZoneInitializer)
+    private static Instant expiryOf(PushMessage message) {
+        return message.expiresAt().atZone(ZoneId.systemDefault()).toInstant();
+    }
+}

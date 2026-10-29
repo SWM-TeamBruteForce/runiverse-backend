@@ -80,7 +80,7 @@ public class ForceFinishRunningIntegrationTest extends IntegrationTestSupport {
     private static final Duration MATCH_COOLDOWN = Duration.ofMinutes(20);
     private static final Duration RUNNING_COOLDOWN = Duration.ofMinutes(20);
     private static final MatchProperties MATCH_PROPERTIES = new MatchProperties(
-            Duration.ofMinutes(10), Duration.ofSeconds(10), FORCE_FINISH_OFFSET,
+            Duration.ofMinutes(10), Duration.ofMinutes(5), Duration.ofSeconds(10), FORCE_FINISH_OFFSET,
             10, MATCH_COOLDOWN,
             LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
     private static final RunningFinishProperties FINISH_PROPERTIES = new RunningFinishProperties(

@@ -351,7 +351,7 @@ class MatchSlotPolicyTest {
     // 슬롯과 무관한 값은 운영 설정 그대로 둔다
     private static MatchProperties properties(LocalTime first, LocalTime last, Duration interval,
                                               List<Integer> distances) {
-        return new MatchProperties(Duration.ofMinutes(10), Duration.ofSeconds(10), Duration.ofHours(6),
-                10, Duration.ofMinutes(20), first, last, interval, distances);
+        return new MatchProperties(Duration.ofMinutes(10), Duration.ofMinutes(5), Duration.ofSeconds(10),
+                Duration.ofHours(6), 10, Duration.ofMinutes(20), first, last, interval, distances);
     }
 }

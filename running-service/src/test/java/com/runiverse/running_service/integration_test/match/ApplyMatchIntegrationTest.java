@@ -73,11 +73,12 @@ public class ApplyMatchIntegrationTest extends IntegrationTestSupport {
 
     // 운영 설정과 같은 값
     private static final Duration CLOSE_OFFSET = Duration.ofMinutes(10);
+    private static final Duration REMINDER_OFFSET = Duration.ofMinutes(5);
     private static final Duration READY_OFFSET = Duration.ofSeconds(10);
     private static final Duration FORCE_FINISH_OFFSET = Duration.ofHours(6);
     private static final Duration COOLDOWN = Duration.ofMinutes(20);
     private static final MatchProperties MATCH_PROPERTIES = new MatchProperties(
-            CLOSE_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET, 10, COOLDOWN,
+            CLOSE_OFFSET, REMINDER_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET, 10, COOLDOWN,
             LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
     private static final InviteProperties INVITE_PROPERTIES = new InviteProperties(
             Duration.ofMinutes(10), Duration.ofMinutes(1), 1_000, 42_195, 5);
@@ -167,6 +168,8 @@ public class ApplyMatchIntegrationTest extends IntegrationTestSupport {
         assertThat(room.getAvgPace()).contains(new Pace(330));
         assertThat(executeAtOf(ScheduledJobType.MATCH_CLOSE, runningRoomId))
                 .isEqualTo(SLOT.minus(CLOSE_OFFSET));
+        assertThat(executeAtOf(ScheduledJobType.RUNNING_REMINDER, runningRoomId))
+                .isEqualTo(SLOT.minus(REMINDER_OFFSET));
         assertThat(executeAtOf(ScheduledJobType.RUNNING_READY, runningRoomId))
                 .isEqualTo(SLOT.minus(READY_OFFSET));
         assertThat(executeAtOf(ScheduledJobType.RUNNING_START, runningRoomId)).isEqualTo(SLOT);
@@ -201,7 +204,7 @@ public class ApplyMatchIntegrationTest extends IntegrationTestSupport {
                 .containsExactly(hostId, guestId);
         assertThat(updated.teamAveragePaceSecondsPerKm()).isEqualTo(360);
         // 예약은 방이 생길 때만 건다 — 합류로 늘지 않는다
-        assertThat(scheduledJobStore.jobCount()).isEqualTo(4);
+        assertThat(scheduledJobStore.jobCount()).isEqualTo(5);
     }
 
     @Test

@@ -40,7 +40,8 @@ public class GetMatchSlotsIntegrationTest extends IntegrationTestSupport {
 
     // 운영 설정과 같은 값
     private static final MatchProperties MATCH_PROPERTIES = new MatchProperties(
-            Duration.ofMinutes(10), Duration.ofSeconds(10), Duration.ofHours(6), 10, Duration.ofMinutes(20),
+            Duration.ofMinutes(10), Duration.ofMinutes(5), Duration.ofSeconds(10), Duration.ofHours(6),
+            10, Duration.ofMinutes(20),
             LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
 
     private GetMatchSlotsHandler handler;

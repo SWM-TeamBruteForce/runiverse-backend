@@ -60,10 +60,12 @@ public class OpenInviteRoomHandler implements OpenInviteRoomUsecase {
         RunningRoom room = createMatchRoomPort.create(RunningRoom.openInvite(
                 userId, player.getRunningPlayerId().orElseThrow(), pace.secondsPerKm(),
                 command.targetDistanceMeters(), startAt));
-        // 5. 예약은 매칭 방과 같은 네 가지다 — 마감만 초대 오프셋이고 나머지는 매칭 설정을 쓴다.
+        // 5. 예약은 매칭 방과 같은 다섯 가지다 — 마감만 초대 오프셋이고 나머지는 매칭 설정을 쓴다.
         //    방과 같은 트랜잭션이라 방이 롤백되면 예약도 사라진다
         Long roomId = room.getRunningRoomId().orElseThrow().value();
         scheduleJobPort.schedule(ScheduledJobType.MATCH_CLOSE, roomId, inviteStartPolicy.closeAt(startAt));
+        scheduleJobPort.schedule(
+                ScheduledJobType.RUNNING_REMINDER, roomId, startAt.minus(matchProperties.reminderOffset()));
         scheduleJobPort.schedule(
                 ScheduledJobType.RUNNING_READY, roomId, startAt.minus(matchProperties.readyOffset()));
         scheduleJobPort.schedule(ScheduledJobType.RUNNING_START, roomId, startAt);

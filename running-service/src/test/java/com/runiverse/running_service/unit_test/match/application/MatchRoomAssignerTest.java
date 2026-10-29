@@ -50,6 +50,7 @@ class MatchRoomAssignerTest {
     private static final LocalDateTime START_AT = LocalDateTime.of(2026, 7, 25, 19, 0);
     private static final int TARGET_DISTANCE = 5_000;
     private static final Duration CLOSE_OFFSET = Duration.ofMinutes(15);
+    private static final Duration REMINDER_OFFSET = Duration.ofMinutes(5);
     private static final Duration READY_OFFSET = Duration.ofSeconds(10);
     private static final Duration FORCE_FINISH_OFFSET = Duration.ofHours(6);
     // 페이스 차를 이 단위로 끊어 같은 구간이면 내 이탈 이력이 순위를 가른다
@@ -83,7 +84,7 @@ class MatchRoomAssignerTest {
         matchRoomAssigner = new MatchRoomAssigner(
                 loadMatchCandidatesPort, lockMatchRoomPort, loadMatchPlayersPort,
                 updateMatchRoomPort, createMatchRoomPort, scheduleJobPort,
-                new MatchProperties(CLOSE_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET,
+                new MatchProperties(CLOSE_OFFSET, REMINDER_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET,
                         PACE_TIE_TOLERANCE, COOLDOWN,
                         LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000)));
     }
@@ -407,6 +408,21 @@ class MatchRoomAssignerTest {
         // then -> 마감은 start_at - 오프셋이다. 컬럼에 저장하지 않고 여기서 계산한다
         verify(scheduleJobPort).schedule(
                 ScheduledJobType.MATCH_CLOSE, NEW_ROOM_ID, START_AT.minus(CLOSE_OFFSET));
+    }
+
+    @Test
+    @DisplayName("방을 새로 열면 러닝 리마인더도 함께 예약한다")
+    void schedulesRunningReminderForNewRoom() {
+        // given -> 이 예약이 없으면 앱을 닫아 둔 참가자가 시작을 놓친다
+        givenCandidates();
+        given(createMatchRoomPort.create(any())).willReturn(savedRoom(NEW_ROOM_ID));
+
+        // when
+        assign();
+
+        // then -> 마감 뒤·통지 앞이다. 받는 사람은 발화 때 남은 참가자라 합류자도 받는다
+        verify(scheduleJobPort).schedule(
+                ScheduledJobType.RUNNING_REMINDER, NEW_ROOM_ID, START_AT.minus(REMINDER_OFFSET));
     }
 
     @Test

@@ -69,7 +69,7 @@ class SettleRunningForAccountDeletionHandlerTest {
     private static final Duration MATCH_COOLDOWN = Duration.ofMinutes(20);
     // 탈퇴는 오프셋을 보지 않는다 — 쿨다운 길이만 쓴다
     private static final MatchProperties MATCH_PROPERTIES = new MatchProperties(
-            Duration.ofMinutes(10), Duration.ofSeconds(10), Duration.ofHours(6),
+            Duration.ofMinutes(10), Duration.ofMinutes(5), Duration.ofSeconds(10), Duration.ofHours(6),
             10, MATCH_COOLDOWN,
             LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
     // 조립 결과는 이 테스트의 주제가 아니다 — 발행 여부만 본다

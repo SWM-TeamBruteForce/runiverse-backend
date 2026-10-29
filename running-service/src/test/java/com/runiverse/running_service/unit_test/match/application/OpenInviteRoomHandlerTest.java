@@ -60,10 +60,11 @@ class OpenInviteRoomHandlerTest {
     private static final long PLAYER_ID = 42L;
     private static final long ROOM_ID = 130L;
     private static final Duration CLOSE_OFFSET = Duration.ofMinutes(1);
+    private static final Duration REMINDER_OFFSET = Duration.ofMinutes(5);
     private static final Duration READY_OFFSET = Duration.ofSeconds(10);
     private static final Duration FORCE_FINISH_OFFSET = Duration.ofHours(6);
     private static final MatchProperties MATCH_PROPERTIES = new MatchProperties(
-            Duration.ofMinutes(10), READY_OFFSET, FORCE_FINISH_OFFSET, 10, Duration.ofMinutes(20),
+            Duration.ofMinutes(10), REMINDER_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET, 10, Duration.ofMinutes(20),
             LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
     private static final InviteProperties INVITE_PROPERTIES = new InviteProperties(
             Duration.ofMinutes(10), CLOSE_OFFSET, 1_000, 42_195, 5);
@@ -202,8 +203,8 @@ class OpenInviteRoomHandlerTest {
     }
 
     @Test
-    @DisplayName("예약 네 가지를 걸고 마감만 초대 오프셋을 쓴다")
-    void schedulesFourJobsWithInviteCloseOffset() {
+    @DisplayName("예약 다섯 가지를 걸고 마감만 초대 오프셋을 쓴다")
+    void schedulesFiveJobsWithInviteCloseOffset() {
         // given
         LocalDateTime startAt = START;
         givenOpenable(startAt);
@@ -211,8 +212,9 @@ class OpenInviteRoomHandlerTest {
         // when
         handler.handle(commandAt(userId, startAt));
 
-        // then -> 마감은 시작 1분 전, 통지·시작·강제 종료는 매칭과 같은 시점이다
+        // then -> 마감은 시작 1분 전, 리마인더·통지·시작·강제 종료는 매칭과 같은 시점이다
         verify(scheduleJobPort).schedule(ScheduledJobType.MATCH_CLOSE, ROOM_ID, startAt.minus(CLOSE_OFFSET));
+        verify(scheduleJobPort).schedule(ScheduledJobType.RUNNING_REMINDER, ROOM_ID, startAt.minus(REMINDER_OFFSET));
         verify(scheduleJobPort).schedule(ScheduledJobType.RUNNING_READY, ROOM_ID, startAt.minus(READY_OFFSET));
         verify(scheduleJobPort).schedule(ScheduledJobType.RUNNING_START, ROOM_ID, startAt);
         verify(scheduleJobPort).schedule(
