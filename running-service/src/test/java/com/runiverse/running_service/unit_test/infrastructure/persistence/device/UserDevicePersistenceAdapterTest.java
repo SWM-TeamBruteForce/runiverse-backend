@@ -21,9 +21,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -146,7 +146,8 @@ public class UserDevicePersistenceAdapterTest {
         when(entity.getPushToken()).thenReturn("token-1");
         when(entityManager.createQuery(anyString(), eq(UserDeviceJpaEntity.class))).thenReturn(typedQuery);
         when(typedQuery.setParameter(anyString(), any())).thenReturn(typedQuery);
-        when(typedQuery.getResultStream()).thenReturn(Stream.of(entity));
+        when(typedQuery.setMaxResults(1)).thenReturn(typedQuery);
+        when(typedQuery.getResultList()).thenReturn(List.of(entity));
 
         // when
         Optional<PushTarget> target = adapter.loadPushTarget(new UserId(userId));
@@ -168,7 +169,8 @@ public class UserDevicePersistenceAdapterTest {
         // given
         when(entityManager.createQuery(anyString(), eq(UserDeviceJpaEntity.class))).thenReturn(typedQuery);
         when(typedQuery.setParameter(anyString(), any())).thenReturn(typedQuery);
-        when(typedQuery.getResultStream()).thenReturn(Stream.empty());
+        when(typedQuery.setMaxResults(1)).thenReturn(typedQuery);
+        when(typedQuery.getResultList()).thenReturn(List.of());
 
         // when & then
         assertThat(adapter.loadPushTarget(new UserId(userId))).isEmpty();

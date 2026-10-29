@@ -93,7 +93,9 @@ public class UserDevicePersistenceAdapter implements UpsertUserDevicePort, Deact
                         """, UserDeviceJpaEntity.class)
                 .setParameter("userId", userId.value())
                 // 등록이 유저당 하나만 켜 두지만 DB는 강제하지 않는다 — 여럿이면 마지막에 켜진 기기로 보낸다
-                .getResultStream()
+                .setMaxResults(1)
+                .getResultList()
+                .stream()
                 .findFirst()
                 .map(entity -> new PushTarget(
                         new DeviceId(entity.getDeviceId()), new PushToken(entity.getPushToken())));
