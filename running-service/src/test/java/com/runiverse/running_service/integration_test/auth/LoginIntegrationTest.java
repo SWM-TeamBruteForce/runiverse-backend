@@ -129,7 +129,7 @@ public class LoginIntegrationTest extends IntegrationTestSupport {
         userDeviceStore.upsert(UserDevice.register(otherUserId, "device-other", "token-other", Platform.IOS, "1.1.0"));
         // when - 새 폰에서 로그인한다
         loginHandler.handle(new LoginCommand(EMAIL, PASSWORD));
-        // then — 새 폰이 등록에 실패해도 세션이 끝난 예전 폰으로 푸시가 가지 않는다. 행은 남는다
+        // then - 새 폰이 등록에 실패해도 세션이 끝난 예전 폰으로 푸시가 가지 않는다. 행은 남는다
         assertThat(userDeviceStore.activeDeviceIds(userId)).isEmpty();
         assertThat(userDeviceStore.find("device-old")).isPresent();
         assertThat(userDeviceStore.activeDeviceIds(otherUserId)).containsExactly("device-other");
@@ -144,7 +144,7 @@ public class LoginIntegrationTest extends IntegrationTestSupport {
         // when
         assertThatThrownBy(() -> loginHandler.handle(new LoginCommand(EMAIL, "WrongPassword1!")))
                 .isInstanceOf(InvalidCredentialsException.class);
-        // then — 남이 틀린 비밀번호로 시도해도 내 폰의 푸시가 꺼지지 않는다
+        // then - 남이 틀린 비밀번호로 시도해도 내 폰의 푸시가 꺼지지 않는다
         assertThat(userDeviceStore.activeDeviceIds(userId)).containsExactly("device-old");
     }
 
