@@ -46,8 +46,6 @@ class NotifyRunningReminderHandlerTest {
     private static final long ROOM_ID = 125L;
     // 예약이 제때 깼을 때 남는 시간 — 운영 오프셋과 같을 필요는 없다
     private static final Duration LEAD = Duration.ofMinutes(5);
-    // now()를 두 번 부르는 사이의 실행 시간만큼 어긋난다 — 그 폭만 허용한다
-    private static final long TOLERANCE_MS = 1_000L;
 
     @Mock
     private LoadRunningRoomPort loadRunningRoomPort;
@@ -89,18 +87,17 @@ class NotifyRunningReminderHandlerTest {
     }
 
     @Test
-    @DisplayName("유효 시간은 지금부터 시작 시각까지다")
-    void ttlLastsUntilStart() {
+    @DisplayName("만료 시각은 방의 시작 시각이다")
+    void expiresAtStart() {
         // given
-        givenRoom(room(RunningRoomType.MATCH, RunningRoomStatus.MATCHED, startAfter(LEAD),
-                session(newUserId(), true)));
+        LocalDateTime startAt = startAfter(LEAD);
+        givenRoom(room(RunningRoomType.MATCH, RunningRoomStatus.MATCHED, startAt, session(newUserId(), true)));
 
         // when
         handler.handle(new NotifyRunningReminderCommand(ROOM_ID));
 
         // then -> 꺼져 있던 폰이 시작 뒤에 켜지면 받지 않아야 한다
-        assertThat(publishedEvents(1).getFirst().message().ttl().toMillis())
-                .isBetween(LEAD.toMillis() - TOLERANCE_MS, LEAD.toMillis());
+        assertThat(publishedEvents(1).getFirst().message().expiresAt()).isEqualTo(startAt);
     }
 
     @Test

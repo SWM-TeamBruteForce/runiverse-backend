@@ -25,8 +25,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.IOException;
-import java.time.Duration;
-import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -35,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -100,29 +101,30 @@ public class FcmPushClientTest {
     }
 
     @Test
-    @DisplayName("유효 시간이 있으면 안드로이드엔 남은 시간을, APNs엔 만료 시각을 싣는다")
-    void sendPutsTtlForEachPlatform() throws Exception {
+    @DisplayName("만료 시각이 있으면 안드로이드엔 보내는 순간의 남은 시간을, APNs엔 만료 시각을 싣는다")
+    void sendPutsExpiryForEachPlatform() throws Exception {
         // given
+        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(5);
         PushMessage message = new PushMessage(
-                PushType.RUNNING_REMINDER, "제목", "본문", Map.of("runningRoomId", "125"), Duration.ofMinutes(5));
+                PushType.RUNNING_REMINDER, "제목", "본문", Map.of("runningRoomId", "125"), expiresAt);
         when(firebaseMessaging.sendAsync(any())).thenReturn(ApiFutures.immediateFuture("message-id"));
-        Instant before = Instant.now();
 
         // when
         client.send(TOKEN, message);
 
         // then -> APNs는 남은 시간이 아니라 epoch 초로 받는다
-        Instant after = Instant.now();
         String json = sentJson();
-        assertThat(json).contains("\"ttl\":\"300s\"");
+        Matcher ttl = Pattern.compile("\"ttl\":\"([\\d.]+)s\"").matcher(json);
+        assertThat(ttl.find()).isTrue();
+        assertThat(Double.parseDouble(ttl.group(1))).isBetween(299.0, 300.0);
         Matcher expiration = Pattern.compile("\"apns-expiration\":\"(\\d+)\"").matcher(json);
         assertThat(expiration.find()).isTrue();
-        assertThat(Long.parseLong(expiration.group(1))).isBetween(
-                before.plusSeconds(300).getEpochSecond(), after.plusSeconds(300).getEpochSecond());
+        assertThat(Long.parseLong(expiration.group(1)))
+                .isEqualTo(expiresAt.atZone(ZoneId.systemDefault()).toEpochSecond());
     }
 
     @Test
-    @DisplayName("유효 시간이 없으면 FCM 기본값을 쓰게 싣지 않는다")
+    @DisplayName("만료 시각이 없으면 FCM 기본값을 쓰게 싣지 않는다")
     void sendOmitsTtlWhenAbsent() throws Exception {
         // given
         when(firebaseMessaging.sendAsync(any())).thenReturn(ApiFutures.immediateFuture("message-id"));
@@ -132,6 +134,22 @@ public class FcmPushClientTest {
 
         // then
         assertThat(sentJson()).doesNotContain("\"ttl\"").doesNotContain("apns-expiration");
+    }
+
+    @Test
+    @DisplayName("보내려는 순간 만료 시각이 지났으면 보내지 않고 EXPIRED를 돌려준다")
+    void expiredMessageIsNotSent() {
+        // given -> 발송 대기 줄에서 기다리는 사이 시작 시각이 지났다
+        PushMessage message = new PushMessage(
+                PushType.RUNNING_REMINDER, "제목", "본문", Map.of("runningRoomId", "125"),
+                LocalDateTime.now().minusSeconds(1));
+
+        // when
+        PushSendStatus status = client.send(TOKEN, message);
+
+        // then -> 안드로이드 TTL 0은 "지금 닿으면 전달"이라 0으로 보내면 지난 알림이 간다
+        assertThat(status).isEqualTo(PushSendStatus.EXPIRED);
+        verifyNoInteractions(firebaseMessaging);
     }
 
     @Test

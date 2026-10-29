@@ -71,12 +71,12 @@ public class NotifyRunningReminderHandler implements NotifyRunningReminderUsecas
     }
 
     // 남은 분은 올린다 — 예약은 정시보다 조금 늦게 깨서, 내리면 5분 전 발화가 "4분 전"이 된다.
-    // 유효 시간은 시작까지다 — 꺼져 있던 폰이 시작 뒤에 켜져 지난 알림을 받지 않게 한다
+    // 만료는 시작 시각이다 — 꺼져 있던 폰이 시작 뒤에 켜져 지난 알림을 받지 않게 한다
     private static PushMessage reminderOf(RunningRoomId roomId, LocalDateTime startAt, Duration untilStart) {
         return new PushMessage(PushType.RUNNING_REMINDER,
                 TITLE.formatted(Math.ceilDiv(untilStart.toNanos(), MINUTE_NANOS)),
                 BODY.formatted(startAt.format(TIME_FORMAT)),
                 Map.of("runningRoomId", String.valueOf(roomId.value())),
-                untilStart);
+                startAt);
     }
 }

@@ -23,7 +23,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -54,7 +54,8 @@ public class SendPushHandlerTest {
     private final UUID userId = UuidCreator.getTimeOrderedEpoch();
     private final PushTarget target = new PushTarget(new DeviceId("device-1"), new PushToken("token-1"));
     private final PushMessage message = new PushMessage(
-            PushType.RUNNING_REMINDER, "제목", "본문", Map.of("runningRoomId", "125"), Duration.ofMinutes(5));
+            PushType.RUNNING_REMINDER, "제목", "본문", Map.of("runningRoomId", "125"),
+            LocalDateTime.now().plusMinutes(5));
     private final SendPushCommand command = new SendPushCommand(userId, message);
 
     @Test

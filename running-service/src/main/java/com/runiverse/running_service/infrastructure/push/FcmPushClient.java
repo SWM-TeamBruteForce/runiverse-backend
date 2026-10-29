@@ -20,6 +20,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -42,7 +43,12 @@ public class FcmPushClient implements SendPushPort {
 
     @Override
     public PushSendStatus send(PushToken pushToken, PushMessage message) {
-        ApiFuture<String> future = firebaseMessaging.sendAsync(toMessage(pushToken, message));
+        // 대기 줄에서 기다린 만큼 줄어 있어 보내는 순간에 잰다
+        Duration remaining = remainingOf(message);
+        if (remaining != null && !remaining.isPositive()) {
+            return PushSendStatus.EXPIRED;
+        }
+        ApiFuture<String> future = firebaseMessaging.sendAsync(toMessage(pushToken, message, remaining));
         try {
             future.get(SEND_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
             return PushSendStatus.SENT;
@@ -79,17 +85,16 @@ public class FcmPushClient implements SendPushPort {
     }
 
     // 안드로이드는 앱이 백그라운드여도 바로 띄우게 HIGH, iOS는 소리가 기본으로 꺼져 있어 켠다
-    private Message toMessage(PushToken pushToken, PushMessage message) {
+    private Message toMessage(PushToken pushToken, PushMessage message, Duration remaining) {
         AndroidConfig.Builder android = AndroidConfig.builder()
                 .setPriority(AndroidConfig.Priority.HIGH);
         ApnsConfig.Builder apns = ApnsConfig.builder()
                 .setAps(Aps.builder().setSound(DEFAULT_SOUND).build());
-        // 꺼져 있던 폰이 유효 시간이 지나 켜지면 받지 않는다.
+        // 꺼져 있던 폰이 만료 시각이 지나 켜지면 받지 않는다.
         // 안드로이드는 남은 시간을, APNs는 만료 시각(epoch 초)을 받는다
-        if (message.ttl() != null) {
-            android.setTtl(message.ttl().toMillis());
-            apns.putHeader(APNS_EXPIRATION_HEADER,
-                    String.valueOf(Instant.now().plus(message.ttl()).getEpochSecond()));
+        if (remaining != null) {
+            android.setTtl(remaining.toMillis());
+            apns.putHeader(APNS_EXPIRATION_HEADER, String.valueOf(expiryOf(message).getEpochSecond()));
         }
         return Message.builder()
                 .setToken(pushToken.value())
@@ -102,5 +107,14 @@ public class FcmPushClient implements SendPushPort {
                 .setAndroidConfig(android.build())
                 .setApnsConfig(apns.build())
                 .build();
+    }
+
+    private static Duration remainingOf(PushMessage message) {
+        return message.expiresAt() == null ? null : Duration.between(Instant.now(), expiryOf(message));
+    }
+
+    // 만료 시각이 KST 벽시계라 JVM 기본 타임존으로 되돌린다(DefaultTimeZoneInitializer)
+    private static Instant expiryOf(PushMessage message) {
+        return message.expiresAt().atZone(ZoneId.systemDefault()).toInstant();
     }
 }
