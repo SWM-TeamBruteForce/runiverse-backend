@@ -163,6 +163,57 @@ public class SendPushHandlerTest {
         verifyNoInteractions(deactivateStaleDevicePort);
     }
 
+    @Test
+    @DisplayName("만료 시각이 지났으면 기기·세션이 다 있어도 보내지 않는다")
+    void skipsExpiredMessage() {
+        // given -> 발송 대기 줄에서 기다리는 사이 시작 시각이 지났다
+        givenTarget();
+        givenUser(true);
+        givenSession();
+        PushMessage expired = new PushMessage(
+                PushType.RUNNING_REMINDER, "제목", "본문", Map.of("runningRoomId", "125"),
+                LocalDateTime.now().minusSeconds(1));
+
+        // when
+        handler.handle(new SendPushCommand(userId, expired));
+
+        // then
+        verifyNoInteractions(sendPushPort, deactivateStaleDevicePort);
+    }
+
+    @Test
+    @DisplayName("만료 시각이 없으면 시각과 무관하게 보낸다")
+    void sendsMessageWithoutExpiry() {
+        // given -> 늦게 닿아도 의미가 있는 알림이다
+        givenTarget();
+        givenUser(true);
+        givenSession();
+        PushMessage timeless = new PushMessage(PushType.RUNNING_REMINDER, "제목", "본문", Map.of(), null);
+        when(sendPushPort.send(any(), any())).thenReturn(PushSendStatus.SENT);
+
+        // when
+        handler.handle(new SendPushCommand(userId, timeless));
+
+        // then
+        verify(sendPushPort).send(new PushToken("token-1"), timeless);
+    }
+
+    @Test
+    @DisplayName("보내려는 순간 만료됐다는 결과면 기기를 그대로 둔다")
+    void keepsDeviceWhenExpiredAtSend() {
+        // given
+        givenTarget();
+        givenUser(true);
+        givenSession();
+        when(sendPushPort.send(any(), any())).thenReturn(PushSendStatus.EXPIRED);
+
+        // when
+        handler.handle(command);
+
+        // then -> 토큰은 멀쩡하다
+        verifyNoInteractions(deactivateStaleDevicePort);
+    }
+
     private void givenTarget() {
         when(loadPushTargetPort.loadPushTarget(new UserId(userId))).thenReturn(Optional.of(target));
     }
