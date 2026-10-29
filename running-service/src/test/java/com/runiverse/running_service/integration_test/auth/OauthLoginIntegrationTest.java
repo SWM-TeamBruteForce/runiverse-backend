@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level;
 import com.runiverse.running_service.application.auth.command.oauthlogin.OauthLoginCommand;
 import com.runiverse.running_service.application.auth.command.oauthlogin.OauthLoginHandler;
 import com.runiverse.running_service.application.auth.command.oauthlogin.OauthLoginResult;
+import com.runiverse.running_service.application.auth.command.oauthlogin.OauthSessionIssuer;
 import com.runiverse.running_service.application.auth.command.oauthlogin.OauthUserResolver;
 import com.runiverse.running_service.application.auth.command.signup.SignUpCommand;
 import com.runiverse.running_service.application.auth.command.signup.SignUpHandler;
@@ -55,18 +56,21 @@ public class OauthLoginIntegrationTest extends IntegrationTestSupport {
                 userStore,        // LoadUserByProviderPort
                 userStore,        // CheckEmailDuplicatePort
                 userIdGenerator,  // GenerateUserIdPort
-                userStore,        // SaveUserPort
-                userDeviceStore   // DeactivateUserDevicesPort
+                userStore         // SaveUserPort
+        );
+        OauthSessionIssuer oauthSessionIssuer = new OauthSessionIssuer(
+                oauthUserResolver,
+                userDeviceStore,    // DeactivateUserDevicesPort
+                tokenProvider,      // GenerateTokenPort
+                tokenProvider,      // RefreshTokenHashPort
+                refreshTokenStore   // SaveRefreshTokenHashPort
         );
         meterRegistry = new SimpleMeterRegistry();
         oauthLoginHandler = new OauthLoginHandler(
                 googleOauthClient,  // LoadGoogleProfilePort
                 kakaoOauthClient,   // LoadKakaoProfilePort
                 appleOauthClient,   // LoadAppleProfilePort
-                oauthUserResolver,
-                tokenProvider,      // GenerateTokenPort
-                tokenProvider,      // RefreshTokenHashPort
-                refreshTokenStore,  // SaveRefreshTokenHashPort
+                oauthSessionIssuer,
                 new AuthMetricAdapter(meterRegistry)  // RecordAuthMetricPort
         );
         googleOauthClient.register(GOOGLE_ID_TOKEN, new OauthProfile(Provider.GOOGLE, GOOGLE_ID, GOOGLE_EMAIL));
