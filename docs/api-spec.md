@@ -1243,7 +1243,7 @@ data:{"notificationId":912,"isRead":false,"createdAt":"2026-10-28T12:03:00","act
   - **못 보내면 건너뛰지 않고 이유를 에러로 돌려준다** — 아래 에러 표. 클라는 메시지를 그대로 보여주면 된다
   - **대기 중인 친구에게도 다시 보낼 수 있다** — 초대 상태는 `PENDING` 그대로이고 호출자의 보낸 횟수만 오른다(독촉)
   - 거절(`DECLINED`)했거나 수락 뒤 나간(`LEFT`) 친구는 같은 초대를 `PENDING`으로 되살린다. 보낸 횟수는 이어서 센다
-- **부수 효과**: 초대받은 사람에게 인앱 알림(`RUNNING_INVITED`)을 쌓고, 방 참가자에게 `INVITE_ROOM_UPDATED`를 보낸다 — 초대 현황이 `RoomInfo.invitations`에 실린다
+- **부수 효과**: 초대받은 사람에게 인앱 알림(`RUNNING_INVITED`)을 쌓고 푸시를 보내고, 방 참가자에게 `INVITE_ROOM_UPDATED`를 보낸다 — 초대 현황이 `RoomInfo.invitations`에 실린다
 - **Response `204 No Content`** — 본문이 없다. 초대 현황은 스트림의 `INVITE_ROOM_UPDATED`가 나른다
 - **에러 (404 Not Found)**: 방이 없거나, 초대 방이 아니거나, 호출자가 이 방의 현재 참가자가 아니다
 - **에러 (409 Conflict)** — 판정 순서대로
@@ -1264,7 +1264,7 @@ data:{"notificationId":912,"isRead":false,"createdAt":"2026-10-28T12:03:00","act
 
 - **화면**: 알림함 (초대 알림의 수락 버튼)
 - **Request 본문이 없다** — 받는 사람은 토큰 주체다. 경로의 방에서 나에게 온 초대를 수락한다. 누가 보냈든 초대는 받는 사람 기준으로 하나라 보낸 사람을 고르지 않는다
-- **동작**: 방을 잠그고 다시 확인한 뒤 매칭 참가와 같게 `running_players(JOINED)`·배정 세션을 만들고, 인원·방 평균 페이스를 갱신하고, 나에게 온 초대 행을 모두 `ACCEPTED`로 바꾼다. 기존 방 참가자에게 `INVITE_ROOM_UPDATED`를 보낸다. 수락한 사람은 응답을 받은 뒤 스트림을 열어 `INVITE_ROOM_ENTRANCE`를 받는다
+- **동작**: 방을 잠그고 다시 확인한 뒤 매칭 참가와 같게 `running_players(JOINED)`·배정 세션을 만들고, 인원·방 평균 페이스를 갱신하고, 나에게 온 초대 행을 모두 `ACCEPTED`로 바꾼다. 기존 방 참가자에게 `INVITE_ROOM_UPDATED`를 보낸다. 수락한 사람은 응답을 받은 뒤 스트림을 열어 `INVITE_ROOM_ENTRANCE`를 받는다. 수락한 사람을 초대했고 방에 남은 사람에게 초대 수락 푸시(`INVITATION_ACCEPTED`)를 보낸다
   - **먼저 수락한 순서로 자리가 찬다** — 방 행 잠금이 순서를 정한다
   - 매칭 쿨다운 중에도 수락할 수 있다
 - 응답을 받으면 클라는 `GET /match-rooms/stream`을 연다
