@@ -3,6 +3,7 @@ package com.runiverse.running_service.unit_test.match.application;
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.match.command.close.CloseMatchingCommand;
 import com.runiverse.running_service.application.match.command.close.CloseMatchingHandler;
+import com.runiverse.running_service.application.match.common.MatchPushRequester;
 import com.runiverse.running_service.application.match.common.MatchRoomChangedEvent;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
 import com.runiverse.running_service.application.match.port.out.LockMatchRoomPort;
@@ -60,6 +61,9 @@ class CloseMatchingHandlerTest {
     private RoomInfoAssembler roomInfoAssembler;
 
     @Mock
+    private MatchPushRequester matchPushRequester;
+
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     private CloseMatchingHandler closeMatchingHandler;
@@ -67,7 +71,7 @@ class CloseMatchingHandlerTest {
     @BeforeEach
     void setUp() {
         closeMatchingHandler = new CloseMatchingHandler(
-                lockMatchRoomPort, updateMatchRoomPort, roomInfoAssembler, eventPublisher);
+                lockMatchRoomPort, updateMatchRoomPort, roomInfoAssembler, matchPushRequester, eventPublisher);
     }
 
     @Test

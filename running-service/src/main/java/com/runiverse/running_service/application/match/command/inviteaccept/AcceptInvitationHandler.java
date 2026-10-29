@@ -11,6 +11,7 @@ import com.runiverse.running_service.application.match.port.out.CreateMatchAppli
 import com.runiverse.running_service.application.match.port.out.ExistsActiveApplicationPort;
 import com.runiverse.running_service.application.match.port.out.LockMatchRoomPort;
 import com.runiverse.running_service.application.match.port.out.UpdateMatchRoomPort;
+import com.runiverse.running_service.application.match.common.MatchPushRequester;
 import com.runiverse.running_service.application.match.common.MatchRoomChangedEvent;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
 import com.runiverse.running_service.application.match.port.out.LoadMatchPlayersPort;
@@ -46,6 +47,7 @@ public class AcceptInvitationHandler implements AcceptInvitationUsecase {
     private final CreateMatchApplicationPort createMatchApplicationPort;
     private final LoadMatchPlayersPort loadMatchPlayersPort;
     private final RoomInfoAssembler roomInfoAssembler;
+    private final MatchPushRequester matchPushRequester;
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -93,6 +95,7 @@ public class AcceptInvitationHandler implements AcceptInvitationUsecase {
         // 9. 기존 참가자에게 인원·초대 현황 변동을 알린다 — 수락한 사람은 응답을 받고 스트림을 열어 스냅샷을 받는다
         eventPublisher.publishEvent(new MatchRoomChangedEvent(
                 MatchStreamEvent.updated(roomInfoAssembler.assemble(room))));
+        matchPushRequester.invitationAccepted(room, inviteeId);
         return new AcceptInvitationResult(roomId.value());
     }
 

@@ -16,6 +16,7 @@ import com.runiverse.running_service.application.match.port.out.ExistsActiveAppl
 import com.runiverse.running_service.application.match.port.out.LockMatchRoomPort;
 import com.runiverse.running_service.application.match.port.out.UpdateMatchRoomPort;
 import com.runiverse.running_service.application.match.common.MatchProperties;
+import com.runiverse.running_service.application.match.common.MatchPushRequester;
 import com.runiverse.running_service.application.match.common.MatchRoomChangedEvent;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
 import com.runiverse.running_service.application.match.port.out.LoadMatchPlayersPort;
@@ -101,6 +102,9 @@ class AcceptInvitationHandlerTest {
     private RoomInfoAssembler roomInfoAssembler;
 
     @Mock
+    private MatchPushRequester matchPushRequester;
+
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     private AcceptInvitationHandler handler;
@@ -115,7 +119,7 @@ class AcceptInvitationHandlerTest {
                 lockMatchRoomPort, updateMatchRoomPort,
                 new InviteStartPolicy(INVITE_PROPERTIES, MATCH_PROPERTIES),
                 existsActiveApplicationPort, loadUserAvgPacePort, createMatchApplicationPort,
-                loadMatchPlayersPort, roomInfoAssembler, eventPublisher);
+                loadMatchPlayersPort, roomInfoAssembler, matchPushRequester, eventPublisher);
         host = newUser();
         otherInviter = newUser();
         invitee = newUser();

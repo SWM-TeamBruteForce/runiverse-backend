@@ -1,5 +1,6 @@
 package com.runiverse.running_service.application.match.command.close;
 
+import com.runiverse.running_service.application.match.common.MatchPushRequester;
 import com.runiverse.running_service.application.match.common.MatchRoomChangedEvent;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
 import com.runiverse.running_service.application.match.port.in.CloseMatchingUsecase;
@@ -31,6 +32,7 @@ public class CloseMatchingHandler implements CloseMatchingUsecase {
     private final LockMatchRoomPort lockMatchRoomPort;
     private final UpdateMatchRoomPort updateMatchRoomPort;
     private final RoomInfoAssembler roomInfoAssembler;
+    private final MatchPushRequester matchPushRequester;
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -63,6 +65,9 @@ public class CloseMatchingHandler implements CloseMatchingUsecase {
                     ? MatchStreamEvent.updated(roomInfo)
                     : MatchStreamEvent.started(roomInfo);
             eventPublisher.publishEvent(new MatchRoomChangedEvent(event));
+            if (room.getType() == RunningRoomType.MATCH) {
+                matchPushRequester.matchConfirmed(room);
+            }
         }
     }
 }
