@@ -43,7 +43,7 @@ public class RegisterDeviceHandler implements RegisterDeviceUsecase {
         // 4. 같은 유저의 다른 기기를 끈다
         deactivateUserDevicesPort.deactivateOthers(userDevice.getUserId(), userDevice.getDeviceId());
 
-        log.info("[기기] 등록 성공 - platform={}, appVersion={}",
+        log.info("[기기] 등록 성공 - platform={}, versionName={}",
                 userDevice.getPlatform(), userDevice.getAppVersion().value());
     }
 }
