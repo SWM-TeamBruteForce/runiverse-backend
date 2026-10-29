@@ -2,6 +2,8 @@ package com.runiverse.running_service.application.user.command.accountdeletion;
 
 import com.runiverse.running_service.application.auth.port.out.BlockAccessTokenPort;
 import com.runiverse.running_service.application.auth.port.out.DeleteRefreshTokenPort;
+import com.runiverse.running_service.application.common.port.out.LockUserPort;
+import com.runiverse.running_service.application.device.port.out.DeleteUserDevicesPort;
 import com.runiverse.running_service.application.running.command.accountdeletion.SettleRunningForAccountDeletionCommand;
 import com.runiverse.running_service.application.running.exception.RunningTrackUnavailableException;
 import com.runiverse.running_service.application.running.port.in.SettleRunningForAccountDeletionUsecase;
@@ -27,9 +29,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class DeleteAccountHandler implements DeleteAccountUsecase {
 
+    private final LockUserPort lockUserPort;
     private final LoadAccountSnapshotPort loadAccountSnapshotPort;
     private final SettleRunningForAccountDeletionUsecase settleRunningForAccountDeletionUsecase;
     private final SaveDeletedUserPort saveDeletedUserPort;
+    private final DeleteUserDevicesPort deleteUserDevicesPort;
     private final DeleteUserPort deleteUserPort;
     private final DeleteRefreshTokenPort deleteRefreshTokenPort;
     private final BlockAccessTokenPort blockAccessTokenPort;
@@ -38,6 +42,8 @@ public class DeleteAccountHandler implements DeleteAccountUsecase {
     @Override
     public void handle(DeleteAccountCommand command) {
         UserId userId = new UserId(command.userId());
+        // 0. 같은 유저의 기기 등록과 줄 세운다 — 탈퇴 중에 기기 행이 새로 생기지 않게 한다
+        lockUserPort.lock(userId);
         // 1. 지우기 전에 한 번에 읽는다 — 소셜 연동을 지운 뒤에는 login_type을 판정할 수 없다
         AccountSnapshot snapshot = loadAccountSnapshotPort.loadAccountSnapshot(userId)
                 .orElseThrow(UserNotFoundException::new);
@@ -48,8 +54,9 @@ public class DeleteAccountHandler implements DeleteAccountUsecase {
         } catch (RunningTrackUnavailableException e) {
             throw new AccountDeletionUnavailableException();
         }
-        // 3. 스냅샷을 남긴 뒤 계정을 지운다
+        // 3. 스냅샷을 남긴 뒤 계정을 지운다. 기기는 FK CASCADE에 기대지 않고 먼저 지운다
         saveDeletedUserPort.saveDeletedUser(toDeletedUser(snapshot));
+        deleteUserDevicesPort.deleteAll(userId);
         deleteUserPort.deleteUser(userId);
         // 4. 토큰을 폐기한다 — 로그아웃과 같은 두 단계
         deleteRefreshTokenPort.delete(userId);

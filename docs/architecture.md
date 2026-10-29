@@ -23,7 +23,7 @@ presentation ──▶ [port/in] application [port/out] ◀── infrastructure
 domain/
   <domain>/             aggregate · vo · exception
   common/exception/     BusinessException · ErrorCode (도메인용)
-  common/vo/            UserId · Platform (여러 도메인 공용)
+  common/vo/            UserId · Platform · VersionName (여러 도메인 공용)
 
 application/
   <domain>/command/     상태를 바꾸는 유스케이스 — 기능별 Command · Handler · Result(선택)

@@ -1,6 +1,6 @@
 package com.runiverse.running_service.application.user.command.profile;
 
-import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
+import com.runiverse.running_service.application.common.port.out.ExistsUserPort;
 import com.runiverse.running_service.application.user.exception.OnboardingNotCompletedException;
 import com.runiverse.running_service.application.user.exception.UserNotFoundException;
 import com.runiverse.running_service.application.user.port.in.ChangeMyProfileUsecase;
@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class ChangeMyProfileHandler implements ChangeMyProfileUsecase {
 
-    private final LoadUserByIdPort loadUserByIdPort;
+    private final ExistsUserPort existsUserPort;
     private final UpdateIntroductionPort updateIntroductionPort;
     private final ExistsOnboardingPort existsOnboardingPort;
     private final UpdateOnboardingPort updateOnboardingPort;
@@ -32,7 +32,9 @@ public class ChangeMyProfileHandler implements ChangeMyProfileUsecase {
         UserId userId = new UserId(command.userId());
 
         // 1. 갱신 대상이 남아 있는지 확인
-        loadUserByIdPort.loadById(userId).orElseThrow(UserNotFoundException::new);
+        if (!existsUserPort.existsById(userId)) {
+            throw new UserNotFoundException();
+        }
 
         // 2. 값 규칙은 VO가 지킨다 — 저장 전에 전부 만들어 하나라도 어긋나면 아무것도 바꾸지 않는다
         Introduction introduction = command.introduction() == null

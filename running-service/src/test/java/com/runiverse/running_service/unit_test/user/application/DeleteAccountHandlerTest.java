@@ -3,6 +3,8 @@ package com.runiverse.running_service.unit_test.user.application;
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.auth.port.out.BlockAccessTokenPort;
 import com.runiverse.running_service.application.auth.port.out.DeleteRefreshTokenPort;
+import com.runiverse.running_service.application.common.port.out.LockUserPort;
+import com.runiverse.running_service.application.device.port.out.DeleteUserDevicesPort;
 import com.runiverse.running_service.application.running.command.accountdeletion.SettleRunningForAccountDeletionCommand;
 import com.runiverse.running_service.application.running.exception.RunningTrackUnavailableException;
 import com.runiverse.running_service.application.running.port.in.SettleRunningForAccountDeletionUsecase;
@@ -54,11 +56,15 @@ public class DeleteAccountHandlerTest {
     private static final LocalDateTime JOINED_AT = LocalDateTime.of(2026, 1, 1, 9, 0);
 
     @Mock
+    private LockUserPort lockUserPort;
+    @Mock
     private LoadAccountSnapshotPort loadAccountSnapshotPort;
     @Mock
     private SettleRunningForAccountDeletionUsecase settleRunningForAccountDeletionUsecase;
     @Mock
     private SaveDeletedUserPort saveDeletedUserPort;
+    @Mock
+    private DeleteUserDevicesPort deleteUserDevicesPort;
     @Mock
     private DeleteUserPort deleteUserPort;
     @Mock
@@ -70,6 +76,24 @@ public class DeleteAccountHandlerTest {
 
     @InjectMocks
     private DeleteAccountHandler handler;
+
+    @Test
+    @DisplayName("읽기 전에 유저를 잠근다")
+    void locksUserBeforeReading() {
+        // given
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        when(loadAccountSnapshotPort.loadAccountSnapshot(new UserId(userId)))
+                .thenReturn(Optional.of(notOnboardedSnapshot(userId)));
+
+        // when
+        handler.handle(new DeleteAccountCommand(userId, ACCESS_TOKEN_ID));
+
+        // then -> 기기 등록과 줄을 서야 지운 뒤에 기기 행이 새로 생기지 않는다
+        InOrder order = inOrder(lockUserPort, loadAccountSnapshotPort, deleteUserDevicesPort);
+        order.verify(lockUserPort).lock(new UserId(userId));
+        order.verify(loadAccountSnapshotPort).loadAccountSnapshot(new UserId(userId));
+        order.verify(deleteUserDevicesPort).deleteAll(new UserId(userId));
+    }
 
     @Test
     @DisplayName("스냅샷을 남긴 뒤에 계정을 지운다")
@@ -85,6 +109,23 @@ public class DeleteAccountHandlerTest {
         // then -> 계정을 먼저 지우면 옮길 값이 사라진다
         InOrder order = inOrder(saveDeletedUserPort, deleteUserPort);
         order.verify(saveDeletedUserPort).saveDeletedUser(any());
+        order.verify(deleteUserPort).deleteUser(new UserId(userId));
+    }
+
+    @Test
+    @DisplayName("계정을 지우기 전에 기기를 먼저 지운다")
+    void deletesDevicesBeforeDeletingAccount() {
+        // given
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        when(loadAccountSnapshotPort.loadAccountSnapshot(new UserId(userId)))
+                .thenReturn(Optional.of(notOnboardedSnapshot(userId)));
+
+        // when
+        handler.handle(new DeleteAccountCommand(userId, ACCESS_TOKEN_ID));
+
+        // then -> FK가 붙지 않은 DB도 있어 CASCADE에 기대지 않는다
+        InOrder order = inOrder(deleteUserDevicesPort, deleteUserPort);
+        order.verify(deleteUserDevicesPort).deleteAll(new UserId(userId));
         order.verify(deleteUserPort).deleteUser(new UserId(userId));
     }
 
@@ -206,6 +247,7 @@ public class DeleteAccountHandlerTest {
                 handler.handle(new DeleteAccountCommand(unknownUserId, ACCESS_TOKEN_ID)))
                 .isInstanceOf(UserNotFoundException.class);
         verify(saveDeletedUserPort, never()).saveDeletedUser(any());
+        verify(deleteUserDevicesPort, never()).deleteAll(any());
         verify(deleteUserPort, never()).deleteUser(any());
     }
 

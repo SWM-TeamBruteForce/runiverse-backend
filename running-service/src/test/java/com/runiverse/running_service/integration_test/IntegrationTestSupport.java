@@ -31,6 +31,7 @@ import com.runiverse.running_service.integration_test.fake.InMemoryRefreshTokenS
 import com.runiverse.running_service.integration_test.fake.InMemoryRunningRecordStore;
 import com.runiverse.running_service.integration_test.fake.InMemoryRunningStore;
 import com.runiverse.running_service.integration_test.fake.InMemoryRunningTrackStore;
+import com.runiverse.running_service.integration_test.fake.InMemoryUserDeviceStore;
 import com.runiverse.running_service.integration_test.fake.InMemoryUserStore;
 import com.runiverse.running_service.integration_test.fake.InMemoryVerificationTicketStore;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,6 +51,7 @@ public abstract class IntegrationTestSupport {
 
     protected InMemoryUserStore userStore;
     protected InMemoryRefreshTokenStore refreshTokenStore;
+    protected InMemoryUserDeviceStore userDeviceStore;
     protected InMemoryOnboardingStore onboardingStore;
     protected InMemoryRunningStore runningStore;
     protected InMemoryRunningTrackStore runningTrackStore;
@@ -81,6 +83,7 @@ public abstract class IntegrationTestSupport {
     void setUpFakes() {
         userStore = new InMemoryUserStore();
         refreshTokenStore = new InMemoryRefreshTokenStore();
+        userDeviceStore = new InMemoryUserDeviceStore();
         onboardingStore = new InMemoryOnboardingStore();
         runningStore = new InMemoryRunningStore();
         runningTrackStore = new InMemoryRunningTrackStore();

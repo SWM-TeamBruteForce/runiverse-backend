@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level;
 import com.runiverse.running_service.application.auth.command.oauthlogin.OauthLoginCommand;
 import com.runiverse.running_service.application.auth.command.oauthlogin.OauthLoginHandler;
 import com.runiverse.running_service.application.auth.command.oauthlogin.OauthLoginResult;
+import com.runiverse.running_service.application.auth.command.oauthlogin.OauthSessionIssuer;
 import com.runiverse.running_service.application.auth.command.oauthlogin.OauthUserResolver;
 import com.runiverse.running_service.application.auth.command.signup.SignUpCommand;
 import com.runiverse.running_service.application.auth.command.signup.SignUpHandler;
@@ -11,6 +12,8 @@ import com.runiverse.running_service.application.auth.exception.EmailAlreadyExis
 import com.runiverse.running_service.application.auth.exception.OauthLoginFailedException;
 import com.runiverse.running_service.application.auth.exception.UnsupportedProviderException;
 import com.runiverse.running_service.application.auth.port.out.OauthProfile;
+import com.runiverse.running_service.domain.common.vo.Platform;
+import com.runiverse.running_service.domain.device.UserDevice;
 import com.runiverse.running_service.domain.user.User;
 import com.runiverse.running_service.domain.user.vo.Provider;
 import com.runiverse.running_service.infrastructure.metrics.auth.AuthMetricAdapter;
@@ -55,15 +58,19 @@ public class OauthLoginIntegrationTest extends IntegrationTestSupport {
                 userIdGenerator,  // GenerateUserIdPort
                 userStore         // SaveUserPort
         );
+        OauthSessionIssuer oauthSessionIssuer = new OauthSessionIssuer(
+                oauthUserResolver,
+                userDeviceStore,    // DeactivateUserDevicesPort
+                tokenProvider,      // GenerateTokenPort
+                tokenProvider,      // RefreshTokenHashPort
+                refreshTokenStore   // SaveRefreshTokenHashPort
+        );
         meterRegistry = new SimpleMeterRegistry();
         oauthLoginHandler = new OauthLoginHandler(
                 googleOauthClient,  // LoadGoogleProfilePort
                 kakaoOauthClient,   // LoadKakaoProfilePort
                 appleOauthClient,   // LoadAppleProfilePort
-                oauthUserResolver,
-                tokenProvider,      // GenerateTokenPort
-                tokenProvider,      // RefreshTokenHashPort
-                refreshTokenStore,  // SaveRefreshTokenHashPort
+                oauthSessionIssuer,
                 new AuthMetricAdapter(meterRegistry)  // RecordAuthMetricPort
         );
         googleOauthClient.register(GOOGLE_ID_TOKEN, new OauthProfile(Provider.GOOGLE, GOOGLE_ID, GOOGLE_EMAIL));
@@ -127,6 +134,20 @@ public class OauthLoginIntegrationTest extends IntegrationTestSupport {
         assertThat(second.userId()).isEqualTo(first.userId());
         assertThat(userStore.size()).isEqualTo(1);
         assertThat(second.refreshToken()).isNotEqualTo(first.refreshToken());
+    }
+
+    @Test
+    @DisplayName("기존 회원이 소셜 로그인하면 그 유저의 기기가 전부 꺼진다")
+    void oauthLoginDeactivatesOwnDevices() {
+        // given - 예전 폰에 등록해 둔 기기가 켜져 있다
+        OauthLoginResult first = login();
+        userDeviceStore.upsert(UserDevice.register(
+                first.userId(), "device-old", "token-old", Platform.ANDROID, "1.1.0"));
+        // when - 새 폰에서 다시 소셜 로그인한다
+        login();
+        // then — 새 폰이 등록에 실패해도 세션이 끝난 예전 폰으로 푸시가 가지 않는다
+        assertThat(userDeviceStore.activeDeviceIds(first.userId())).isEmpty();
+        assertThat(userDeviceStore.find("device-old")).isPresent();
     }
 
     @Test

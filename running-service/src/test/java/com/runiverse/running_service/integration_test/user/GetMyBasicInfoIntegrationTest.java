@@ -3,6 +3,7 @@ package com.runiverse.running_service.integration_test.user;
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.auth.command.oauthlogin.OauthLoginCommand;
 import com.runiverse.running_service.application.auth.command.oauthlogin.OauthLoginHandler;
+import com.runiverse.running_service.application.auth.command.oauthlogin.OauthSessionIssuer;
 import com.runiverse.running_service.application.auth.command.oauthlogin.OauthUserResolver;
 import com.runiverse.running_service.application.auth.command.signup.SignUpCommand;
 import com.runiverse.running_service.application.auth.command.signup.SignUpHandler;
@@ -61,14 +62,18 @@ public class GetMyBasicInfoIntegrationTest extends IntegrationTestSupport {
                 userIdGenerator,  // GenerateUserIdPort
                 userStore         // SaveUserPort
         );
+        OauthSessionIssuer oauthSessionIssuer = new OauthSessionIssuer(
+                oauthUserResolver,
+                userDeviceStore,   // DeactivateUserDevicesPort
+                tokenProvider,     // GenerateTokenPort
+                tokenProvider,     // RefreshTokenHashPort
+                refreshTokenStore  // SaveRefreshTokenHashPort
+        );
         oauthLoginHandler = new OauthLoginHandler(
                 googleOauthClient, // LoadGoogleProfilePort
                 kakaoOauthClient,  // LoadKakaoProfilePort
                 appleOauthClient,  // LoadAppleProfilePort
-                oauthUserResolver,
-                tokenProvider,     // GenerateTokenPort
-                tokenProvider,     // RefreshTokenHashPort
-                refreshTokenStore, // SaveRefreshTokenHashPort
+                oauthSessionIssuer,
                 new AuthMetricAdapter(new SimpleMeterRegistry())  // RecordAuthMetricPort
         );
         completeOnboardingHandler = new CompleteOnboardingHandler(

@@ -16,6 +16,7 @@ public final class LogTag {
             "running", "[러닝]",
             "notification", "[알림]",
             "app", "[앱]",
+            "device", "[기기]",
             RequestDomain.COMMON, "[공통]"
     );
 

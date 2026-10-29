@@ -4,6 +4,7 @@ import com.runiverse.running_service.observability.RequestDomain;
 import com.runiverse.running_service.presentation.app.controller.AppController;
 import com.runiverse.running_service.presentation.auth.controller.AuthController;
 import com.runiverse.running_service.presentation.common.exception.GlobalExceptionHandler;
+import com.runiverse.running_service.presentation.device.controller.DeviceController;
 import com.runiverse.running_service.presentation.match.controller.MatchRoomController;
 import com.runiverse.running_service.presentation.notification.controller.UserNotificationController;
 import com.runiverse.running_service.presentation.relationship.controller.RelationshipController;
@@ -34,7 +35,8 @@ class RequestDomainTest {
                 Arguments.of(MatchRoomController.class, "match"),
                 Arguments.of(RunningRoomController.class, "running"),
                 Arguments.of(UserNotificationController.class, "notification"),
-                Arguments.of(AppController.class, "app")
+                Arguments.of(AppController.class, "app"),
+                Arguments.of(DeviceController.class, "device")
         );
     }
 

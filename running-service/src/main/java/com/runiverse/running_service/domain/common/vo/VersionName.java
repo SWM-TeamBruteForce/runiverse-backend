@@ -1,7 +1,7 @@
-package com.runiverse.running_service.domain.app.vo;
+package com.runiverse.running_service.domain.common.vo;
 
-import com.runiverse.running_service.domain.app.exception.InvalidVersionNameFormatException;
-import com.runiverse.running_service.domain.app.exception.VersionNameRequiredException;
+import com.runiverse.running_service.domain.common.exception.InvalidVersionNameFormatException;
+import com.runiverse.running_service.domain.common.exception.VersionNameRequiredException;
 
 import java.util.Arrays;
 import java.util.regex.Pattern;

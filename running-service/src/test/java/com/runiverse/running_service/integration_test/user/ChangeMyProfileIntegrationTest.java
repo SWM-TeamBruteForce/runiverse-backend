@@ -54,7 +54,7 @@ public class ChangeMyProfileIntegrationTest extends IntegrationTestSupport {
                 onboardingStore   // SaveOnboardingPort
         );
         changeMyProfileHandler = new ChangeMyProfileHandler(
-                userStore,        // LoadUserByIdPort
+                userStore,        // ExistsUserPort
                 userStore,        // UpdateIntroductionPort
                 onboardingStore,  // LoadOnboardingPort
                 onboardingStore   // UpdateOnboardingPort

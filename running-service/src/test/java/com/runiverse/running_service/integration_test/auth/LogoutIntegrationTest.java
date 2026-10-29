@@ -10,6 +10,8 @@ import com.runiverse.running_service.application.auth.command.refresh.RefreshHan
 import com.runiverse.running_service.application.auth.command.signup.SignUpCommand;
 import com.runiverse.running_service.application.auth.command.signup.SignUpHandler;
 import com.runiverse.running_service.application.auth.exception.InvalidRefreshTokenException;
+import com.runiverse.running_service.application.device.command.register.RegisterDeviceCommand;
+import com.runiverse.running_service.application.device.command.register.RegisterDeviceHandler;
 import com.runiverse.running_service.integration_test.IntegrationTestSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,17 +33,25 @@ public class LogoutIntegrationTest extends IntegrationTestSupport {
     private LoginHandler loginHandler;
     private RefreshHandler refreshHandler;
     private LogoutHandler logoutHandler;
+    private RegisterDeviceHandler registerDeviceHandler;
 
     @BeforeEach
     void setUp() {
         signUpHandler = newSignUpHandler();
+        registerDeviceHandler = new RegisterDeviceHandler(
+                userId -> { },     // LockUserPort — 한 스레드라 줄 세울 일이 없다
+                userStore,         // ExistsUserPort
+                userDeviceStore,   // UpsertUserDevicePort
+                userDeviceStore    // DeactivateUserDevicesPort
+        );
         loginHandler = new LoginHandler(
                 userStore, passwordHasher, tokenProvider,
-                tokenProvider, refreshTokenStore);
+                tokenProvider, refreshTokenStore, userDeviceStore);
         refreshHandler = new RefreshHandler(
                 tokenProvider, refreshTokenStore, tokenProvider,
                 refreshTokenStore, tokenProvider, refreshTokenStore);
         logoutHandler = new LogoutHandler(
+                userDeviceStore,       // DeactivateUserDevicesPort
                 refreshTokenStore,     // DeleteRefreshTokenPort
                 accessTokenBlacklist   // BlockAccessTokenPort
         );
@@ -62,6 +72,27 @@ public class LogoutIntegrationTest extends IntegrationTestSupport {
         // then
         assertThat(refreshTokenStore.loadById(login.userId())).isEmpty();
         assertThat(accessTokenBlacklist.isBlocked(ACCESS_TOKEN_ID)).isTrue();
+    }
+
+    @Test
+    @DisplayName("로그아웃하면 그 유저의 기기는 꺼지고 다른 유저의 기기는 그대로다")
+    void logoutDeactivatesOnlyOwnDevices() {
+        // given
+        LoginResult mine = signUpAndLogin();
+        UUID otherUserId = signUpHandler.handle(
+                new SignUpCommand(issueVerificationTicket("other@runiverse.com"), PASSWORD)).userId();
+        registerDeviceHandler.handle(
+                new RegisterDeviceCommand(mine.userId(), "device-mine", "token-mine", "IOS", "1.1.0"));
+        registerDeviceHandler.handle(
+                new RegisterDeviceCommand(otherUserId, "device-other", "token-other", "ANDROID", "1.1.0"));
+
+        // when
+        logoutHandler.handle(new LogoutCommand(mine.userId(), ACCESS_TOKEN_ID));
+
+        // then -> 기기 행은 남아 다시 로그인해 등록하면 켜진다
+        assertThat(userDeviceStore.activeDeviceIds(mine.userId())).isEmpty();
+        assertThat(userDeviceStore.find("device-mine")).isPresent();
+        assertThat(userDeviceStore.activeDeviceIds(otherUserId)).containsExactly("device-other");
     }
 
     @Test

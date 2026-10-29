@@ -59,7 +59,7 @@ runiverse.<도메인>.<기능 폴더>.<동작>
 
 | 쓴다 | 쓰지 않는다 |
 |---|---|
-| `domain=auth\|user\|relationship\|match\|running\|scheduling\|notification\|app\|common` | `userId`, `roomId`, `requestId`, `scheduledJobId` |
+| `domain=auth\|user\|relationship\|match\|running\|scheduling\|notification\|app\|device\|common` | `userId`, `roomId`, `requestId`, `scheduledJobId` |
 | `result=success\|failure` | 이메일, 좌표, 예외 메시지 |
 | `reason=<아래 목록>` | 요청 경로 원문 — 템플릿(`/users/{userId}/profile`)만 |
 | `decision=<메트릭별 목록>` — 성공·실패가 아닌 업무 판정의 갈래 | |
