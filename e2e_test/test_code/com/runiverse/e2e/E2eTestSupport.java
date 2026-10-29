@@ -274,7 +274,7 @@ public abstract class E2eTestSupport {
 
     /**
      * API로 볼 수 없는 저장 결과를 DB에서 직접 읽는다 — 행마다 한 줄, 열은 '|'로 잇는다.
-     * 조회 API가 아직 없는 기능(인앱 알림 쌓기)이 실제 스키마에 들어갔는지 확인할 때 쓴다.
+     * 응답에 그대로 드러나지 않는 저장값(인앱 알림 행의 payload·읽음·갱신 시각)을 확인할 때 쓴다.
      */
     protected List<String> querySql(String sql) {
         String output = runPsql(sql, "--tuples-only", "--no-align");

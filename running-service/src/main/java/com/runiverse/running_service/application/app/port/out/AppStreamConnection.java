@@ -11,7 +11,7 @@ public interface AppStreamConnection {
 
     // 마지막 연결이 이긴다 — 밀려난 쪽을 닫을 때 사용
     void closeSuperseded();
-    
+
     // 이벤트를 실어 보낸다. 와이어 형식(이벤트 이름·JSON)은 구현체가 정한다
     void send(AppStreamEvent event);
 }

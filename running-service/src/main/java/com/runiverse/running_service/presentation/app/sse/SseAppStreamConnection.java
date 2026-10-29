@@ -47,7 +47,7 @@ public class SseAppStreamConnection implements AppStreamConnection {
                 .data(bodyOf(event), MediaType.APPLICATION_JSON));
     }
 
-    // 알림은 목록(2-4) 항목에서 type만 뺀 모양이다 — 종류는 event 이름이 말한다
+    // 알림은 목록 항목에서 type만 뺀 모양이다 — 종류는 event 이름이 말한다
     private Object bodyOf(AppStreamEvent event) {
         return switch (event.type()) {
             case FRIEND_REQUESTED, FRIEND_ACCEPTED, RUNNING_INVITED ->

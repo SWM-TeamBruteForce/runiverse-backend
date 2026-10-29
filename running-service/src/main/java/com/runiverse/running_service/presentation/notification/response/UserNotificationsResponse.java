@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-// 마지막 페이지면 nextCursor는 null. unreadCount는 페이지와 무관한 전체 안 읽은 수다 — 앱 진입 때 배지를 여기서 그린다
+// 마지막 페이지면 nextCursor는 null. unreadCount는 페이지와 무관한 보관 기간 안의 전체 안 읽은 수다 — 앱 진입 때 배지를 여기서 그린다
 public record UserNotificationsResponse(List<ItemResponse> items, String nextCursor, long unreadCount) {
 
     public static UserNotificationsResponse from(GetUserNotificationsResult result) {
@@ -39,7 +39,7 @@ public record UserNotificationsResponse(List<ItemResponse> items, String nextCur
         }
     }
 
-    // 탈퇴했으면 §0 탈퇴 유저 형식이고 relationshipType은 null이다
+    // 탈퇴했으면 닉네임 "탈퇴한 사용자"·사진 null·isDeleted true이고 relationshipType도 null이다
     public record ActorResponse(
             UUID userId,
             String nickname,

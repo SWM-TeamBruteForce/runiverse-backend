@@ -12,7 +12,8 @@ public final class RequestDomain {
 
     public static final String COMMON = "common";
     private static final String PRESENTATION_PACKAGE = "com.runiverse.running_service.presentation.";
-    private static final Set<String> DOMAINS = Set.of("auth", "user", "match", "running", "app");
+    private static final Set<String> DOMAINS =
+            Set.of("auth", "user", "relationship", "match", "running", "notification", "app");
 
     private RequestDomain() {
     }

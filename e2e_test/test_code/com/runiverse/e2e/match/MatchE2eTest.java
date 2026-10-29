@@ -1,8 +1,8 @@
 package com.runiverse.e2e.match;
 
 import com.runiverse.e2e.E2eTestSupport;
-import com.runiverse.e2e.SseStream;
 import com.runiverse.e2e.RunningWebSocket;
+import com.runiverse.e2e.SseStream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

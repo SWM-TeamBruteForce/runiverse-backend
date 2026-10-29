@@ -97,7 +97,7 @@ public class GetUserProfileHandlerTest {
         // when
         GetUserProfileResult result = handler.handle(new GetUserProfileQuery(viewerId, targetUserId));
 
-        // then -> 타인이면 친구 버튼을 가르는 값이 필요하다(10-6 표)
+        // then -> 타인이면 친구 버튼을 가르는 값이 필요하다
         assertThat(result.userId()).isEqualTo(targetUserId);
         assertThat(result.isMe()).isFalse();
         assertThat(result.nickname()).isEqualTo(NICKNAME);

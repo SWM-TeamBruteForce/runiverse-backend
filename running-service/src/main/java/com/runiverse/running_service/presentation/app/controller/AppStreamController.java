@@ -5,8 +5,8 @@ import com.runiverse.running_service.application.app.command.stream.OpenAppStrea
 import com.runiverse.running_service.application.app.port.in.CloseAppStreamUsecase;
 import com.runiverse.running_service.application.app.port.in.OpenAppStreamUsecase;
 import com.runiverse.running_service.application.app.port.out.AppStreamConnection;
-import com.runiverse.running_service.presentation.app.sse.SseAppStreamConnection;
 import com.runiverse.running_service.presentation.app.sse.AppStreamProperties;
+import com.runiverse.running_service.presentation.app.sse.SseAppStreamConnection;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;

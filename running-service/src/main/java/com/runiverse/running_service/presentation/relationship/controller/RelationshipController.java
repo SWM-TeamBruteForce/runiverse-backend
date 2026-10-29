@@ -53,7 +53,7 @@ public class RelationshipController {
     // UserId VO가 받는 UUIDv7만 — UUID 타입으로 받으면 1-1-1-1-1 같은 값도 변환된다
     private static final String USER_ID_FORMAT =
             "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
-    // api-convention 커서 페이지네이션 — 기본 20, 넘으면 50으로 줄인다
+    // 커서 페이지네이션 — 기본 20, 넘으면 50으로 줄인다
     private static final int MAX_LIMIT = 50;
     private final RequestFriendUsecase requestFriendUsecase;
     private final AcceptFriendRequestUsecase acceptFriendRequestUsecase;

@@ -13,9 +13,9 @@ import com.runiverse.running_service.application.user.query.profile.GetUserProfi
 import com.runiverse.running_service.application.user.query.profile.GetUserProfileQuery;
 import com.runiverse.running_service.application.user.query.profile.GetUserProfileResult;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
-import com.runiverse.running_service.integration_test.fake.InMemoryUserRelationshipStore;
 import com.runiverse.running_service.integration_test.IntegrationTestSupport;
 import com.runiverse.running_service.integration_test.fake.FakeViewUrlGenerator;
+import com.runiverse.running_service.integration_test.fake.InMemoryUserRelationshipStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

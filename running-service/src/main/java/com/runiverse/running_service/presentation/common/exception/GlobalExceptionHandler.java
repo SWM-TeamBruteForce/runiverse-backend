@@ -358,7 +358,7 @@ public class GlobalExceptionHandler {
                  RUNNING_ROOM_FULL -> HttpStatus.CONFLICT;
         };
     }
-    
+
     private HttpStatus toStatus(NotificationErrorCode code) {
         return switch (code) {
             case INVALID_NOTIFICATION_CURSOR -> HttpStatus.BAD_REQUEST;

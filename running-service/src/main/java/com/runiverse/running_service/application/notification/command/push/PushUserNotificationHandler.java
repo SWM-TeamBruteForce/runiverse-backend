@@ -33,7 +33,7 @@ public class PushUserNotificationHandler implements PushUserNotificationUsecase 
             return;
         }
 
-        // 2. 커밋 뒤라 지금 상태로 조립된다 — 목록(2-4) 항목과 같은 모양이다
+        // 2. 커밋 뒤라 지금 상태로 조립된다 — 알림 목록 항목과 같은 모양이다
         Optional<GetUserNotificationsResult.Item> item =
                 userNotificationItemReader.read(userId, command.notificationId());
         if (item.isEmpty()) {

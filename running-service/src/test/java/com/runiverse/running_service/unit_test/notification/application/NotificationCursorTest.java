@@ -43,7 +43,7 @@ class NotificationCursorTest {
     }
 
     @ParameterizedTest(name = "{0}")
-    @ValueSource(strings = {"abc", "0", "-5", ""})
+    @ValueSource(strings = {"abc", "0", "-5", "", "\u0000", "912\u0000"})
     @DisplayName("풀어도 1 이상의 숫자가 아니면 400으로 거절한다")
     void rejectsNonPositiveOrNonNumeric(String raw) {
         // given

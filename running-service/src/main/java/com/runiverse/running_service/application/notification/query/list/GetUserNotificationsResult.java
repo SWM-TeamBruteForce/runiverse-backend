@@ -22,7 +22,7 @@ public record GetUserNotificationsResult(List<Item> items, String nextCursor, lo
 
     }
 
-    // 알림을 일으킨 사람 — 탈퇴했으면 §0 탈퇴 유저 형식이고 관계는 싣지 않는다
+    // 알림을 일으킨 사람 — 탈퇴했으면 공통 탈퇴 유저 형식이고 관계는 싣지 않는다
     public record Actor(
             UUID userId,
             String nickname,                    // 탈퇴했으면 "탈퇴한 사용자"

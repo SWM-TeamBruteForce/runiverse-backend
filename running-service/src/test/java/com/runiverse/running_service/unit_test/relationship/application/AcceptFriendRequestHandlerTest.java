@@ -1,10 +1,10 @@
 package com.runiverse.running_service.unit_test.relationship.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.common.port.out.SendUserNotificationPort;
 import com.runiverse.running_service.application.relationship.command.accept.AcceptFriendRequestCommand;
 import com.runiverse.running_service.application.relationship.command.accept.AcceptFriendRequestHandler;
 import com.runiverse.running_service.application.relationship.command.accept.AcceptFriendRequestResult;
-import com.runiverse.running_service.application.common.port.out.SendUserNotificationPort;
 import com.runiverse.running_service.application.relationship.common.FriendRequestAcceptor;
 import com.runiverse.running_service.application.relationship.exception.FriendRequestNotFoundException;
 import com.runiverse.running_service.application.relationship.port.out.LoadUserRelationshipPort;
