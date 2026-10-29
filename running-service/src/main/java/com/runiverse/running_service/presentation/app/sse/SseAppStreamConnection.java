@@ -14,7 +14,7 @@ public class SseAppStreamConnection implements AppStreamConnection {
 
     private final String id;
     private final SseEmitter emitter;
-    // keep-alive 스케줄러와 알림 푸시(Redis 리스너 스레드)가 동시에 쓴다.
+    // keep-alive 스케줄러와 알림 전송(Redis 리스너 스레드)이 동시에 쓴다.
     // SseEmitter는 동시 전송을 막아주지 않아 프레임이 섞이면 스트림 전체가 깨진다
     private final Object sendLock = new Object();
 

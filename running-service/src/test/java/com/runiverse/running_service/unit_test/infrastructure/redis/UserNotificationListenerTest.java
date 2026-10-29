@@ -49,8 +49,8 @@ class UserNotificationListenerTest {
     }
 
     @Test
-    @DisplayName("받은 메시지의 받는 사람과 알림 ID로 푸시를 부른다")
-    void pushesFromMessage() {
+    @DisplayName("받은 메시지의 받는 사람과 알림 ID로 스트림 전송을 부른다")
+    void broadcastsFromMessage() {
         // given -> 발행 어댑터가 싣는 모양 그대로다
         String body = "{\"userId\":\"" + RECIPIENT_ID + "\",\"notificationId\":912}";
 

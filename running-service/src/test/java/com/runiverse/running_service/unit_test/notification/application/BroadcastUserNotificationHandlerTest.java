@@ -34,8 +34,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("알림 푸시 단위 테스트")
-class PushUserNotificationHandlerTest {
+@DisplayName("알림 스트림 전송 단위 테스트")
+class BroadcastUserNotificationHandlerTest {
 
     private static final UUID ME = UuidCreator.getTimeOrderedEpoch();
     private static final UUID CHULSU = UuidCreator.getTimeOrderedEpoch();
@@ -96,7 +96,8 @@ class PushUserNotificationHandlerTest {
         // then
         verify(connection).send(AppStreamEvent.notification(ITEM));
         assertThat(AppStreamEvent.notification(ITEM).type().name()).isEqualTo("FRIEND_REQUESTED");
-        assertThat(log.messages(Level.INFO)).containsExactly("[알림] 푸시 성공 - notificationId=912, connectionId=conn-1");
+        assertThat(log.messages(Level.INFO))
+                .containsExactly("[알림] 스트림 전송 성공 - notificationId=912, connectionId=conn-1");
     }
 
     @Test
@@ -111,7 +112,7 @@ class PushUserNotificationHandlerTest {
 
         // then
         verify(connection, never()).send(any());
-        assertThat(log.messages(Level.WARN)).containsExactly("[알림] 푸시 건너뜀: 알림 없음 - notificationId=912");
+        assertThat(log.messages(Level.WARN)).containsExactly("[알림] 스트림 전송 건너뜀: 알림 없음 - notificationId=912");
     }
 
     @Test

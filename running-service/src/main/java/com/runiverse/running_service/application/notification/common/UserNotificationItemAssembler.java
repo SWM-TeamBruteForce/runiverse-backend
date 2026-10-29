@@ -26,8 +26,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-// 알림 행에 지금 상태(사람·관계·초대)를 붙여 항목으로 만든다 — 알림 목록과 스트림 푸시가 함께 쓴다.
-// 한 곳에서 만들어야 목록 항목과 푸시 이벤트의 모양이 어긋나지 않는다
+// 알림 행에 지금 상태(사람·관계·초대)를 붙여 항목으로 만든다 — 알림 목록과 스트림 전송이 함께 쓴다.
+// 한 곳에서 만들어야 목록 항목과 스트림 이벤트의 모양이 어긋나지 않는다
 @Slf4j
 @Component
 @RequiredArgsConstructor

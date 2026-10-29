@@ -82,7 +82,7 @@ class GetUserNotificationsHandlerTest {
         // when
         GetUserNotificationsResult result = handler.handle(new GetUserNotificationsQuery(ME, null, LIMIT));
 
-        // then -> 스트림 푸시와 같은 조립기를 써 모양이 어긋나지 않는다
+        // then -> 스트림 전송과 같은 조립기를 써 모양이 어긋나지 않는다
         assertThat(result.items()).containsExactly(ITEM);
         assertThat(result.nextCursor()).isNull();
         assertThat(result.unreadCount()).isEqualTo(3L);
