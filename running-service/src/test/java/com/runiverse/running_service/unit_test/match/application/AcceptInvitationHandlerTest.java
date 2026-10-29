@@ -234,6 +234,21 @@ class AcceptInvitationHandlerTest {
             assertThat(room.getAvgPace()).hasValueSatisfying(pace ->
                     assertThat(pace.secondsPerKm()).isEqualTo(330));
         }
+
+        @Test
+        @DisplayName("수락하면 수락한 사람을 넘겨 초대한 사람에게 갈 푸시를 요청한다")
+        void requestsInvitationAcceptedPush() {
+            // given
+            RunningRoom room = pendingRoom(1);
+            givenLocked(room);
+            givenJoinable();
+
+            // when
+            accept();
+
+            // then -> 받는 사람은 요청기가 자리를 잡은 뒤의 방으로 고른다
+            verify(matchPushRequester).invitationAccepted(room, invitee);
+        }
     }
 
     @Nested
@@ -327,6 +342,18 @@ class AcceptInvitationHandlerTest {
                     .isInstanceOf(RunningRoomFullException.class);
             assertThat(room.invitationStatusOf(invitee)).contains(RoomInvitationStatus.PENDING);
             verifyNoInteractions(existsActiveApplicationPort, createMatchApplicationPort, updateMatchRoomPort);
+        }
+
+        @Test
+        @DisplayName("수락이 거절되면 초대 수락 푸시를 요청하지 않는다")
+        void skipsPushWhenRejected() {
+            // given
+            givenLocked(pendingRoom(4));
+
+            // when & then
+            assertThatThrownBy(AcceptInvitationHandlerTest.this::accept)
+                    .isInstanceOf(RunningRoomFullException.class);
+            verifyNoInteractions(matchPushRequester);
         }
 
         @Test

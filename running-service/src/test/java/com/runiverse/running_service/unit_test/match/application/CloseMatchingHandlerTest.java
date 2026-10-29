@@ -165,6 +165,46 @@ class CloseMatchingHandlerTest {
     }
 
     @Test
+    @DisplayName("매칭 방을 확정하면 남은 사람에게 확정 푸시를 요청한다")
+    void requestsMatchConfirmedPush() {
+        // given
+        RunningRoom room = room(RunningRoomStatus.MATCHING, 3);
+        givenRoom(room);
+
+        // when
+        closeMatchingHandler.handle(new CloseMatchingCommand(ROOM_ID));
+
+        // then
+        verify(matchPushRequester).matchConfirmed(room);
+    }
+
+    @Test
+    @DisplayName("초대 방 마감은 확정 푸시를 요청하지 않는다")
+    void skipsPushOnInviteRoomClose() {
+        // given -> 매칭 성사가 아니라 더 이상 초대받지 않을 뿐이다
+        givenRoom(room(RunningRoomType.INVITE, RunningRoomStatus.MATCHING, 2));
+
+        // when
+        closeMatchingHandler.handle(new CloseMatchingCommand(ROOM_ID));
+
+        // then
+        verifyNoInteractions(matchPushRequester);
+    }
+
+    @Test
+    @DisplayName("이미 확정된 방이 다시 깨도 확정 푸시를 다시 요청하지 않는다")
+    void skipsPushOnAlreadyClosedRoom() {
+        // given
+        givenRoom(room(RunningRoomStatus.MATCHED, 3));
+
+        // when
+        closeMatchingHandler.handle(new CloseMatchingCommand(ROOM_ID));
+
+        // then
+        verifyNoInteractions(matchPushRequester);
+    }
+
+    @Test
     @DisplayName("방이 없으면 아무것도 하지 않는다")
     void skipsWhenRoomIsGone() {
         // given -> 예약만 남고 방이 사라진 경우. 예약을 소비한 것으로 보고 끝낸다
