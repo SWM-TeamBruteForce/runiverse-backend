@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 // 받는 사람은 요청자가 아닐 수 있어 로그에 targetUserId로 남긴다
@@ -60,9 +61,16 @@ public class SendPushHandler implements SendPushUsecase {
                     userId.value(), pushType);
             return;
         }
-        // 4. 보낸다. 실패 원인은 발송 어댑터가 남긴다
+        // 4. 만료 시각이 지났으면 보내지 않는다 — 발송 대기 줄에서 기다리는 사이 지났을 수 있다
+        LocalDateTime expiresAt = command.message().expiresAt();
+        if (expiresAt != null && !LocalDateTime.now().isBefore(expiresAt)) {
+            log.info("[기기] 푸시 발송 건너뜀: 만료 시각 지남 - targetUserId={}, pushType={}",
+                    userId.value(), pushType);
+            return;
+        }
+        // 5. 보낸다. 실패 원인은 발송 어댑터가 남긴다
         PushSendStatus status = sendPushPort.send(target.get().pushToken(), command.message());
-        // 5. 다시 보내도 닿지 않는 토큰이면 기기를 끈다
+        // 6. 다시 보내도 닿지 않는 토큰이면 기기를 끈다
         switch (status) {
             case SENT -> log.info("[기기] 푸시 발송 성공 - targetUserId={}, pushType={}", userId.value(), pushType);
             case UNREGISTERED -> {
