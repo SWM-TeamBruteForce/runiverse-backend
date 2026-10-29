@@ -73,6 +73,8 @@ public class SendPushHandler implements SendPushUsecase {
             case FAILED -> {
                 // 원인은 발송 어댑터가 ERROR로 남겼다 — 기기는 그대로 두고 다음 푸시에 다시 시도된다
             }
+            case EXPIRED -> log.info("[기기] 푸시 발송 건너뜀: 만료 시각 지남 - targetUserId={}, pushType={}",
+                    userId.value(), pushType);
         }
     }
 }

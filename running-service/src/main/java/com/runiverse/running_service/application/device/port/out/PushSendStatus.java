@@ -4,5 +4,7 @@ public enum PushSendStatus {
     SENT,
     // 앱이 지워졌거나 토큰이 만료돼 다시 보내도 닿지 않는다
     UNREGISTERED,
-    FAILED
+    FAILED,
+    // 만료 시각이 지나 보내지 않았다
+    EXPIRED
 }
