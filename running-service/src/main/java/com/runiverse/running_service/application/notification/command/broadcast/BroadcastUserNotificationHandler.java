@@ -1,10 +1,10 @@
-package com.runiverse.running_service.application.notification.command.push;
+package com.runiverse.running_service.application.notification.command.broadcast;
 
 import com.runiverse.running_service.application.app.port.out.AppStreamConnection;
 import com.runiverse.running_service.application.app.port.out.AppStreamEvent;
 import com.runiverse.running_service.application.app.port.out.AppStreamPort;
 import com.runiverse.running_service.application.notification.common.UserNotificationItemReader;
-import com.runiverse.running_service.application.notification.port.in.PushUserNotificationUsecase;
+import com.runiverse.running_service.application.notification.port.in.BroadcastUserNotificationUsecase;
 import com.runiverse.running_service.application.notification.query.list.GetUserNotificationsResult;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import lombok.RequiredArgsConstructor;
@@ -18,13 +18,13 @@ import java.util.Optional;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class PushUserNotificationHandler implements PushUserNotificationUsecase {
+public class BroadcastUserNotificationHandler implements BroadcastUserNotificationUsecase {
 
     private final AppStreamPort appStreamPort;
     private final UserNotificationItemReader userNotificationItemReader;
 
     @Override
-    public void handle(PushUserNotificationCommand command) {
+    public void handle(BroadcastUserNotificationCommand command) {
         UserId userId = new UserId(command.userId());
 
         // 1. 이 인스턴스에 붙어 있지 않으면 끝 — 붙은 인스턴스가 따로 보낸다. 로그도 남기지 않는다

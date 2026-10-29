@@ -2,8 +2,8 @@ package com.runiverse.running_service.unit_test.infrastructure.redis;
 
 import ch.qos.logback.classic.Level;
 import com.github.f4b6a3.uuid.UuidCreator;
-import com.runiverse.running_service.application.notification.command.push.PushUserNotificationCommand;
-import com.runiverse.running_service.application.notification.port.in.PushUserNotificationUsecase;
+import com.runiverse.running_service.application.notification.command.broadcast.BroadcastUserNotificationCommand;
+import com.runiverse.running_service.application.notification.port.in.BroadcastUserNotificationUsecase;
 import com.runiverse.running_service.infrastructure.redis.notification.UserNotificationListener;
 import com.runiverse.running_service.support.LogCapture;
 import org.junit.jupiter.api.AfterEach;
@@ -32,14 +32,14 @@ class UserNotificationListenerTest {
     private static final byte[] CHANNEL = "notification:user".getBytes(StandardCharsets.UTF_8);
 
     @Mock
-    private PushUserNotificationUsecase pushUserNotificationUsecase;
+    private BroadcastUserNotificationUsecase broadcastUserNotificationUsecase;
 
     private UserNotificationListener listener;
     private LogCapture log;
 
     @BeforeEach
     void setUp() {
-        listener = new UserNotificationListener(JsonMapper.builder().build(), pushUserNotificationUsecase);
+        listener = new UserNotificationListener(JsonMapper.builder().build(), broadcastUserNotificationUsecase);
         log = LogCapture.of(UserNotificationListener.class);
     }
 
@@ -58,7 +58,7 @@ class UserNotificationListenerTest {
         listener.onMessage(new DefaultMessage(CHANNEL, body.getBytes(StandardCharsets.UTF_8)), null);
 
         // then
-        verify(pushUserNotificationUsecase).handle(new PushUserNotificationCommand(RECIPIENT_ID, 912L));
+        verify(broadcastUserNotificationUsecase).handle(new BroadcastUserNotificationCommand(RECIPIENT_ID, 912L));
     }
 
     @Test
@@ -70,7 +70,7 @@ class UserNotificationListenerTest {
                 .doesNotThrowAnyException();
 
         // then
-        verifyNoInteractions(pushUserNotificationUsecase);
+        verifyNoInteractions(broadcastUserNotificationUsecase);
         assertThat(log.messages(Level.ERROR))
                 .containsExactly("[알림] 알림 전파 메시지 파싱 실패: 메시지 형식 불일치 - channel=notification:user");
     }

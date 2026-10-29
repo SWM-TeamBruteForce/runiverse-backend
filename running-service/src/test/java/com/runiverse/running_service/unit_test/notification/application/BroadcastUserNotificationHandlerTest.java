@@ -5,8 +5,8 @@ import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.app.port.out.AppStreamConnection;
 import com.runiverse.running_service.application.app.port.out.AppStreamEvent;
 import com.runiverse.running_service.application.app.port.out.AppStreamPort;
-import com.runiverse.running_service.application.notification.command.push.PushUserNotificationCommand;
-import com.runiverse.running_service.application.notification.command.push.PushUserNotificationHandler;
+import com.runiverse.running_service.application.notification.command.broadcast.BroadcastUserNotificationCommand;
+import com.runiverse.running_service.application.notification.command.broadcast.BroadcastUserNotificationHandler;
 import com.runiverse.running_service.application.notification.common.UserNotificationItemReader;
 import com.runiverse.running_service.application.notification.query.list.GetUserNotificationsResult;
 import com.runiverse.running_service.domain.common.vo.UserId;
@@ -53,13 +53,13 @@ class PushUserNotificationHandlerTest {
     @Mock
     private AppStreamConnection connection;
 
-    private PushUserNotificationHandler handler;
+    private BroadcastUserNotificationHandler handler;
     private LogCapture log;
 
     @BeforeEach
     void setUp() {
-        handler = new PushUserNotificationHandler(appStreamPort, userNotificationItemReader);
-        log = LogCapture.of(PushUserNotificationHandler.class);
+        handler = new BroadcastUserNotificationHandler(appStreamPort, userNotificationItemReader);
+        log = LogCapture.of(BroadcastUserNotificationHandler.class);
     }
 
     @AfterEach
@@ -74,7 +74,7 @@ class PushUserNotificationHandlerTest {
         given(appStreamPort.find(new UserId(ME))).willReturn(Optional.empty());
 
         // when
-        handler.handle(new PushUserNotificationCommand(ME, 912L));
+        handler.handle(new BroadcastUserNotificationCommand(ME, 912L));
 
         // then
         verifyNoInteractions(userNotificationItemReader);
@@ -91,7 +91,7 @@ class PushUserNotificationHandlerTest {
         given(userNotificationItemReader.read(new UserId(ME), 912L)).willReturn(Optional.of(ITEM));
 
         // when
-        handler.handle(new PushUserNotificationCommand(ME, 912L));
+        handler.handle(new BroadcastUserNotificationCommand(ME, 912L));
 
         // then
         verify(connection).send(AppStreamEvent.notification(ITEM));
@@ -107,7 +107,7 @@ class PushUserNotificationHandlerTest {
         given(userNotificationItemReader.read(new UserId(ME), 912L)).willReturn(Optional.empty());
 
         // when
-        handler.handle(new PushUserNotificationCommand(ME, 912L));
+        handler.handle(new BroadcastUserNotificationCommand(ME, 912L));
 
         // then
         verify(connection, never()).send(any());
@@ -118,9 +118,9 @@ class PushUserNotificationHandlerTest {
     @DisplayName("핸들러는 트랜잭션을 열지 않는다")
     void opensNoTransaction() throws NoSuchMethodException {
         // when & then -> 붙어 있지 않은 인스턴스가 메시지마다 DB 커넥션을 잡지 않는다. 읽기 트랜잭션은 리더가 연다
-        assertThat(PushUserNotificationHandler.class.getAnnotation(Transactional.class)).isNull();
-        assertThat(PushUserNotificationHandler.class
-                .getMethod("handle", PushUserNotificationCommand.class)
+        assertThat(BroadcastUserNotificationHandler.class.getAnnotation(Transactional.class)).isNull();
+        assertThat(BroadcastUserNotificationHandler.class
+                .getMethod("handle", BroadcastUserNotificationCommand.class)
                 .getAnnotation(Transactional.class)).isNull();
     }
 }
