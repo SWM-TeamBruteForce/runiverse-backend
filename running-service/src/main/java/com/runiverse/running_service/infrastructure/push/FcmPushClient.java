@@ -36,7 +36,7 @@ public class FcmPushClient implements SendPushPort {
     private static final String TYPE_KEY = "type";
     private static final String APNS_EXPIRATION_HEADER = "apns-expiration";
     // 라이브러리는 503이면 최대 4번, 매번 최대 60초씩 기다려 다시 보낸다.
-    // 커밋 뒤 요청 스레드에서 보내므로 응답이 늦어지지 않게 전체를 이 시간으로 묶는다
+    // 발송 스레드가 한 건에 오래 묶이지 않게 전체를 이 시간으로 묶는다
     private static final Duration SEND_TIMEOUT = Duration.ofSeconds(3);
 
     private final FirebaseMessaging firebaseMessaging;
