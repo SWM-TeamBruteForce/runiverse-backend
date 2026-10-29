@@ -10,9 +10,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 
-// 알림 한 건을 읽어 목록 항목 모양으로 만든다 — 스트림 푸시가 받는 사람의 연결을 확인한 뒤에만 부른다.
+// 알림 한 건을 읽어 목록 항목 모양으로 만든다 — 스트림 전송(연결을 확인한 뒤)과 기기 푸시가 부른다.
 // 트랜잭션을 여기서 연다: 조립기의 조회가 게으른 커서를 써서 트랜잭션 밖에서는 먼저 닫힌다.
-// 푸시 핸들러에 걸면 연결이 없는 인스턴스도 메시지마다 DB 커넥션을 잡는다
+// 스트림 전송 핸들러에 걸면 연결이 없는 인스턴스도 메시지마다 DB 커넥션을 잡는다
 @Component
 @RequiredArgsConstructor
 public class UserNotificationItemReader {
