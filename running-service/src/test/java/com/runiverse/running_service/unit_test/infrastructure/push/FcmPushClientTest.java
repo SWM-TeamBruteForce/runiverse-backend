@@ -222,6 +222,22 @@ public class FcmPushClientTest {
     }
 
     @Test
+    @DisplayName("실패 로그에 받는 사람과 푸시 종류를 싣는다")
+    void failureLogNamesTargetAndType() {
+        // given -> 발송 스레드에는 요청의 MDC가 없다
+        FirebaseMessagingException exception = fcmException(MessagingErrorCode.UNAVAILABLE);
+        when(firebaseMessaging.sendAsync(any())).thenReturn(ApiFutures.immediateFailedFuture(exception));
+
+        // when
+        client.send(USER_ID, TOKEN, MESSAGE);
+
+        // then
+        assertThat(log.messages(Level.ERROR)).singleElement().asString()
+                .contains("targetUserId=" + USER_ID.value())
+                .contains("pushType=RUNNING_REMINDER");
+    }
+
+    @Test
     @DisplayName("응답이 상한 안에 오지 않으면 기다리지 않고 FAILED를 돌려주고 재시도를 멈춘다")
     void timeoutIsFailed() {
         // given -> 라이브러리가 503 재시도로 응답을 붙잡고 있는 상황이다
