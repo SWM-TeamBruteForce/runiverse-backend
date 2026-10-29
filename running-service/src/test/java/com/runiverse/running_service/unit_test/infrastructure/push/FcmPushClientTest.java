@@ -153,6 +153,21 @@ public class FcmPushClientTest {
     }
 
     @Test
+    @DisplayName("발송 요청을 만들다 실패하면 FAILED를 돌려주고 ERROR를 남긴다")
+    void requestFailureIsFailed() {
+        // given -> 종료 중에 Firebase 앱이 먼저 지워졌다
+        when(firebaseMessaging.sendAsync(any())).thenThrow(new IllegalStateException("FirebaseApp was deleted"));
+
+        // when
+        PushSendStatus status = client.send(TOKEN, MESSAGE);
+
+        // then
+        assertThat(status).isEqualTo(PushSendStatus.FAILED);
+        assertThat(log.messages(Level.ERROR)).singleElement().asString()
+                .contains("[기기] 푸시 발송 실패: FCM 요청 오류");
+    }
+
+    @Test
     @DisplayName("등록 해제된 토큰이면 UNREGISTERED를 돌려주고 ERROR를 남기지 않는다")
     void unregisteredTokenIsNotServerError() {
         // given

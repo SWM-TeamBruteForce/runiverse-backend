@@ -48,7 +48,14 @@ public class FcmPushClient implements SendPushPort {
         if (remaining != null && !remaining.isPositive()) {
             return PushSendStatus.EXPIRED;
         }
-        ApiFuture<String> future = firebaseMessaging.sendAsync(toMessage(pushToken, message, remaining));
+        ApiFuture<String> future;
+        try {
+            future = firebaseMessaging.sendAsync(toMessage(pushToken, message, remaining));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            // 라이브러리가 메시지 값을 검사해 던지거나, 종료 중이라 Firebase 앱이 이미 지워졌다
+            log.error("[기기] 푸시 발송 실패: FCM 요청 오류", e);
+            return PushSendStatus.FAILED;
+        }
         try {
             future.get(SEND_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
             return PushSendStatus.SENT;
