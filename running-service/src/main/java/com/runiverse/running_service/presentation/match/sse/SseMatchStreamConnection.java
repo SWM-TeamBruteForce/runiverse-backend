@@ -59,7 +59,7 @@ public class SseMatchStreamConnection implements MatchStreamConnection {
         return switch (event.type()) {
             case RUNNING_READY -> RunningReadyResponse.from(event.ready());
             case INVITE_ROOM_ENTRANCE -> InviteRoomEntranceResponse.from(event);
-            case MATCH_STARTED, MATCH_ROOM_UPDATED, INVITE_ROOM_UPDATED -> RoomInfoResponse.from(event.room());
+            case MATCH_CONFIRMED, MATCH_ROOM_UPDATED, INVITE_ROOM_UPDATED -> RoomInfoResponse.from(event.room());
         };
     }
 

@@ -4,9 +4,9 @@ package com.runiverse.running_service.domain.notification.vo;
 // 값마다 payload 모양이 하나씩 정해져 있다(UserNotificationPayload 구현체)
 public enum UserNotificationType {
     // 누군가 나에게 친구 요청을 보냈다
-    FRIEND_REQUESTED,
+    FRIEND_REQUEST_RECEIVED,
     // 내가 보낸 친구 요청을 상대가 수락했다 — 서로 요청해 바로 성립한 경우도 포함한다
-    FRIEND_ACCEPTED,
+    FRIEND_REQUEST_ACCEPTED,
     // 누군가 나를 초대 방에 초대했다 — 다시 초대도 새로 쌓는다
-    RUNNING_INVITED
+    RUNNING_INVITATION_RECEIVED
 }

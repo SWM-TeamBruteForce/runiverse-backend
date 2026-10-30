@@ -34,7 +34,7 @@ public class GetUserNotificationsHandler implements GetUserNotificationsUsecase 
         // 1. 한 페이지를 읽는다 — 되살리지 못한 행은 어댑터가 이미 뺐다
         UserNotificationPage page = loadUserNotificationsPort.loadPage(userId, beforeId, since, query.limit());
 
-        // 2. 지금 상태를 붙여 항목을 만든다 — 스트림 푸시와 같은 조립기를 써 모양이 어긋나지 않는다
+        // 2. 지금 상태를 붙여 항목을 만든다 — 스트림 전송과 같은 조립기를 써 모양이 어긋나지 않는다
         List<GetUserNotificationsResult.Item> items = userNotificationItemAssembler.assemble(userId, page.rows());
 
         // 3. 다음 페이지 기준은 걸러내기 전의 행으로 어댑터가 정했다

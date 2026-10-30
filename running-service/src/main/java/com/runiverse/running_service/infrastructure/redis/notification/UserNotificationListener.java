@@ -1,7 +1,7 @@
 package com.runiverse.running_service.infrastructure.redis.notification;
 
-import com.runiverse.running_service.application.notification.command.push.PushUserNotificationCommand;
-import com.runiverse.running_service.application.notification.port.in.PushUserNotificationUsecase;
+import com.runiverse.running_service.application.notification.command.broadcast.BroadcastUserNotificationCommand;
+import com.runiverse.running_service.application.notification.port.in.BroadcastUserNotificationUsecase;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.Message;
@@ -18,7 +18,7 @@ import java.nio.charset.StandardCharsets;
 public class UserNotificationListener implements MessageListener {
 
     private final JsonMapper jsonMapper;
-    private final PushUserNotificationUsecase pushUserNotificationUsecase;
+    private final BroadcastUserNotificationUsecase broadcastUserNotificationUsecase;
 
     // 발행한 인스턴스도 자기 메시지를 받는다 — 받는 사람이 여기 붙어 있으면 여기서 보낸다
     @Override
@@ -32,6 +32,7 @@ public class UserNotificationListener implements MessageListener {
                     new String(message.getChannel(), StandardCharsets.UTF_8), e);
             return;
         }
-        pushUserNotificationUsecase.handle(new PushUserNotificationCommand(payload.userId(), payload.notificationId()));
+        broadcastUserNotificationUsecase.handle(
+                new BroadcastUserNotificationCommand(payload.userId(), payload.notificationId()));
     }
 }

@@ -4,9 +4,9 @@ import com.runiverse.running_service.application.auth.port.out.CheckEmailDuplica
 import com.runiverse.running_service.application.auth.port.out.LoadUserByEmailPort;
 import com.runiverse.running_service.application.auth.port.out.LoadUserByProviderPort;
 import com.runiverse.running_service.application.auth.port.out.SaveUserPort;
+import com.runiverse.running_service.application.common.port.out.ExistsUserPort;
 import com.runiverse.running_service.application.common.port.out.LoadPlayerProfilesPort;
 import com.runiverse.running_service.application.common.port.out.LoadUserAvgPacePort;
-import com.runiverse.running_service.application.common.port.out.ExistsUserPort;
 import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.common.port.out.PlayerProfile;
 import com.runiverse.running_service.application.common.port.out.UpdateUserAvgPacePort;

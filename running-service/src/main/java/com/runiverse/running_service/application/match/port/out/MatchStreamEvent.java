@@ -12,7 +12,7 @@ public record MatchStreamEvent(MatchEventType type, Long runningRoomId,
                                RoomInfo room, RunningReady ready, Long startsInMs) {
 
     // 갱신은 전부 이쪽이다 — 방 종류로 이벤트 이름이 갈린다.
-    // 매칭 방은 확정된 그 순간만 started()를 쓰고, 초대 방은 마감도 이 갱신으로 알린다
+    // 매칭 방은 확정된 그 순간만 confirmed()를 쓰고, 초대 방은 마감도 이 갱신으로 알린다
     public static MatchStreamEvent updated(RoomInfo room) {
         MatchEventType type = room.type() == RunningRoomType.INVITE
                 ? MatchEventType.INVITE_ROOM_UPDATED
@@ -21,8 +21,8 @@ public record MatchStreamEvent(MatchEventType type, Long runningRoomId,
     }
 
     // 매칭 방 전용 — 초대 방의 마감은 매칭 성사가 아니라 확정 연출을 두지 않는다
-    public static MatchStreamEvent started(RoomInfo room) {
-        return new MatchStreamEvent(MatchEventType.MATCH_STARTED,
+    public static MatchStreamEvent confirmed(RoomInfo room) {
+        return new MatchStreamEvent(MatchEventType.MATCH_CONFIRMED,
                 room.runningRoomId(), room, null, null);
     }
 

@@ -23,7 +23,7 @@ import com.runiverse.running_service.application.match.port.out.UpdateMatchRoomP
 import com.runiverse.running_service.application.running.port.out.LoadUserStatusPort;
 import com.runiverse.running_service.application.running.port.out.UserStatusRow;
 import com.runiverse.running_service.domain.common.vo.UserId;
-import com.runiverse.running_service.domain.notification.vo.RunningInvitedPayload;
+import com.runiverse.running_service.domain.notification.vo.RunningInvitationReceivedPayload;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerId;
 import com.runiverse.running_service.domain.running.room.InvitationDraft;
 import com.runiverse.running_service.domain.running.room.RoomInvitation;
@@ -197,7 +197,8 @@ class SendInvitationHandlerTest {
             verify(updateMatchRoomPort).update(room);
             verify(eventPublisher).publishEvent(any(MatchRoomChangedEvent.class));
             // 받은 친구에게 초대한 사람과 방을 담은 알림을 보낸다
-            verify(sendUserNotificationPort).send(friend, new RunningInvitedPayload(inviter, new RunningRoomId(ROOM_ID)));
+            verify(sendUserNotificationPort).send(friend,
+                    new RunningInvitationReceivedPayload(inviter, new RunningRoomId(ROOM_ID)));
         }
 
         @Test
@@ -218,7 +219,8 @@ class SendInvitationHandlerTest {
             assertThat(rowOf(room).getInviteCount().value()).isEqualTo(3);
             assertThat(rowOf(room).getStatus()).isEqualTo(RoomInvitationStatus.PENDING);
             // 초대 행은 횟수만 오르지만 알림은 사건마다 새로 쌓는다
-            verify(sendUserNotificationPort).send(friend, new RunningInvitedPayload(inviter, new RunningRoomId(ROOM_ID)));
+            verify(sendUserNotificationPort).send(friend,
+                    new RunningInvitationReceivedPayload(inviter, new RunningRoomId(ROOM_ID)));
         }
 
         @ParameterizedTest(name = "{0}")

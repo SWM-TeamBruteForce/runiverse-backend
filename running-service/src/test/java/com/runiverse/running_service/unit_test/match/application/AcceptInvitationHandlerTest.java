@@ -16,6 +16,7 @@ import com.runiverse.running_service.application.match.port.out.ExistsActiveAppl
 import com.runiverse.running_service.application.match.port.out.LockMatchRoomPort;
 import com.runiverse.running_service.application.match.port.out.UpdateMatchRoomPort;
 import com.runiverse.running_service.application.match.common.MatchProperties;
+import com.runiverse.running_service.application.match.common.MatchPushRequester;
 import com.runiverse.running_service.application.match.common.MatchRoomChangedEvent;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
 import com.runiverse.running_service.application.match.port.out.LoadMatchPlayersPort;
@@ -101,6 +102,9 @@ class AcceptInvitationHandlerTest {
     private RoomInfoAssembler roomInfoAssembler;
 
     @Mock
+    private MatchPushRequester matchPushRequester;
+
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     private AcceptInvitationHandler handler;
@@ -108,6 +112,7 @@ class AcceptInvitationHandlerTest {
     private UserId otherInviter;
     private UserId invitee;
     private LocalDateTime startAt;
+    private RoomInfo assembledRoom;
 
     @BeforeEach
     void setUp() {
@@ -115,7 +120,7 @@ class AcceptInvitationHandlerTest {
                 lockMatchRoomPort, updateMatchRoomPort,
                 new InviteStartPolicy(INVITE_PROPERTIES, MATCH_PROPERTIES),
                 existsActiveApplicationPort, loadUserAvgPacePort, createMatchApplicationPort,
-                loadMatchPlayersPort, roomInfoAssembler, eventPublisher);
+                loadMatchPlayersPort, roomInfoAssembler, matchPushRequester, eventPublisher);
         host = newUser();
         otherInviter = newUser();
         invitee = newUser();
@@ -171,9 +176,10 @@ class AcceptInvitationHandlerTest {
                 .build());
         given(loadMatchPlayersPort.loadPlayers(new RunningRoomId(ROOM_ID)))
                 .willReturn(List.of(new MatchPlayer(host.value(), HOST_PACE)));
-        given(roomInfoAssembler.assemble(any())).willReturn(new RoomInfo(
+        assembledRoom = new RoomInfo(
                 ROOM_ID, RunningRoomType.INVITE, RunningRoomStatus.MATCHING, startAt, startAt.minus(CLOSE_OFFSET),
-                TARGET_DISTANCE, HOST_PACE, List.of(), List.of()));
+                TARGET_DISTANCE, HOST_PACE, List.of(), List.of());
+        given(roomInfoAssembler.assemble(any())).willReturn(assembledRoom);
     }
 
     private AcceptInvitationResult accept() {
@@ -229,6 +235,21 @@ class AcceptInvitationHandlerTest {
             // then -> (300 + 360) / 2
             assertThat(room.getAvgPace()).hasValueSatisfying(pace ->
                     assertThat(pace.secondsPerKm()).isEqualTo(330));
+        }
+
+        @Test
+        @DisplayName("수락하면 수락한 사람과 스트림에 보낸 방 정보를 넘겨 초대한 사람에게 갈 푸시를 요청한다")
+        void requestsRunningInvitationAcceptedPush() {
+            // given
+            RunningRoom room = pendingRoom(1);
+            givenLocked(room);
+            givenJoinable();
+
+            // when
+            accept();
+
+            // then -> 받는 사람은 요청기가 자리를 잡은 뒤의 방으로, 닉네임은 이미 조립한 방 정보로 고른다
+            verify(matchPushRequester).runningInvitationAccepted(room, invitee, assembledRoom);
         }
     }
 
@@ -323,6 +344,18 @@ class AcceptInvitationHandlerTest {
                     .isInstanceOf(RunningRoomFullException.class);
             assertThat(room.invitationStatusOf(invitee)).contains(RoomInvitationStatus.PENDING);
             verifyNoInteractions(existsActiveApplicationPort, createMatchApplicationPort, updateMatchRoomPort);
+        }
+
+        @Test
+        @DisplayName("수락이 거절되면 초대 수락 푸시를 요청하지 않는다")
+        void skipsPushWhenRejected() {
+            // given
+            givenLocked(pendingRoom(4));
+
+            // when & then
+            assertThatThrownBy(AcceptInvitationHandlerTest.this::accept)
+                    .isInstanceOf(RunningRoomFullException.class);
+            verifyNoInteractions(matchPushRequester);
         }
 
         @Test

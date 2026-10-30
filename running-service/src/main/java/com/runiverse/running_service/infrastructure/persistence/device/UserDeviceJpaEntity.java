@@ -35,7 +35,7 @@ import java.util.UUID;
                 name = "uk_user_device_device_id",
                 columnNames = "device_id"
         ),
-        // 등록·로그아웃 때 유저의 기기를 끄고, 탈퇴 때 지운다
+        // 등록·로그인·로그아웃 때 유저의 기기를 끄고, 탈퇴 때 지운다
         indexes = @Index(name = "idx_user_device_user", columnList = "user_id")
 )
 @Check(name = "ck_user_device_platform", constraints = "platform in ('IOS', 'ANDROID')")

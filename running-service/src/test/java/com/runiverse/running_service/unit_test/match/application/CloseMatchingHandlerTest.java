@@ -3,6 +3,7 @@ package com.runiverse.running_service.unit_test.match.application;
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.match.command.close.CloseMatchingCommand;
 import com.runiverse.running_service.application.match.command.close.CloseMatchingHandler;
+import com.runiverse.running_service.application.match.common.MatchPushRequester;
 import com.runiverse.running_service.application.match.common.MatchRoomChangedEvent;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
 import com.runiverse.running_service.application.match.port.out.LockMatchRoomPort;
@@ -60,6 +61,9 @@ class CloseMatchingHandlerTest {
     private RoomInfoAssembler roomInfoAssembler;
 
     @Mock
+    private MatchPushRequester matchPushRequester;
+
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     private CloseMatchingHandler closeMatchingHandler;
@@ -67,7 +71,7 @@ class CloseMatchingHandlerTest {
     @BeforeEach
     void setUp() {
         closeMatchingHandler = new CloseMatchingHandler(
-                lockMatchRoomPort, updateMatchRoomPort, roomInfoAssembler, eventPublisher);
+                lockMatchRoomPort, updateMatchRoomPort, roomInfoAssembler, matchPushRequester, eventPublisher);
     }
 
     @Test
@@ -84,8 +88,8 @@ class CloseMatchingHandlerTest {
     }
 
     @Test
-    @DisplayName("확정된 순간에는 MATCH_STARTED로 알린다")
-    void publishesStartedOnClose() {
+    @DisplayName("확정된 순간에는 MATCH_CONFIRMED로 알린다")
+    void publishesConfirmedOnClose() {
         // given -> 재연결 스냅샷(UPDATED)과 갈라야 확정 연출이 반복되지 않는다
         givenRoom(room(RunningRoomStatus.MATCHING, 3));
         given(roomInfoAssembler.assemble(any(RunningRoom.class))).willReturn(ROOM_INFO);
@@ -95,7 +99,7 @@ class CloseMatchingHandlerTest {
 
         // then
         verify(eventPublisher).publishEvent(new MatchRoomChangedEvent(
-                MatchStreamEvent.started(ROOM_INFO)));
+                MatchStreamEvent.confirmed(ROOM_INFO)));
     }
 
     @Test
@@ -158,6 +162,46 @@ class CloseMatchingHandlerTest {
 
         // then
         verifyNoInteractions(updateMatchRoomPort, roomInfoAssembler, eventPublisher);
+    }
+
+    @Test
+    @DisplayName("매칭 방을 확정하면 남은 사람에게 확정 푸시를 요청한다")
+    void requestsMatchConfirmedPush() {
+        // given
+        RunningRoom room = room(RunningRoomStatus.MATCHING, 3);
+        givenRoom(room);
+
+        // when
+        closeMatchingHandler.handle(new CloseMatchingCommand(ROOM_ID));
+
+        // then
+        verify(matchPushRequester).matchConfirmed(room);
+    }
+
+    @Test
+    @DisplayName("초대 방 마감은 확정 푸시를 요청하지 않는다")
+    void skipsPushOnInviteRoomClose() {
+        // given -> 매칭 성사가 아니라 더 이상 초대받지 않을 뿐이다
+        givenRoom(room(RunningRoomType.INVITE, RunningRoomStatus.MATCHING, 2));
+
+        // when
+        closeMatchingHandler.handle(new CloseMatchingCommand(ROOM_ID));
+
+        // then
+        verifyNoInteractions(matchPushRequester);
+    }
+
+    @Test
+    @DisplayName("이미 확정된 방이 다시 깨도 확정 푸시를 다시 요청하지 않는다")
+    void skipsPushOnAlreadyClosedRoom() {
+        // given
+        givenRoom(room(RunningRoomStatus.MATCHED, 3));
+
+        // when
+        closeMatchingHandler.handle(new CloseMatchingCommand(ROOM_ID));
+
+        // then
+        verifyNoInteractions(matchPushRequester);
     }
 
     @Test

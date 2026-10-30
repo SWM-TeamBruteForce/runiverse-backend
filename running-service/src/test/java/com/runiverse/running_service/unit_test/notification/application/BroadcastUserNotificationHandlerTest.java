@@ -5,8 +5,8 @@ import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.app.port.out.AppStreamConnection;
 import com.runiverse.running_service.application.app.port.out.AppStreamEvent;
 import com.runiverse.running_service.application.app.port.out.AppStreamPort;
-import com.runiverse.running_service.application.notification.command.push.PushUserNotificationCommand;
-import com.runiverse.running_service.application.notification.command.push.PushUserNotificationHandler;
+import com.runiverse.running_service.application.notification.command.broadcast.BroadcastUserNotificationCommand;
+import com.runiverse.running_service.application.notification.command.broadcast.BroadcastUserNotificationHandler;
 import com.runiverse.running_service.application.notification.common.UserNotificationItemReader;
 import com.runiverse.running_service.application.notification.query.list.GetUserNotificationsResult;
 import com.runiverse.running_service.domain.common.vo.UserId;
@@ -34,13 +34,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("알림 푸시 단위 테스트")
-class PushUserNotificationHandlerTest {
+@DisplayName("알림 스트림 전송 단위 테스트")
+class BroadcastUserNotificationHandlerTest {
 
     private static final UUID ME = UuidCreator.getTimeOrderedEpoch();
     private static final UUID CHULSU = UuidCreator.getTimeOrderedEpoch();
     private static final GetUserNotificationsResult.Item ITEM = new GetUserNotificationsResult.Item(
-            912L, UserNotificationType.FRIEND_REQUESTED, false, LocalDateTime.of(2026, 10, 28, 12, 0),
+            912L, UserNotificationType.FRIEND_REQUEST_RECEIVED, false, LocalDateTime.of(2026, 10, 28, 12, 0),
             new GetUserNotificationsResult.Actor(CHULSU, "철수", null, false, RelationshipType.FRIEND_REQUEST_RECEIVED),
             null);
 
@@ -53,13 +53,13 @@ class PushUserNotificationHandlerTest {
     @Mock
     private AppStreamConnection connection;
 
-    private PushUserNotificationHandler handler;
+    private BroadcastUserNotificationHandler handler;
     private LogCapture log;
 
     @BeforeEach
     void setUp() {
-        handler = new PushUserNotificationHandler(appStreamPort, userNotificationItemReader);
-        log = LogCapture.of(PushUserNotificationHandler.class);
+        handler = new BroadcastUserNotificationHandler(appStreamPort, userNotificationItemReader);
+        log = LogCapture.of(BroadcastUserNotificationHandler.class);
     }
 
     @AfterEach
@@ -74,7 +74,7 @@ class PushUserNotificationHandlerTest {
         given(appStreamPort.find(new UserId(ME))).willReturn(Optional.empty());
 
         // when
-        handler.handle(new PushUserNotificationCommand(ME, 912L));
+        handler.handle(new BroadcastUserNotificationCommand(ME, 912L));
 
         // then
         verifyNoInteractions(userNotificationItemReader);
@@ -91,12 +91,13 @@ class PushUserNotificationHandlerTest {
         given(userNotificationItemReader.read(new UserId(ME), 912L)).willReturn(Optional.of(ITEM));
 
         // when
-        handler.handle(new PushUserNotificationCommand(ME, 912L));
+        handler.handle(new BroadcastUserNotificationCommand(ME, 912L));
 
         // then
         verify(connection).send(AppStreamEvent.notification(ITEM));
-        assertThat(AppStreamEvent.notification(ITEM).type().name()).isEqualTo("FRIEND_REQUESTED");
-        assertThat(log.messages(Level.INFO)).containsExactly("[알림] 푸시 성공 - notificationId=912, connectionId=conn-1");
+        assertThat(AppStreamEvent.notification(ITEM).type().name()).isEqualTo("FRIEND_REQUEST_RECEIVED");
+        assertThat(log.messages(Level.INFO))
+                .containsExactly("[알림] 스트림 전송 성공 - notificationId=912, connectionId=conn-1");
     }
 
     @Test
@@ -107,20 +108,20 @@ class PushUserNotificationHandlerTest {
         given(userNotificationItemReader.read(new UserId(ME), 912L)).willReturn(Optional.empty());
 
         // when
-        handler.handle(new PushUserNotificationCommand(ME, 912L));
+        handler.handle(new BroadcastUserNotificationCommand(ME, 912L));
 
         // then
         verify(connection, never()).send(any());
-        assertThat(log.messages(Level.WARN)).containsExactly("[알림] 푸시 건너뜀: 알림 없음 - notificationId=912");
+        assertThat(log.messages(Level.WARN)).containsExactly("[알림] 스트림 전송 건너뜀: 알림 없음 - notificationId=912");
     }
 
     @Test
     @DisplayName("핸들러는 트랜잭션을 열지 않는다")
     void opensNoTransaction() throws NoSuchMethodException {
         // when & then -> 붙어 있지 않은 인스턴스가 메시지마다 DB 커넥션을 잡지 않는다. 읽기 트랜잭션은 리더가 연다
-        assertThat(PushUserNotificationHandler.class.getAnnotation(Transactional.class)).isNull();
-        assertThat(PushUserNotificationHandler.class
-                .getMethod("handle", PushUserNotificationCommand.class)
+        assertThat(BroadcastUserNotificationHandler.class.getAnnotation(Transactional.class)).isNull();
+        assertThat(BroadcastUserNotificationHandler.class
+                .getMethod("handle", BroadcastUserNotificationCommand.class)
                 .getAnnotation(Transactional.class)).isNull();
     }
 }

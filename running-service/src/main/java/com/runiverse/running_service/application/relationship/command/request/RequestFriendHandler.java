@@ -12,7 +12,7 @@ import com.runiverse.running_service.application.relationship.port.out.LoadUserR
 import com.runiverse.running_service.application.relationship.port.out.SaveUserRelationshipPort;
 import com.runiverse.running_service.application.relationship.port.out.UserRelationshipPair;
 import com.runiverse.running_service.domain.common.vo.UserId;
-import com.runiverse.running_service.domain.notification.vo.FriendRequestedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestReceivedPayload;
 import com.runiverse.running_service.domain.relationship.UserRelationship;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 import lombok.RequiredArgsConstructor;
@@ -66,7 +66,7 @@ public class RequestFriendHandler implements RequestFriendUsecase {
                 saveUserRelationshipPort.save(mine);
                 saveUserRelationshipPort.save(theirs);
                 // 받는 사람에게 요청이 왔다고 알린다 — 같은 트랜잭션이라 요청만 남거나 알림만 남지 않는다
-                sendUserNotificationPort.send(targetId, new FriendRequestedPayload(userId));
+                sendUserNotificationPort.send(targetId, new FriendRequestReceivedPayload(userId));
                 log.info("[관계] 친구 요청 성공 - targetUserId={}", targetId.value());
                 yield new RequestFriendResult(RelationshipType.FRIEND_REQUEST_SENT);
             }

@@ -1,9 +1,9 @@
 package com.runiverse.running_service.infrastructure.persistence.notification;
 
 import com.runiverse.running_service.domain.common.vo.UserId;
-import com.runiverse.running_service.domain.notification.vo.FriendAcceptedPayload;
-import com.runiverse.running_service.domain.notification.vo.FriendRequestedPayload;
-import com.runiverse.running_service.domain.notification.vo.RunningInvitedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestAcceptedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestReceivedPayload;
+import com.runiverse.running_service.domain.notification.vo.RunningInvitationReceivedPayload;
 import com.runiverse.running_service.domain.notification.vo.UserNotificationPayload;
 import com.runiverse.running_service.domain.notification.vo.UserNotificationType;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
@@ -25,10 +25,10 @@ final class UserNotificationPayloadMapper {
     // 종류가 늘면 sealed라 여기서 컴파일 에러가 난다 — 키를 빠뜨린 채 저장되지 않는다
     static Map<String, Object> toJson(UserNotificationPayload payload) {
         return switch (payload) {
-            case FriendRequestedPayload p -> Map.of(REQUEST_USER_ID, p.requestUserId().value().toString());
-            case FriendAcceptedPayload p -> Map.of(ACCEPT_USER_ID, p.acceptUserId().value().toString());
+            case FriendRequestReceivedPayload p -> Map.of(REQUEST_USER_ID, p.requestUserId().value().toString());
+            case FriendRequestAcceptedPayload p -> Map.of(ACCEPT_USER_ID, p.acceptUserId().value().toString());
             // 방 ID는 숫자로 둔다 — 초대 상태를 찾는 running_room_invitations의 bigint와 같은 값이다
-            case RunningInvitedPayload p -> Map.of(
+            case RunningInvitationReceivedPayload p -> Map.of(
                     REQUEST_USER_ID, p.requestUserId().value().toString(),
                     RUNNING_ROOM_ID, p.runningRoomId().value());
         };
@@ -38,9 +38,9 @@ final class UserNotificationPayloadMapper {
     // 어떤 예외든 "되살리지 못한 행"이라 어댑터가 잡아 그 행만 뺀다
     static UserNotificationPayload fromJson(UserNotificationType type, Map<String, Object> json) {
         return switch (type) {
-            case FRIEND_REQUESTED -> new FriendRequestedPayload(userIdOf(json, REQUEST_USER_ID));
-            case FRIEND_ACCEPTED -> new FriendAcceptedPayload(userIdOf(json, ACCEPT_USER_ID));
-            case RUNNING_INVITED -> new RunningInvitedPayload(
+            case FRIEND_REQUEST_RECEIVED -> new FriendRequestReceivedPayload(userIdOf(json, REQUEST_USER_ID));
+            case FRIEND_REQUEST_ACCEPTED -> new FriendRequestAcceptedPayload(userIdOf(json, ACCEPT_USER_ID));
+            case RUNNING_INVITATION_RECEIVED -> new RunningInvitationReceivedPayload(
                     userIdOf(json, REQUEST_USER_ID), roomIdOf(json, RUNNING_ROOM_ID));
         };
     }

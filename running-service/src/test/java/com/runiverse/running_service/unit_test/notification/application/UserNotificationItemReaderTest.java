@@ -7,7 +7,7 @@ import com.runiverse.running_service.application.notification.port.out.LoadUserN
 import com.runiverse.running_service.application.notification.port.out.UserNotificationRow;
 import com.runiverse.running_service.application.notification.query.list.GetUserNotificationsResult;
 import com.runiverse.running_service.domain.common.vo.UserId;
-import com.runiverse.running_service.domain.notification.vo.FriendRequestedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestReceivedPayload;
 import com.runiverse.running_service.domain.notification.vo.UserNotificationType;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 import org.junit.jupiter.api.DisplayName;
@@ -34,9 +34,9 @@ class UserNotificationItemReaderTest {
     private static final UserId ME = new UserId(UuidCreator.getTimeOrderedEpoch());
     private static final UUID CHULSU = UuidCreator.getTimeOrderedEpoch();
     private static final UserNotificationRow ROW = new UserNotificationRow(912L,
-            new FriendRequestedPayload(new UserId(CHULSU)), false, LocalDateTime.of(2026, 10, 28, 12, 0));
+            new FriendRequestReceivedPayload(new UserId(CHULSU)), false, LocalDateTime.of(2026, 10, 28, 12, 0));
     private static final GetUserNotificationsResult.Item ITEM = new GetUserNotificationsResult.Item(
-            912L, UserNotificationType.FRIEND_REQUESTED, false, LocalDateTime.of(2026, 10, 28, 12, 0),
+            912L, UserNotificationType.FRIEND_REQUEST_RECEIVED, false, LocalDateTime.of(2026, 10, 28, 12, 0),
             new GetUserNotificationsResult.Actor(CHULSU, "철수", null, false, RelationshipType.FRIEND_REQUEST_RECEIVED),
             null);
 

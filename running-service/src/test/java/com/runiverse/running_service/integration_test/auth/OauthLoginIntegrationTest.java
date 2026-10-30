@@ -145,7 +145,7 @@ public class OauthLoginIntegrationTest extends IntegrationTestSupport {
                 first.userId(), "device-old", "token-old", Platform.ANDROID, "1.1.0"));
         // when - 새 폰에서 다시 소셜 로그인한다
         login();
-        // then — 새 폰이 등록에 실패해도 세션이 끝난 예전 폰으로 푸시가 가지 않는다
+        // then - 새 폰이 등록에 실패해도 세션이 끝난 예전 폰으로 푸시가 가지 않는다
         assertThat(userDeviceStore.activeDeviceIds(first.userId())).isEmpty();
         assertThat(userDeviceStore.find("device-old")).isPresent();
     }

@@ -37,7 +37,7 @@ import java.util.UUID;
         indexes = @Index(name = "idx_user_notification_list", columnList = "user_id, user_notification_id")
 )
 @Check(name = "ck_user_notification_type",
-        constraints = "type in ('FRIEND_REQUESTED', 'FRIEND_ACCEPTED', 'RUNNING_INVITED')")
+        constraints = "type in ('FRIEND_REQUEST_RECEIVED', 'FRIEND_REQUEST_ACCEPTED', 'RUNNING_INVITATION_RECEIVED')")
 // 키 검증은 도메인이 한다 — DB는 객체인지만 본다
 @Check(name = "ck_user_notification_payload", constraints = "jsonb_typeof(payload) = 'object'")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

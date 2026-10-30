@@ -396,18 +396,18 @@
 |---|---|---|---|
 | user_notification_id | bigint | PK | API `notificationId`(Long). 생성 순서대로 늘어나 최신순 정렬·커서 기준으로 쓴다 |
 | user_id | UUID | FK → users, NOT NULL, ON DELETE CASCADE | 받는 사람 |
-| type | enum | NOT NULL | `FRIEND_REQUESTED` / `FRIEND_ACCEPTED` / `RUNNING_INVITED` — [§6](#6-enum-사전). 문구·동작은 클라가 이 값으로 정한다 |
+| type | enum | NOT NULL | `FRIEND_REQUEST_RECEIVED` / `FRIEND_REQUEST_ACCEPTED` / `RUNNING_INVITATION_RECEIVED` — [§6](#6-enum-사전). 문구·동작은 클라가 이 값으로 정한다 |
 | payload | jsonb | NOT NULL | 종류별 데이터 — 모양은 아래 표. 키 검증은 도메인이 한다 |
 | is_read | boolean | NOT NULL, default false | 알림함을 열면 받는 사람의 안 읽은 알림을 모두 true로 바꾼다 |
 | created_at / updated_at | timestamp | NOT NULL | `created_at` = 쌓인 시각(정렬·보관 기간 기준), `updated_at` = 마지막 변경 시각(지금은 읽음 처리뿐) |
 
 | type | payload |
 |---|---|
-| `FRIEND_REQUESTED` | `{"request_user_id": UUID}` — 나에게 친구 요청을 보낸 사람 |
-| `FRIEND_ACCEPTED` | `{"accept_user_id": UUID}` — 내 요청을 수락한 사람 |
-| `RUNNING_INVITED` | `{"request_user_id": UUID, "running_room_id": bigint}` — 나를 초대한 사람과 그 초대 방 |
+| `FRIEND_REQUEST_RECEIVED` | `{"request_user_id": UUID}` — 나에게 친구 요청을 보낸 사람 |
+| `FRIEND_REQUEST_ACCEPTED` | `{"accept_user_id": UUID}` — 내 요청을 수락한 사람 |
+| `RUNNING_INVITATION_RECEIVED` | `{"request_user_id": UUID, "running_room_id": bigint}` — 나를 초대한 사람과 그 초대 방 |
 
-> CHECK `ck_user_notification_type`: `type in ('FRIEND_REQUESTED', 'FRIEND_ACCEPTED', 'RUNNING_INVITED')`
+> CHECK `ck_user_notification_type`: `type in ('FRIEND_REQUEST_RECEIVED', 'FRIEND_REQUEST_ACCEPTED', 'RUNNING_INVITATION_RECEIVED')`
 > CHECK `ck_user_notification_payload`: `jsonb_typeof(payload) = 'object'`
 
 > **알림은 사건의 기록이다** — 원 상태(친구 요청·초대)가 바뀌어도 고치거나 지우지 않는다. 화면의 현재 상태는 조회할 때 `user_relationships`·`running_room_invitations`에서 읽어 붙인다. 그래서 상태 컬럼이 없다.
@@ -574,7 +574,7 @@ FK 강제 없는 독립 테이블(원본 삭제/수정된 row를 참조하므로
 | users.profile_visibility | FRIENDS / PUBLIC | 지인 마스킹 — FRIENDS는 `user_relationships`로 직접 판정 |
 | user_relationships.type | NONE / FRIEND / FRIEND_REQUEST_SENT / FRIEND_REQUEST_RECEIVED / BLOCKED | 행 주인 관점의 관계 — 관계 없음(끝난 관계) / 친구 / 보낸 요청 / 받은 요청 / 내가 차단함. API `relationshipType`과 같은 값(`BLOCKED`는 차단 구현 때 API에 추가). 행이 없어도 `NONE`이다 |
 | running_room_invitations.status | PENDING / ACCEPTED / DECLINED / LEFT / EXPIRED | 응답 대기 / 수락(지금 방에 있음) / 거절 / 수락 뒤 방을 나감 / 모집 마감·방 취소로 만료. `user_relationships`와 달리 거절을 값으로 남긴다 — 화면(`RoomInfo.invitations`)은 `PENDING`만 보여주지만, 다시 초대할 때 보낸 횟수를 이어서 세려면 행이 남아야 한다 |
-| user_notifications.type | FRIEND_REQUESTED / FRIEND_ACCEPTED / RUNNING_INVITED | 친구 요청 도착 / 내 요청이 수락됨 / 러닝 초대 도착 |
+| user_notifications.type | FRIEND_REQUEST_RECEIVED / FRIEND_REQUEST_ACCEPTED / RUNNING_INVITATION_RECEIVED | 친구 요청 도착 / 내 요청이 수락됨 / 러닝 초대 도착 |
 | colors.category | DISTANCE / SPEED / ENDURANCE / CONSISTENCY / CADENCE / INTERVAL / EVEN_PACE / HILLS / RECOVERY / COMPANY / ADVERSITY / MILESTONE | 12범주 — 거리 / 속도 / 지구력 / 꾸준함 / 케이던스 / 인터벌 / 균등페이스 / 언덕 / 회복 / 동행 / 악조건극복 / 이정표 |
 | user_onboardings.gender | MALE / FEMALE | |
 | user_devices.platform | IOS / ANDROID | |

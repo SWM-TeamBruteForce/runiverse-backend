@@ -25,7 +25,7 @@ public record UserNotificationsResponse(List<ItemResponse> items, String nextCur
             boolean isRead,
             LocalDateTime createdAt,
             ActorResponse actor,
-            InvitationResponse invitation       // RUNNING_INVITED만 있고 그 밖에는 null
+            InvitationResponse invitation       // RUNNING_INVITATION_RECEIVED만 있고 그 밖에는 null
     ) {
 
         static ItemResponse from(GetUserNotificationsResult.Item item) {

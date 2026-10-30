@@ -9,9 +9,9 @@ import com.runiverse.running_service.application.notification.port.out.UserNotif
 import com.runiverse.running_service.application.notification.query.list.GetUserNotificationsResult;
 import com.runiverse.running_service.application.user.port.out.GenerateViewUrlPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
-import com.runiverse.running_service.domain.notification.vo.FriendAcceptedPayload;
-import com.runiverse.running_service.domain.notification.vo.FriendRequestedPayload;
-import com.runiverse.running_service.domain.notification.vo.RunningInvitedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestAcceptedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestReceivedPayload;
+import com.runiverse.running_service.domain.notification.vo.RunningInvitationReceivedPayload;
 import com.runiverse.running_service.domain.notification.vo.UserNotificationPayload;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 import lombok.RequiredArgsConstructor;
@@ -26,8 +26,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-// 알림 행에 지금 상태(사람·관계·초대)를 붙여 항목으로 만든다 — 알림 목록과 스트림 푸시가 함께 쓴다.
-// 한 곳에서 만들어야 목록 항목과 푸시 이벤트의 모양이 어긋나지 않는다
+// 알림 행에 지금 상태(사람·관계·초대)를 붙여 항목으로 만든다 — 알림 목록과 스트림 전송이 함께 쓴다.
+// 한 곳에서 만들어야 목록 항목과 스트림 이벤트의 모양이 어긋나지 않는다
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -103,9 +103,9 @@ public class UserNotificationItemAssembler {
     // 종류가 늘면 sealed라 여기서 컴파일 에러가 난다 — 방을 가리키는 알림인지 빠뜨리지 않는다
     private static Long roomIdOf(UserNotificationPayload payload) {
         return switch (payload) {
-            case FriendRequestedPayload p -> null;
-            case FriendAcceptedPayload p -> null;
-            case RunningInvitedPayload p -> p.runningRoomId().value();
+            case FriendRequestReceivedPayload p -> null;
+            case FriendRequestAcceptedPayload p -> null;
+            case RunningInvitationReceivedPayload p -> p.runningRoomId().value();
         };
     }
 }

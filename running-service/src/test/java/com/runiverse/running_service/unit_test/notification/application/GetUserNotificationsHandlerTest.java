@@ -13,7 +13,7 @@ import com.runiverse.running_service.application.notification.query.list.GetUser
 import com.runiverse.running_service.application.notification.query.list.GetUserNotificationsResult;
 import com.runiverse.running_service.application.notification.query.list.NotificationCursor;
 import com.runiverse.running_service.domain.common.vo.UserId;
-import com.runiverse.running_service.domain.notification.vo.FriendRequestedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestReceivedPayload;
 import com.runiverse.running_service.domain.notification.vo.UserNotificationType;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,9 +47,9 @@ class GetUserNotificationsHandlerTest {
     private static final int LIMIT = 20;
     private static final Duration RETENTION = Duration.ofDays(30);
     private static final UserNotificationRow ROW = new UserNotificationRow(912L,
-            new FriendRequestedPayload(new UserId(CHULSU)), false, LocalDateTime.of(2026, 10, 28, 12, 0));
+            new FriendRequestReceivedPayload(new UserId(CHULSU)), false, LocalDateTime.of(2026, 10, 28, 12, 0));
     private static final GetUserNotificationsResult.Item ITEM = new GetUserNotificationsResult.Item(
-            912L, UserNotificationType.FRIEND_REQUESTED, false, LocalDateTime.of(2026, 10, 28, 12, 0),
+            912L, UserNotificationType.FRIEND_REQUEST_RECEIVED, false, LocalDateTime.of(2026, 10, 28, 12, 0),
             new GetUserNotificationsResult.Actor(CHULSU, "철수", null, false, RelationshipType.FRIEND_REQUEST_RECEIVED),
             null);
 
@@ -82,7 +82,7 @@ class GetUserNotificationsHandlerTest {
         // when
         GetUserNotificationsResult result = handler.handle(new GetUserNotificationsQuery(ME, null, LIMIT));
 
-        // then -> 스트림 푸시와 같은 조립기를 써 모양이 어긋나지 않는다
+        // then -> 스트림 전송과 같은 조립기를 써 모양이 어긋나지 않는다
         assertThat(result.items()).containsExactly(ITEM);
         assertThat(result.nextCursor()).isNull();
         assertThat(result.unreadCount()).isEqualTo(3L);

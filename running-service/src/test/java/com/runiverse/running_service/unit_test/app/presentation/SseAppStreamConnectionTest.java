@@ -90,7 +90,7 @@ class SseAppStreamConnectionTest {
         // given
         UUID chulsu = UuidCreator.getTimeOrderedEpoch();
         GetUserNotificationsResult.Item item = new GetUserNotificationsResult.Item(
-                913L, UserNotificationType.RUNNING_INVITED, false, LocalDateTime.of(2026, 10, 28, 12, 3),
+                913L, UserNotificationType.RUNNING_INVITATION_RECEIVED, false, LocalDateTime.of(2026, 10, 28, 12, 3),
                 new GetUserNotificationsResult.Actor(chulsu, "철수", null, false, RelationshipType.FRIEND),
                 new GetUserNotificationsResult.Invitation(130L, RoomInvitationStatus.PENDING,
                         LocalDateTime.of(2026, 10, 28, 19, 30), 7_000));
@@ -111,7 +111,7 @@ class SseAppStreamConnectionTest {
                 .map(ResponseBodyEmitter.DataWithMediaType::getData)
                 .findFirst()
                 .orElseThrow();
-        assertThat(frame).contains("event:RUNNING_INVITED");
+        assertThat(frame).contains("event:RUNNING_INVITATION_RECEIVED");
         assertThat(body).isEqualTo(NotificationEventResponse.from(item));
         JsonNode json = JsonMapper.builder().build().valueToTree(body);
         assertThat(json.has("type")).isFalse();   // 종류는 event 이름이 말한다

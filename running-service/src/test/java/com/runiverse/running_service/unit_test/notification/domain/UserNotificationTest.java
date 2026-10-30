@@ -6,8 +6,8 @@ import com.runiverse.running_service.domain.notification.UserNotification;
 import com.runiverse.running_service.domain.notification.exception.SelfNotificationException;
 import com.runiverse.running_service.domain.notification.exception.UserNotificationPayloadRequiredException;
 import com.runiverse.running_service.domain.notification.exception.UserNotificationRecipientRequiredException;
-import com.runiverse.running_service.domain.notification.vo.FriendAcceptedPayload;
-import com.runiverse.running_service.domain.notification.vo.FriendRequestedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestAcceptedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestReceivedPayload;
 import com.runiverse.running_service.domain.notification.vo.UserNotificationType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,11 +25,11 @@ class UserNotificationTest {
     @DisplayName("받는 사람과 payload로 만들고 종류는 payload를 따른다")
     void createsWithTypeFromPayload() {
         // when
-        UserNotification notification = UserNotification.of(RECIPIENT_ID, new FriendAcceptedPayload(ACTOR_ID));
+        UserNotification notification = UserNotification.of(RECIPIENT_ID, new FriendRequestAcceptedPayload(ACTOR_ID));
 
         // then
         assertThat(notification.getUserId()).isEqualTo(RECIPIENT_ID);
-        assertThat(notification.type()).isEqualTo(UserNotificationType.FRIEND_ACCEPTED);
+        assertThat(notification.type()).isEqualTo(UserNotificationType.FRIEND_REQUEST_ACCEPTED);
         assertThat(notification.getPayload().actorId()).isEqualTo(ACTOR_ID);
     }
 
@@ -37,7 +37,7 @@ class UserNotificationTest {
     @DisplayName("받는 사람이 없으면 만들 수 없다")
     void rejectsWithoutRecipient() {
         // when & then
-        assertThatThrownBy(() -> UserNotification.of(null, new FriendRequestedPayload(ACTOR_ID)))
+        assertThatThrownBy(() -> UserNotification.of(null, new FriendRequestReceivedPayload(ACTOR_ID)))
                 .isInstanceOf(UserNotificationRecipientRequiredException.class);
     }
 
@@ -53,7 +53,7 @@ class UserNotificationTest {
     @DisplayName("자기 자신이 일으킨 알림은 만들 수 없다")
     void rejectsSelfNotification() {
         // when & then -> 받는 사람과 일으킨 사람이 같으면 호출한 코드의 잘못이다
-        assertThatThrownBy(() -> UserNotification.of(RECIPIENT_ID, new FriendRequestedPayload(RECIPIENT_ID)))
+        assertThatThrownBy(() -> UserNotification.of(RECIPIENT_ID, new FriendRequestReceivedPayload(RECIPIENT_ID)))
                 .isInstanceOf(SelfNotificationException.class);
     }
 }
