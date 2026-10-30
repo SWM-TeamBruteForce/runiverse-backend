@@ -25,34 +25,40 @@ public class SendPushHandler implements SendPushUsecase {
     private final LoadRefreshTokenPort loadRefreshTokenPort;
     private final SendPushPort sendPushPort;
     private final StaleDeviceDeactivator staleDeviceDeactivator;
+    private final PushProperties pushProperties;
 
     @Override
     public void handle(SendPushCommand command) {
         UserId userId = new UserId(command.userId());
         PushType pushType = command.message().type();
 
-        // 1. 켜진 기기·알림 동의를 본다. 건너뛴 이유는 리더가 남긴다
+        // 1. 꺼 둔 종류는 기기를 읽기 전에 거른다
+        if (pushProperties.disabledTypes().contains(pushType)) {
+            log.info("[기기] 푸시 발송 건너뜀: 꺼 둔 종류 - targetUserId={}, pushType={}", userId.value(), pushType);
+            return;
+        }
+        // 2. 켜진 기기·알림 동의를 본다. 건너뛴 이유는 리더가 남긴다
         Optional<PushTarget> target = pushTargetReader.read(userId, pushType);
         if (target.isEmpty()) {
             return;
         }
-        // 2. 로그인 세션이 없으면 보내지 않는다 — 로그아웃 요청이 실패했거나 세션이 만료·폐기돼도
+        // 3. 로그인 세션이 없으면 보내지 않는다 — 로그아웃 요청이 실패했거나 세션이 만료·폐기돼도
         //    기기는 켜진 채 남아, 로그아웃된 폰에 알림이 갈 수 있다
         if (loadRefreshTokenPort.load(userId).isEmpty()) {
             log.info("[기기] 푸시 발송 건너뜀: 로그인 세션 없음 - targetUserId={}, pushType={}",
                     userId.value(), pushType);
             return;
         }
-        // 3. 만료 시각이 지났으면 보내지 않는다 — 발송 대기 줄에서 기다리는 사이 지났을 수 있다
+        // 4. 만료 시각이 지났으면 보내지 않는다 — 발송 대기 줄에서 기다리는 사이 지났을 수 있다
         LocalDateTime expiresAt = command.message().expiresAt();
         if (expiresAt != null && !LocalDateTime.now().isBefore(expiresAt)) {
             log.info("[기기] 푸시 발송 건너뜀: 만료 시각 지남 - targetUserId={}, pushType={}",
                     userId.value(), pushType);
             return;
         }
-        // 4. 보낸다. 실패 원인은 발송 어댑터가 남긴다
+        // 5. 보낸다. 실패 원인은 발송 어댑터가 남긴다
         PushSendStatus status = sendPushPort.send(userId, target.get().pushToken(), command.message());
-        // 5. 다시 보내도 닿지 않는 토큰이면 기기를 끈다
+        // 6. 다시 보내도 닿지 않는 토큰이면 기기를 끈다
         switch (status) {
             case SENT -> log.info("[기기] 푸시 발송 성공 - targetUserId={}, pushType={}", userId.value(), pushType);
             case UNREGISTERED -> {
