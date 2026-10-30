@@ -2,6 +2,7 @@ package com.runiverse.running_service.infrastructure.persistence.running;
 
 import com.runiverse.running_service.application.match.port.out.CreateMatchApplicationPort;
 import com.runiverse.running_service.application.match.port.out.CreateMatchRoomPort;
+import com.runiverse.running_service.application.match.port.out.DeleteReceivedInvitationsPort;
 import com.runiverse.running_service.application.match.port.out.ExistsActiveApplicationPort;
 import com.runiverse.running_service.application.match.port.out.LoadActiveApplicationPort;
 import com.runiverse.running_service.application.match.port.out.LoadMatchRoomDetailPort;
@@ -65,7 +66,9 @@ public class RunningPersistenceAdapter implements CreateRunningPlayerPort, Creat
         // 스냅샷 조회 — 잠그지 않는 것만 lockById와 다르다
         LoadMatchRoomDetailPort,
         // 홈 상태 판정과 초대 대상의 지금 상태(매칭 중·러닝 중)를 함께 가른다
-        LoadUserStatusPort {
+        LoadUserStatusPort,
+        // 탈퇴가 받은 초대를 계정보다 먼저 지운다
+        DeleteReceivedInvitationsPort {
 
     private final EntityManager entityManager;
 
@@ -432,6 +435,19 @@ public class RunningPersistenceAdapter implements CreateRunningPlayerPort, Creat
                 // 활성 신청도 배정 행도 하나씩이다 — 어긋나도 깨지지 않게 첫 건만 쓴다
                 .getResultStream()
                 .findFirst();
+    }
+
+    // 상태와 상관없이 지운다. 같은 테이블을 지우는 쿼리라 탈퇴 정리가 고쳐 둔 초대 행이 먼저 flush된다 —
+    // 계정 삭제의 CASCADE에 맡기면 지워진 행을 커밋 때 갱신하려다 실패한다.
+    // 지운 행은 영속성 컨텍스트에 남으니 이 뒤에 방·초대를 다시 고치지 않는다
+    @Override
+    public void deleteAll(UserId inviteeId) {
+        entityManager.createQuery("""
+                        DELETE FROM RunningRoomInvitationJpaEntity i
+                        WHERE i.inviteeId = :inviteeId
+                        """)
+                .setParameter("inviteeId", inviteeId.value())
+                .executeUpdate();
     }
 
     private RunningResultPlayer toResultPlayer(RunningPlayerJpaEntity player,
