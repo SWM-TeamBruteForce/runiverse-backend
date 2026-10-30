@@ -5,9 +5,9 @@ package com.runiverse.running_service.application.app.port.out;
 // 알림 이벤트의 data는 셋 다 알림 목록 항목에서 type만 뺀 모양이다 — 클라는 목록 맨 위에 붙이고 배지를 하나 올린다
 public enum AppStreamEventType {
     // 누군가 나에게 친구 요청을 보냈다
-    FRIEND_REQUESTED,
+    FRIEND_REQUEST_RECEIVED,
     // 내가 보낸 친구 요청을 상대가 수락했다
-    FRIEND_ACCEPTED,
+    FRIEND_REQUEST_ACCEPTED,
     // 누군가 나를 초대 방에 초대했다 — 다시 초대도 새로 보낸다
-    RUNNING_INVITED
+    RUNNING_INVITATION_RECEIVED
 }

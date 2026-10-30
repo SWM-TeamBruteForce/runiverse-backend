@@ -17,7 +17,7 @@ public record GetUserNotificationsResult(List<Item> items, String nextCursor, lo
             boolean read,
             LocalDateTime createdAt,
             Actor actor,
-            Invitation invitation               // RUNNING_INVITED만 있고 그 밖에는 null
+            Invitation invitation               // RUNNING_INVITATION_RECEIVED만 있고 그 밖에는 null
     ) {
 
     }

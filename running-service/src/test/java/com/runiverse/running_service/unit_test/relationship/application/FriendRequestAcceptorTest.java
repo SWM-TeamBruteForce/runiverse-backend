@@ -5,7 +5,7 @@ import com.runiverse.running_service.application.common.port.out.SendUserNotific
 import com.runiverse.running_service.application.relationship.common.FriendRequestAcceptor;
 import com.runiverse.running_service.application.relationship.port.out.SaveUserRelationshipPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
-import com.runiverse.running_service.domain.notification.vo.FriendAcceptedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestAcceptedPayload;
 import com.runiverse.running_service.domain.relationship.UserRelationship;
 import com.runiverse.running_service.domain.relationship.exception.InvalidRelationshipTransitionException;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
@@ -67,7 +67,7 @@ class FriendRequestAcceptorTest {
 
     @Test
     @DisplayName("요청했던 사람에게 수락한 사람을 담은 친구 수락 알림을 보낸다")
-    void acceptSendsFriendAcceptedNotification() {
+    void acceptSendsFriendRequestAcceptedNotification() {
         // given
         UserRelationship mine = relationship(1L, userId, requesterId, RelationshipType.FRIEND_REQUEST_RECEIVED);
         UserRelationship theirs = relationship(2L, requesterId, userId, RelationshipType.FRIEND_REQUEST_SENT);
@@ -76,7 +76,8 @@ class FriendRequestAcceptorTest {
         acceptor.accept(mine, theirs);
 
         // then -> 받는 사람은 요청했던 쪽(theirs), 일으킨 사람은 수락한 쪽(mine)이다
-        verify(sendUserNotificationPort).send(new UserId(requesterId), new FriendAcceptedPayload(new UserId(userId)));
+        verify(sendUserNotificationPort).send(new UserId(requesterId),
+                new FriendRequestAcceptedPayload(new UserId(userId)));
     }
 
     @Test

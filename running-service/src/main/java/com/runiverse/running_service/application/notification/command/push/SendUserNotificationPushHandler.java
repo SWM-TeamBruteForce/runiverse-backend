@@ -62,16 +62,16 @@ public class SendUserNotificationPushHandler implements SendUserNotificationPush
         String actorId = item.actor().userId().toString();
         String notificationId = String.valueOf(item.notificationId());
         return switch (item.type()) {
-            case FRIEND_REQUESTED -> new PushMessage(PushType.FRIEND_REQUESTED,
+            case FRIEND_REQUEST_RECEIVED -> new PushMessage(PushType.FRIEND_REQUEST_RECEIVED,
                     "친구 요청이 왔어요", "%s님이 친구 요청을 보냈어요".formatted(nickname),
                     Map.of("actorId", actorId, "notificationId", notificationId), null);
-            case FRIEND_ACCEPTED -> new PushMessage(PushType.FRIEND_ACCEPTED,
+            case FRIEND_REQUEST_ACCEPTED -> new PushMessage(PushType.FRIEND_REQUEST_ACCEPTED,
                     "새 친구가 생겼어요", "%s님과 친구가 됐어요".formatted(nickname),
                     Map.of("actorId", actorId, "notificationId", notificationId), null);
             // 모집이 끝나면 수락할 수 없어 그 뒤에 켜진 폰은 받지 않는다
-            case RUNNING_INVITED -> {
+            case RUNNING_INVITATION_RECEIVED -> {
                 GetUserNotificationsResult.Invitation invitation = item.invitation();
-                yield new PushMessage(PushType.RUNNING_INVITED,
+                yield new PushMessage(PushType.RUNNING_INVITATION_RECEIVED,
                         "러닝 초대가 왔어요",
                         "%s님이 %s 러닝에 초대했어요".formatted(
                                 nickname, invitation.scheduledStartAt().format(TIME_FORMAT)),

@@ -40,7 +40,7 @@ class BroadcastUserNotificationHandlerTest {
     private static final UUID ME = UuidCreator.getTimeOrderedEpoch();
     private static final UUID CHULSU = UuidCreator.getTimeOrderedEpoch();
     private static final GetUserNotificationsResult.Item ITEM = new GetUserNotificationsResult.Item(
-            912L, UserNotificationType.FRIEND_REQUESTED, false, LocalDateTime.of(2026, 10, 28, 12, 0),
+            912L, UserNotificationType.FRIEND_REQUEST_RECEIVED, false, LocalDateTime.of(2026, 10, 28, 12, 0),
             new GetUserNotificationsResult.Actor(CHULSU, "철수", null, false, RelationshipType.FRIEND_REQUEST_RECEIVED),
             null);
 
@@ -95,7 +95,7 @@ class BroadcastUserNotificationHandlerTest {
 
         // then
         verify(connection).send(AppStreamEvent.notification(ITEM));
-        assertThat(AppStreamEvent.notification(ITEM).type().name()).isEqualTo("FRIEND_REQUESTED");
+        assertThat(AppStreamEvent.notification(ITEM).type().name()).isEqualTo("FRIEND_REQUEST_RECEIVED");
         assertThat(log.messages(Level.INFO))
                 .containsExactly("[알림] 스트림 전송 성공 - notificationId=912, connectionId=conn-1");
     }

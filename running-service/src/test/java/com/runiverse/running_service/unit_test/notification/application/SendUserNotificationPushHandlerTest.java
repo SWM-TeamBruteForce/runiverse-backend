@@ -74,9 +74,9 @@ class SendUserNotificationPushHandlerTest {
 
     @Test
     @DisplayName("친구 요청 알림은 요청한 사람의 닉네임으로 만료 없이 보낸다")
-    void sendsFriendRequested() {
+    void sendsFriendRequestReceived() {
         // given
-        givenItem(item(UserNotificationType.FRIEND_REQUESTED, actor(false), null));
+        givenItem(item(UserNotificationType.FRIEND_REQUEST_RECEIVED, actor(false), null));
 
         // when
         handler.handle(COMMAND);
@@ -84,37 +84,38 @@ class SendUserNotificationPushHandlerTest {
         // then -> 늦게 닿아도 의미가 있는 알림이다
         SendPushCommand command = sentCommand();
         assertThat(command.userId()).isEqualTo(ME);
-        assertThat(command.message()).isEqualTo(new PushMessage(PushType.FRIEND_REQUESTED,
+        assertThat(command.message()).isEqualTo(new PushMessage(PushType.FRIEND_REQUEST_RECEIVED,
                 "친구 요청이 왔어요", "철수님이 친구 요청을 보냈어요",
                 Map.of("actorId", CHULSU.toString(), "notificationId", "912"), null));
     }
 
     @Test
     @DisplayName("친구 성립 알림은 수락한 사람의 닉네임으로 보낸다")
-    void sendsFriendAccepted() {
+    void sendsFriendRequestAccepted() {
         // given
-        givenItem(item(UserNotificationType.FRIEND_ACCEPTED, actor(false), null));
+        givenItem(item(UserNotificationType.FRIEND_REQUEST_ACCEPTED, actor(false), null));
 
         // when
         handler.handle(COMMAND);
 
         // then
-        assertThat(sentCommand().message()).isEqualTo(new PushMessage(PushType.FRIEND_ACCEPTED,
+        assertThat(sentCommand().message()).isEqualTo(new PushMessage(PushType.FRIEND_REQUEST_ACCEPTED,
                 "새 친구가 생겼어요", "철수님과 친구가 됐어요",
                 Map.of("actorId", CHULSU.toString(), "notificationId", "912"), null));
     }
 
     @Test
     @DisplayName("초대 알림은 시작 시각과 방을 싣고 모집 마감에 만료된다")
-    void sendsRunningInvited() {
+    void sendsRunningInvitationReceived() {
         // given
-        givenItem(item(UserNotificationType.RUNNING_INVITED, actor(false), invitation(RoomInvitationStatus.PENDING)));
+        givenItem(item(UserNotificationType.RUNNING_INVITATION_RECEIVED, actor(false),
+                invitation(RoomInvitationStatus.PENDING)));
 
         // when
         handler.handle(COMMAND);
 
         // then -> 마감 뒤에는 수락할 수 없다
-        assertThat(sentCommand().message()).isEqualTo(new PushMessage(PushType.RUNNING_INVITED,
+        assertThat(sentCommand().message()).isEqualTo(new PushMessage(PushType.RUNNING_INVITATION_RECEIVED,
                 "러닝 초대가 왔어요", "철수님이 21:30 러닝에 초대했어요",
                 Map.of("actorId", CHULSU.toString(), "notificationId", "912", "runningRoomId", "130"),
                 START_AT.minus(CLOSE_OFFSET)));
@@ -124,7 +125,7 @@ class SendUserNotificationPushHandlerTest {
     @DisplayName("보낸 사람이 그새 탈퇴했으면 보내지 않는다")
     void skipsDeletedActor() {
         // given -> "탈퇴한 사용자님이…"가 된다
-        givenItem(item(UserNotificationType.FRIEND_REQUESTED, actor(true), null));
+        givenItem(item(UserNotificationType.FRIEND_REQUEST_RECEIVED, actor(true), null));
 
         // when
         handler.handle(COMMAND);
@@ -138,7 +139,7 @@ class SendUserNotificationPushHandlerTest {
     @DisplayName("초대가 그새 대기가 아니게 됐으면 보내지 않는다")
     void skipsAnsweredInvitation(RoomInvitationStatus status) {
         // given
-        givenItem(item(UserNotificationType.RUNNING_INVITED, actor(false), invitation(status)));
+        givenItem(item(UserNotificationType.RUNNING_INVITATION_RECEIVED, actor(false), invitation(status)));
 
         // when
         handler.handle(COMMAND);

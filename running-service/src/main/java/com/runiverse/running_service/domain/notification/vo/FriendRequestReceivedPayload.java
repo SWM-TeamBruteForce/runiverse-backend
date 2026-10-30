@@ -4,9 +4,9 @@ import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.notification.exception.UserNotificationActorRequiredException;
 
 // 누군가 나에게 친구 요청을 보냈다 — 저장 키는 request_user_id
-public record FriendRequestedPayload(UserId requestUserId) implements UserNotificationPayload {
+public record FriendRequestReceivedPayload(UserId requestUserId) implements UserNotificationPayload {
 
-    public FriendRequestedPayload {
+    public FriendRequestReceivedPayload {
         if (requestUserId == null) {
             throw new UserNotificationActorRequiredException();
         }
@@ -14,7 +14,7 @@ public record FriendRequestedPayload(UserId requestUserId) implements UserNotifi
 
     @Override
     public UserNotificationType type() {
-        return UserNotificationType.FRIEND_REQUESTED;
+        return UserNotificationType.FRIEND_REQUEST_RECEIVED;
     }
 
     @Override

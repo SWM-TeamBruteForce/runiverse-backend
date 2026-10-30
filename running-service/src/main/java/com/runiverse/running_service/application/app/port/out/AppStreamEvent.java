@@ -10,9 +10,9 @@ public record AppStreamEvent(AppStreamEventType type, GetUserNotificationsResult
     // 알림 종류가 늘면 여기서 컴파일 에러가 난다 — 이벤트 이름을 정하지 않은 채 보내지 않는다
     public static AppStreamEvent notification(GetUserNotificationsResult.Item notification) {
         AppStreamEventType type = switch (notification.type()) {
-            case FRIEND_REQUESTED -> AppStreamEventType.FRIEND_REQUESTED;
-            case FRIEND_ACCEPTED -> AppStreamEventType.FRIEND_ACCEPTED;
-            case RUNNING_INVITED -> AppStreamEventType.RUNNING_INVITED;
+            case FRIEND_REQUEST_RECEIVED -> AppStreamEventType.FRIEND_REQUEST_RECEIVED;
+            case FRIEND_REQUEST_ACCEPTED -> AppStreamEventType.FRIEND_REQUEST_ACCEPTED;
+            case RUNNING_INVITATION_RECEIVED -> AppStreamEventType.RUNNING_INVITATION_RECEIVED;
         };
         return new AppStreamEvent(type, notification);
     }

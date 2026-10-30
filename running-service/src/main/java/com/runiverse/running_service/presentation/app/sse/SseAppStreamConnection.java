@@ -50,7 +50,7 @@ public class SseAppStreamConnection implements AppStreamConnection {
     // 알림은 목록 항목에서 type만 뺀 모양이다 — 종류는 event 이름이 말한다
     private Object bodyOf(AppStreamEvent event) {
         return switch (event.type()) {
-            case FRIEND_REQUESTED, FRIEND_ACCEPTED, RUNNING_INVITED ->
+            case FRIEND_REQUEST_RECEIVED, FRIEND_REQUEST_ACCEPTED, RUNNING_INVITATION_RECEIVED ->
                     NotificationEventResponse.from(event.notification());
         };
     }

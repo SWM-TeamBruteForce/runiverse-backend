@@ -6,9 +6,9 @@ import com.runiverse.running_service.application.notification.port.out.UserNotif
 import com.runiverse.running_service.application.notification.port.out.UserNotificationRow;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.notification.UserNotification;
-import com.runiverse.running_service.domain.notification.vo.FriendAcceptedPayload;
-import com.runiverse.running_service.domain.notification.vo.FriendRequestedPayload;
-import com.runiverse.running_service.domain.notification.vo.RunningInvitedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestAcceptedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestReceivedPayload;
+import com.runiverse.running_service.domain.notification.vo.RunningInvitationReceivedPayload;
 import com.runiverse.running_service.domain.notification.vo.UserNotificationType;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
 import com.runiverse.running_service.infrastructure.persistence.notification.UserNotificationJpaEntity;
@@ -83,7 +83,7 @@ class UserNotificationPersistenceAdapterTest {
 
             // when
             Long id = adapter.save(UserNotification.of(new UserId(RECIPIENT_ID),
-                    new FriendRequestedPayload(new UserId(ACTOR_ID))));
+                    new FriendRequestReceivedPayload(new UserId(ACTOR_ID))));
 
             // then
             assertThat(id).isEqualTo(912L);
@@ -91,40 +91,42 @@ class UserNotificationPersistenceAdapterTest {
 
         @Test
         @DisplayName("친구 요청 알림은 request_user_id 키에 요청한 사람을 문자열로 담아 안 읽음으로 쌓는다")
-        void savesFriendRequested() {
+        void savesFriendRequestReceived() {
             // when
-            adapter.save(UserNotification.of(new UserId(RECIPIENT_ID), new FriendRequestedPayload(new UserId(ACTOR_ID))));
+            adapter.save(UserNotification.of(new UserId(RECIPIENT_ID),
+                    new FriendRequestReceivedPayload(new UserId(ACTOR_ID))));
 
             // then -> 키 이름은 저장된 약속이다
             UserNotificationJpaEntity entity = persisted();
             assertThat(entity.getUserId()).isEqualTo(RECIPIENT_ID);
-            assertThat(entity.getType()).isEqualTo(UserNotificationType.FRIEND_REQUESTED);
+            assertThat(entity.getType()).isEqualTo(UserNotificationType.FRIEND_REQUEST_RECEIVED);
             assertThat(entity.getPayload()).isEqualTo(Map.of("request_user_id", ACTOR_ID.toString()));
             assertThat(entity.isRead()).isFalse();
         }
 
         @Test
         @DisplayName("친구 수락 알림은 accept_user_id 키에 수락한 사람을 담는다")
-        void savesFriendAccepted() {
+        void savesFriendRequestAccepted() {
             // when
-            adapter.save(UserNotification.of(new UserId(RECIPIENT_ID), new FriendAcceptedPayload(new UserId(ACTOR_ID))));
+            adapter.save(UserNotification.of(new UserId(RECIPIENT_ID),
+                    new FriendRequestAcceptedPayload(new UserId(ACTOR_ID))));
 
             // then
             UserNotificationJpaEntity entity = persisted();
-            assertThat(entity.getType()).isEqualTo(UserNotificationType.FRIEND_ACCEPTED);
+            assertThat(entity.getType()).isEqualTo(UserNotificationType.FRIEND_REQUEST_ACCEPTED);
             assertThat(entity.getPayload()).isEqualTo(Map.of("accept_user_id", ACTOR_ID.toString()));
         }
 
         @Test
         @DisplayName("초대 알림은 request_user_id에 초대한 사람, running_room_id에 방 ID를 숫자로 담는다")
-        void savesRunningInvited() {
+        void savesRunningInvitationReceived() {
             // when
             adapter.save(UserNotification.of(new UserId(RECIPIENT_ID),
-                    new RunningInvitedPayload(new UserId(ACTOR_ID), new RunningRoomId(130L))));
+                    new RunningInvitationReceivedPayload(new UserId(ACTOR_ID), new RunningRoomId(130L))));
 
             // then -> 방 ID는 running_room_invitations의 bigint와 맞춰 숫자다
             UserNotificationJpaEntity entity = persisted();
-            assertThat(entity.getType()).isEqualTo(UserNotificationType.RUNNING_INVITED);
+            assertThat(entity.getType()).isEqualTo(UserNotificationType.RUNNING_INVITATION_RECEIVED);
             assertThat(entity.getPayload()).isEqualTo(Map.of(
                     "request_user_id", ACTOR_ID.toString(),
                     "running_room_id", 130L));
@@ -175,7 +177,8 @@ class UserNotificationPersistenceAdapterTest {
         }
 
         private UserNotificationJpaEntity requested(long id) {
-            return row(id, UserNotificationType.FRIEND_REQUESTED, Map.of("request_user_id", ACTOR_ID.toString()));
+            return row(id, UserNotificationType.FRIEND_REQUEST_RECEIVED,
+                    Map.of("request_user_id", ACTOR_ID.toString()));
         }
 
         @Test
@@ -246,8 +249,9 @@ class UserNotificationPersistenceAdapterTest {
             // given
             givenFetched(List.of(
                     requested(30L),
-                    row(20L, UserNotificationType.FRIEND_ACCEPTED, Map.of("accept_user_id", ACTOR_ID.toString())),
-                    row(10L, UserNotificationType.RUNNING_INVITED, Map.of(
+                    row(20L, UserNotificationType.FRIEND_REQUEST_ACCEPTED,
+                            Map.of("accept_user_id", ACTOR_ID.toString())),
+                    row(10L, UserNotificationType.RUNNING_INVITATION_RECEIVED, Map.of(
                             "request_user_id", ACTOR_ID.toString(), "running_room_id", 130))));
 
             // when
@@ -255,9 +259,9 @@ class UserNotificationPersistenceAdapterTest {
 
             // then
             assertThat(page.rows()).extracting(UserNotificationRow::payload).containsExactly(
-                    new FriendRequestedPayload(new UserId(ACTOR_ID)),
-                    new FriendAcceptedPayload(new UserId(ACTOR_ID)),
-                    new RunningInvitedPayload(new UserId(ACTOR_ID), new RunningRoomId(130L)));
+                    new FriendRequestReceivedPayload(new UserId(ACTOR_ID)),
+                    new FriendRequestAcceptedPayload(new UserId(ACTOR_ID)),
+                    new RunningInvitationReceivedPayload(new UserId(ACTOR_ID), new RunningRoomId(130L)));
             assertThat(page.rows().getFirst().createdAt()).isEqualTo(CREATED_AT);
         }
 
@@ -267,8 +271,9 @@ class UserNotificationPersistenceAdapterTest {
             // given -> 가운데 행은 키가 없고, 마지막 행은 페이지의 끝이다
             givenFetched(List.of(
                     requested(30L),
-                    row(20L, UserNotificationType.RUNNING_INVITED, Map.of("request_user_id", ACTOR_ID.toString())),
-                    row(15L, UserNotificationType.FRIEND_REQUESTED, Map.of("request_user_id", "not-a-uuid")),
+                    row(20L, UserNotificationType.RUNNING_INVITATION_RECEIVED,
+                            Map.of("request_user_id", ACTOR_ID.toString())),
+                    row(15L, UserNotificationType.FRIEND_REQUEST_RECEIVED, Map.of("request_user_id", "not-a-uuid")),
                     requested(10L)));
 
             // when
@@ -278,8 +283,8 @@ class UserNotificationPersistenceAdapterTest {
             assertThat(page.rows()).extracting(UserNotificationRow::userNotificationId).containsExactly(30L);
             assertThat(page.nextBeforeId()).isEqualTo(15L);
             assertThat(log.messages(Level.ERROR)).containsExactly(
-                    "[알림] 목록 항목 건너뜀: payload 복원 실패 - notificationId=20, type=RUNNING_INVITED",
-                    "[알림] 목록 항목 건너뜀: payload 복원 실패 - notificationId=15, type=FRIEND_REQUESTED");
+                    "[알림] 목록 항목 건너뜀: payload 복원 실패 - notificationId=20, type=RUNNING_INVITATION_RECEIVED",
+                    "[알림] 목록 항목 건너뜀: payload 복원 실패 - notificationId=15, type=FRIEND_REQUEST_RECEIVED");
         }
     }
 
@@ -303,7 +308,7 @@ class UserNotificationPersistenceAdapterTest {
             UserNotificationJpaEntity entity = mock(UserNotificationJpaEntity.class);
             lenient().when(entity.getUserNotificationId()).thenReturn(912L);
             lenient().when(entity.getUserId()).thenReturn(owner);
-            lenient().when(entity.getType()).thenReturn(UserNotificationType.FRIEND_REQUESTED);
+            lenient().when(entity.getType()).thenReturn(UserNotificationType.FRIEND_REQUEST_RECEIVED);
             lenient().when(entity.getPayload()).thenReturn(payload);
             lenient().when(entity.getCreatedAt()).thenReturn(CREATED_AT);
             return entity;
@@ -319,7 +324,7 @@ class UserNotificationPersistenceAdapterTest {
             // when & then
             assertThat(adapter.loadOne(new UserId(RECIPIENT_ID), 912L)).hasValueSatisfying(row -> {
                 assertThat(row.userNotificationId()).isEqualTo(912L);
-                assertThat(row.payload()).isEqualTo(new FriendRequestedPayload(new UserId(ACTOR_ID)));
+                assertThat(row.payload()).isEqualTo(new FriendRequestReceivedPayload(new UserId(ACTOR_ID)));
             });
         }
 
@@ -354,7 +359,7 @@ class UserNotificationPersistenceAdapterTest {
             // when & then
             assertThat(adapter.loadOne(new UserId(RECIPIENT_ID), 912L)).isEmpty();
             assertThat(log.messages(Level.ERROR)).containsExactly(
-                    "[알림] 목록 항목 건너뜀: payload 복원 실패 - notificationId=912, type=FRIEND_REQUESTED");
+                    "[알림] 목록 항목 건너뜀: payload 복원 실패 - notificationId=912, type=FRIEND_REQUEST_RECEIVED");
         }
     }
 

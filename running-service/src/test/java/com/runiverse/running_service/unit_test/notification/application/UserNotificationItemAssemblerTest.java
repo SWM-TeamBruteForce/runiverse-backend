@@ -12,8 +12,8 @@ import com.runiverse.running_service.application.notification.port.out.UserNotif
 import com.runiverse.running_service.application.notification.query.list.GetUserNotificationsResult;
 import com.runiverse.running_service.application.user.port.out.GenerateViewUrlPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
-import com.runiverse.running_service.domain.notification.vo.FriendRequestedPayload;
-import com.runiverse.running_service.domain.notification.vo.RunningInvitedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestReceivedPayload;
+import com.runiverse.running_service.domain.notification.vo.RunningInvitationReceivedPayload;
 import com.runiverse.running_service.domain.notification.vo.UserNotificationType;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 import com.runiverse.running_service.domain.running.room.vo.RoomInvitationStatus;
@@ -73,14 +73,14 @@ class UserNotificationItemAssemblerTest {
         log.stop();
     }
 
-    private static UserNotificationRow friendRequested(long id) {
-        return new UserNotificationRow(id, new FriendRequestedPayload(new UserId(CHULSU)), false,
+    private static UserNotificationRow friendRequestReceived(long id) {
+        return new UserNotificationRow(id, new FriendRequestReceivedPayload(new UserId(CHULSU)), false,
                 LocalDateTime.of(2026, 10, 28, 12, 0));
     }
 
     private static UserNotificationRow invited(long id) {
         return new UserNotificationRow(id,
-                new RunningInvitedPayload(new UserId(CHULSU), new RunningRoomId(ROOM_ID)), true,
+                new RunningInvitationReceivedPayload(new UserId(CHULSU), new RunningRoomId(ROOM_ID)), true,
                 LocalDateTime.of(2026, 10, 28, 13, 0));
     }
 
@@ -91,7 +91,7 @@ class UserNotificationItemAssemblerTest {
 
     @Test
     @DisplayName("친구 요청 알림에 일으킨 사람의 프로필과 지금 관계를 붙이고, 초대는 읽지 않는다")
-    void assemblesFriendRequestedItem() {
+    void assemblesFriendRequestReceivedItem() {
         // given
         givenChulsuAlive("profile/chulsu.jpg");
         given(generateViewUrlPort.generate("profile/chulsu.jpg")).willReturn("https://cdn/chulsu.jpg");
@@ -99,12 +99,12 @@ class UserNotificationItemAssemblerTest {
                 .willReturn(Map.of(CHULSU, RelationshipType.FRIEND_REQUEST_RECEIVED));
 
         // when
-        List<GetUserNotificationsResult.Item> items = assembler.assemble(ME, List.of(friendRequested(912L)));
+        List<GetUserNotificationsResult.Item> items = assembler.assemble(ME, List.of(friendRequestReceived(912L)));
 
         // then
         assertThat(items).singleElement().satisfies(item -> {
             assertThat(item.notificationId()).isEqualTo(912L);
-            assertThat(item.type()).isEqualTo(UserNotificationType.FRIEND_REQUESTED);
+            assertThat(item.type()).isEqualTo(UserNotificationType.FRIEND_REQUEST_RECEIVED);
             assertThat(item.read()).isFalse();
             assertThat(item.actor()).isEqualTo(new GetUserNotificationsResult.Actor(
                     CHULSU, "철수", "https://cdn/chulsu.jpg", false, RelationshipType.FRIEND_REQUEST_RECEIVED));
@@ -127,7 +127,7 @@ class UserNotificationItemAssemblerTest {
 
         // then -> 알림은 사건의 기록이고 버튼은 지금 상태(EXPIRED)로 그린다
         assertThat(items).singleElement().satisfies(item -> {
-            assertThat(item.type()).isEqualTo(UserNotificationType.RUNNING_INVITED);
+            assertThat(item.type()).isEqualTo(UserNotificationType.RUNNING_INVITATION_RECEIVED);
             assertThat(item.invitation()).isEqualTo(new GetUserNotificationsResult.Invitation(
                     ROOM_ID, RoomInvitationStatus.EXPIRED, START, 7_000));
             assertThat(item.actor().relationshipType()).isEqualTo(RelationshipType.FRIEND);
@@ -144,7 +144,7 @@ class UserNotificationItemAssemblerTest {
         given(loadRelationshipTypesPort.loadTypes(ME, Set.of(CHULSU))).willReturn(Map.of());
 
         // when
-        List<GetUserNotificationsResult.Item> items = assembler.assemble(ME, List.of(friendRequested(912L)));
+        List<GetUserNotificationsResult.Item> items = assembler.assemble(ME, List.of(friendRequestReceived(912L)));
 
         // then -> 알림은 남고 사람만 탈퇴 유저 형식이다
         assertThat(items).singleElement().extracting(GetUserNotificationsResult.Item::actor)
@@ -159,7 +159,7 @@ class UserNotificationItemAssemblerTest {
         given(loadRelationshipTypesPort.loadTypes(ME, Set.of(CHULSU))).willReturn(Map.of());
 
         // when & then
-        assertThat(assembler.assemble(ME, List.of(friendRequested(912L)))).singleElement()
+        assertThat(assembler.assemble(ME, List.of(friendRequestReceived(912L)))).singleElement()
                 .extracting(item -> item.actor().relationshipType()).isEqualTo(RelationshipType.NONE);
     }
 
@@ -172,7 +172,8 @@ class UserNotificationItemAssemblerTest {
         given(loadInvitationSnapshotsPort.loadSnapshots(ME, Set.of(ROOM_ID))).willReturn(Map.of());
 
         // when
-        List<GetUserNotificationsResult.Item> items = assembler.assemble(ME, List.of(friendRequested(912L), invited(913L)));
+        List<GetUserNotificationsResult.Item> items =
+                assembler.assemble(ME, List.of(friendRequestReceived(912L), invited(913L)));
 
         // then -> 알림 하나 때문에 알림함 전체가 막히지 않는다
         assertThat(items).extracting(GetUserNotificationsResult.Item::notificationId).containsExactly(912L);

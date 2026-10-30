@@ -34,7 +34,7 @@ class UserNotificationE2eTest extends E2eTestSupport {
         assertThat(post(friendRequestPath(target), null, requester.accessToken()).status()).isEqualTo(201);
 
         // then
-        assertThat(notificationsOf(target)).containsExactly("FRIEND_REQUESTED|" + requester.userId() + "|false");
+        assertThat(notificationsOf(target)).containsExactly("FRIEND_REQUEST_RECEIVED|" + requester.userId() + "|false");
         assertThat(notificationsOf(requester)).isEmpty();
     }
 
@@ -50,8 +50,8 @@ class UserNotificationE2eTest extends E2eTestSupport {
         assertThat(put(friendRequestPath(requester), target.accessToken()).status()).isEqualTo(200);
 
         // then -> 받은 요청 알림은 사건의 기록이라 수락해도 그대로 남는다
-        assertThat(notificationsOf(requester)).containsExactly("FRIEND_ACCEPTED|" + target.userId() + "|false");
-        assertThat(notificationsOf(target)).containsExactly("FRIEND_REQUESTED|" + requester.userId() + "|false");
+        assertThat(notificationsOf(requester)).containsExactly("FRIEND_REQUEST_ACCEPTED|" + target.userId() + "|false");
+        assertThat(notificationsOf(target)).containsExactly("FRIEND_REQUEST_RECEIVED|" + requester.userId() + "|false");
 
         // 응답을 못 받은 앱의 재요청은 이미 친구라 수락 알림을 또 쌓지 않는다
         assertThat(put(friendRequestPath(requester), target.accessToken()).status()).isEqualTo(200);
@@ -70,8 +70,8 @@ class UserNotificationE2eTest extends E2eTestSupport {
         assertThat(post(friendRequestPath(first), null, second.accessToken()).status()).isEqualTo(200);
 
         // then
-        assertThat(notificationsOf(first)).containsExactly("FRIEND_ACCEPTED|" + second.userId() + "|false");
-        assertThat(notificationsOf(second)).containsExactly("FRIEND_REQUESTED|" + first.userId() + "|false");
+        assertThat(notificationsOf(first)).containsExactly("FRIEND_REQUEST_ACCEPTED|" + second.userId() + "|false");
+        assertThat(notificationsOf(second)).containsExactly("FRIEND_REQUEST_RECEIVED|" + first.userId() + "|false");
     }
 
     @Test
@@ -106,13 +106,13 @@ class UserNotificationE2eTest extends E2eTestSupport {
 
             // then -> 초대 행은 하나로 횟수만 오르지만 알림은 보낼 때마다 쌓인다
             assertThat(notificationsOf(friend)).containsExactly(
-                    "FRIEND_REQUESTED|" + host.userId() + "|false",
-                    "RUNNING_INVITED|" + host.userId() + "|false",
-                    "RUNNING_INVITED|" + host.userId() + "|false");
+                    "FRIEND_REQUEST_RECEIVED|" + host.userId() + "|false",
+                    "RUNNING_INVITATION_RECEIVED|" + host.userId() + "|false",
+                    "RUNNING_INVITATION_RECEIVED|" + host.userId() + "|false");
             assertThat(querySql("""
                     SELECT DISTINCT payload ->> 'running_room_id'
                     FROM user_notifications
-                    WHERE user_id = '%s' AND type = 'RUNNING_INVITED';
+                    WHERE user_id = '%s' AND type = 'RUNNING_INVITATION_RECEIVED';
                     """.formatted(friend.userId()))).containsExactly(String.valueOf(roomId));
         } finally {
             assertThat(post("/match-rooms/leave", null, host.accessToken()).status()).isEqualTo(204);
@@ -161,7 +161,7 @@ class UserNotificationE2eTest extends E2eTestSupport {
             assertThat(listed.text("nextCursor")).isNull();
             List<Map<String, Object>> items = listed.objects("items");
             assertThat(items).extracting(item -> item.get("type"))
-                    .containsExactly("RUNNING_INVITED", "FRIEND_REQUESTED");
+                    .containsExactly("RUNNING_INVITATION_RECEIVED", "FRIEND_REQUEST_RECEIVED");
             Map<String, Object> invited = items.get(0);
             assertThat(invited.get("isRead")).isEqualTo(false);
             assertThat(actorOf(invited))
@@ -300,7 +300,7 @@ class UserNotificationE2eTest extends E2eTestSupport {
             assertThat(invite(host, roomId, me).status()).isEqualTo(204);
             executeSql("""
                     UPDATE user_notifications SET created_at = created_at - INTERVAL '31 days'
-                    WHERE user_id = '%s' AND type = 'FRIEND_ACCEPTED';
+                    WHERE user_id = '%s' AND type = 'FRIEND_REQUEST_ACCEPTED';
                     """.formatted(me.userId()));
 
             // when
@@ -308,7 +308,7 @@ class UserNotificationE2eTest extends E2eTestSupport {
 
             // then -> 지난 수락 알림은 목록에서도 안 읽은 수에서도 빠진다
             assertThat(listed.objects("items")).extracting(item -> item.get("type"))
-                    .containsExactly("RUNNING_INVITED");
+                    .containsExactly("RUNNING_INVITATION_RECEIVED");
             assertThat(listed.number("unreadCount")).isEqualTo(1);
 
             // 남은 초대 알림은 모두 읽음으로 읽힌다
@@ -369,7 +369,7 @@ class UserNotificationE2eTest extends E2eTestSupport {
     }
 
     @Test
-    @DisplayName("친구 요청을 받으면 앱 스트림으로 FRIEND_REQUESTED 이벤트가 오고, data는 목록 항목에서 type만 뺀 모양이다")
+    @DisplayName("친구 요청을 받으면 앱 스트림으로 FRIEND_REQUEST_RECEIVED 이벤트가 오고, data는 목록 항목에서 type만 뺀 모양이다")
     void pushesNotificationToRecipientStream() {
         // given -> 받는 사람만 앱 스트림을 열어 둔다
         TestUser requester = signUpAndOnboard();
@@ -383,10 +383,10 @@ class UserNotificationE2eTest extends E2eTestSupport {
             assertThat(post(friendRequestPath(target), null, requester.accessToken()).status()).isEqualTo(201);
 
             // then
-            Map<String, Object> pushed = targetStream.await("FRIEND_REQUESTED");
+            Map<String, Object> pushed = targetStream.await("FRIEND_REQUEST_RECEIVED");
             Map<String, Object> listed = new HashMap<>(get("/users/me/notifications", target.accessToken()).objects("items").getFirst());
             // 종류는 event 이름이 말해 data에는 type이 없다 — 나머지는 목록 항목과 같다
-            assertThat(listed.remove("type")).isEqualTo("FRIEND_REQUESTED");
+            assertThat(listed.remove("type")).isEqualTo("FRIEND_REQUEST_RECEIVED");
             assertThat(pushed).doesNotContainKey("type").isEqualTo(listed);
             assertThat(actorOf(pushed))
                     .containsEntry("userId", requester.userId())
@@ -394,7 +394,7 @@ class UserNotificationE2eTest extends E2eTestSupport {
 
             // 수락하면 요청했던 사람에게 수락 알림이 간다
             assertThat(put(friendRequestPath(requester), target.accessToken()).status()).isEqualTo(200);
-            Map<String, Object> accepted = requesterStream.await("FRIEND_ACCEPTED");
+            Map<String, Object> accepted = requesterStream.await("FRIEND_REQUEST_ACCEPTED");
             assertThat(accepted).doesNotContainKey("type");
             assertThat(actorOf(accepted))
                     .containsEntry("userId", target.userId())
@@ -418,7 +418,7 @@ class UserNotificationE2eTest extends E2eTestSupport {
             assertThat(post(friendRequestPath(target), null, other.accessToken()).status()).isEqualTo(201);
 
             // then
-            assertThat(actorOf(targetStream.await("FRIEND_REQUESTED"))).containsEntry("userId", other.userId());
+            assertThat(actorOf(targetStream.await("FRIEND_REQUEST_RECEIVED"))).containsEntry("userId", other.userId());
         }
     }
 
@@ -494,7 +494,7 @@ class UserNotificationE2eTest extends E2eTestSupport {
     // 목록의 초대 알림마다 지금 초대 상태 — 최신순
     private List<Object> invitationStatusesOf(TestUser user) {
         return get("/users/me/notifications", user.accessToken()).objects("items").stream()
-                .filter(item -> "RUNNING_INVITED".equals(item.get("type")))
+                .filter(item -> "RUNNING_INVITATION_RECEIVED".equals(item.get("type")))
                 .map(item -> invitationOf(item).get("status"))
                 .toList();
     }

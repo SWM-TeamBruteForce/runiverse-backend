@@ -7,7 +7,7 @@ import com.runiverse.running_service.application.notification.port.out.SaveUserN
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.notification.UserNotification;
 import com.runiverse.running_service.domain.notification.exception.SelfNotificationException;
-import com.runiverse.running_service.domain.notification.vo.FriendRequestedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestReceivedPayload;
 import com.runiverse.running_service.domain.notification.vo.UserNotificationType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -50,13 +50,13 @@ class SendUserNotificationHandlerTest {
         given(saveUserNotificationPort.save(any())).willReturn(912L);
 
         // when
-        handler.send(RECIPIENT_ID, new FriendRequestedPayload(ACTOR_ID));
+        handler.send(RECIPIENT_ID, new FriendRequestReceivedPayload(ACTOR_ID));
 
         // then
         ArgumentCaptor<UserNotification> saved = ArgumentCaptor.forClass(UserNotification.class);
         verify(saveUserNotificationPort).save(saved.capture());
         assertThat(saved.getValue().getUserId()).isEqualTo(RECIPIENT_ID);
-        assertThat(saved.getValue().type()).isEqualTo(UserNotificationType.FRIEND_REQUESTED);
+        assertThat(saved.getValue().type()).isEqualTo(UserNotificationType.FRIEND_REQUEST_RECEIVED);
         assertThat(saved.getValue().getPayload().actorId()).isEqualTo(ACTOR_ID);
     }
 
@@ -67,7 +67,7 @@ class SendUserNotificationHandlerTest {
         given(saveUserNotificationPort.save(any())).willReturn(912L);
 
         // when
-        handler.send(RECIPIENT_ID, new FriendRequestedPayload(ACTOR_ID));
+        handler.send(RECIPIENT_ID, new FriendRequestReceivedPayload(ACTOR_ID));
 
         // then -> 밖으로 내보내는 일은 이 이벤트를 받는 리스너가 커밋 뒤에 한다
         InOrder order = inOrder(saveUserNotificationPort, eventPublisher);
@@ -79,7 +79,7 @@ class SendUserNotificationHandlerTest {
     @DisplayName("도메인 검증에 걸리면 저장도 발행도 하지 않고 예외를 그대로 던진다")
     void rejectsInvalidNotificationWithoutSaving() {
         // when & then -> 부르는 쪽 트랜잭션이 함께 롤백되도록 삼키지 않는다
-        assertThatThrownBy(() -> handler.send(RECIPIENT_ID, new FriendRequestedPayload(RECIPIENT_ID)))
+        assertThatThrownBy(() -> handler.send(RECIPIENT_ID, new FriendRequestReceivedPayload(RECIPIENT_ID)))
                 .isInstanceOf(SelfNotificationException.class);
         verifyNoInteractions(saveUserNotificationPort, eventPublisher);
     }

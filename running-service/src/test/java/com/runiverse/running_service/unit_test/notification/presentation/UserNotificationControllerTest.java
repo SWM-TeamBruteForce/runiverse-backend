@@ -92,7 +92,8 @@ class UserNotificationControllerTest {
         // given
         given(getUserNotificationsUsecase.handle(new GetUserNotificationsQuery(ME, null, 20)))
                 .willReturn(new GetUserNotificationsResult(List.of(new GetUserNotificationsResult.Item(
-                        913L, UserNotificationType.RUNNING_INVITED, false, LocalDateTime.of(2026, 10, 28, 12, 3),
+                        913L, UserNotificationType.RUNNING_INVITATION_RECEIVED, false,
+                        LocalDateTime.of(2026, 10, 28, 12, 3),
                         new GetUserNotificationsResult.Actor(CHULSU, "철수", null, false, RelationshipType.FRIEND),
                         new GetUserNotificationsResult.Invitation(130L, RoomInvitationStatus.PENDING,
                                 LocalDateTime.of(2026, 10, 28, 19, 30), 7_000))),
@@ -106,7 +107,7 @@ class UserNotificationControllerTest {
         JsonNode body = json(result);
         JsonNode item = body.get("items").get(0);
         assertThat(item.get("notificationId").asLong()).isEqualTo(913L);
-        assertThat(item.get("type").asString()).isEqualTo("RUNNING_INVITED");
+        assertThat(item.get("type").asString()).isEqualTo("RUNNING_INVITATION_RECEIVED");
         assertThat(item.get("isRead").asBoolean()).isFalse();
         assertThat(item.get("createdAt").asString()).isEqualTo("2026-10-28T12:03:00");
         assertThat(item.get("actor").get("userId").asString()).isEqualTo(CHULSU.toString());
@@ -125,7 +126,7 @@ class UserNotificationControllerTest {
     void friendItemHasNullInvitation() throws Exception {
         // given
         given(getUserNotificationsUsecase.handle(any())).willReturn(new GetUserNotificationsResult(
-                List.of(new GetUserNotificationsResult.Item(912L, UserNotificationType.FRIEND_REQUESTED, true,
+                List.of(new GetUserNotificationsResult.Item(912L, UserNotificationType.FRIEND_REQUEST_RECEIVED, true,
                         LocalDateTime.of(2026, 10, 28, 12, 0),
                         new GetUserNotificationsResult.Actor(CHULSU, "탈퇴한 사용자", null, true, null), null)),
                 null, 0L));

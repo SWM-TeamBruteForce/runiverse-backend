@@ -15,8 +15,8 @@ import com.runiverse.running_service.application.relationship.port.out.LoadUserR
 import com.runiverse.running_service.application.relationship.port.out.SaveUserRelationshipPort;
 import com.runiverse.running_service.application.relationship.port.out.UserRelationshipPair;
 import com.runiverse.running_service.domain.common.vo.UserId;
-import com.runiverse.running_service.domain.notification.vo.FriendAcceptedPayload;
-import com.runiverse.running_service.domain.notification.vo.FriendRequestedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestAcceptedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestReceivedPayload;
 import com.runiverse.running_service.domain.relationship.UserRelationship;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 import com.runiverse.running_service.domain.user.User;
@@ -107,7 +107,7 @@ class RequestFriendHandlerTest {
 
     @Test
     @DisplayName("새 요청이면 받는 사람에게 요청한 사람을 담은 친구 요청 알림을 보낸다")
-    void requestSendsFriendRequestedNotification() {
+    void requestSendsFriendRequestReceivedNotification() {
         // given
         givenTargetExists();
         givenPair(relationship(1L, userId, targetId, RelationshipType.NONE),
@@ -117,7 +117,8 @@ class RequestFriendHandlerTest {
         handler.handle(command());
 
         // then -> 받는 사람은 대상, 일으킨 사람은 요청한 본인이다
-        verify(sendUserNotificationPort).send(new UserId(targetId), new FriendRequestedPayload(new UserId(userId)));
+        verify(sendUserNotificationPort).send(new UserId(targetId),
+                new FriendRequestReceivedPayload(new UserId(userId)));
     }
 
     @Test
@@ -139,8 +140,9 @@ class RequestFriendHandlerTest {
         verify(saveUserRelationshipPort).save(mine);
         verify(saveUserRelationshipPort).save(theirs);
         // 요청이 아니라 수락으로 끝났으므로 요청 알림 대신 먼저 요청했던 상대에게 수락 알림을 보낸다
-        verify(sendUserNotificationPort, never()).send(any(), any(FriendRequestedPayload.class));
-        verify(sendUserNotificationPort).send(new UserId(targetId), new FriendAcceptedPayload(new UserId(userId)));
+        verify(sendUserNotificationPort, never()).send(any(), any(FriendRequestReceivedPayload.class));
+        verify(sendUserNotificationPort).send(new UserId(targetId),
+                new FriendRequestAcceptedPayload(new UserId(userId)));
     }
 
     @ParameterizedTest

@@ -9,9 +9,9 @@ import com.runiverse.running_service.application.notification.port.out.UserNotif
 import com.runiverse.running_service.application.notification.query.list.GetUserNotificationsResult;
 import com.runiverse.running_service.application.user.port.out.GenerateViewUrlPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
-import com.runiverse.running_service.domain.notification.vo.FriendAcceptedPayload;
-import com.runiverse.running_service.domain.notification.vo.FriendRequestedPayload;
-import com.runiverse.running_service.domain.notification.vo.RunningInvitedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestAcceptedPayload;
+import com.runiverse.running_service.domain.notification.vo.FriendRequestReceivedPayload;
+import com.runiverse.running_service.domain.notification.vo.RunningInvitationReceivedPayload;
 import com.runiverse.running_service.domain.notification.vo.UserNotificationPayload;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 import lombok.RequiredArgsConstructor;
@@ -103,9 +103,9 @@ public class UserNotificationItemAssembler {
     // 종류가 늘면 sealed라 여기서 컴파일 에러가 난다 — 방을 가리키는 알림인지 빠뜨리지 않는다
     private static Long roomIdOf(UserNotificationPayload payload) {
         return switch (payload) {
-            case FriendRequestedPayload p -> null;
-            case FriendAcceptedPayload p -> null;
-            case RunningInvitedPayload p -> p.runningRoomId().value();
+            case FriendRequestReceivedPayload p -> null;
+            case FriendRequestAcceptedPayload p -> null;
+            case RunningInvitationReceivedPayload p -> p.runningRoomId().value();
         };
     }
 }
