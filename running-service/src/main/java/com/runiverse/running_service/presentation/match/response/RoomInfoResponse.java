@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-// SSE의 방 상태 이벤트(MATCH_STARTED·MATCH_ROOM_UPDATED·INVITE_ROOM_UPDATED)가 data로 이 구조를 쓴다.
+// SSE의 방 상태 이벤트(MATCH_CONFIRMED·MATCH_ROOM_UPDATED·INVITE_ROOM_UPDATED)가 data로 이 구조를 쓴다.
 // INVITE_ROOM_ENTRANCE는 같은 필드에 startsInMs를 더한 InviteRoomEntranceResponse를 쓴다.
 // 와이어 계약이라 presentation이 갖는다 — SSE 전송도 이걸 실어 보낸다
 public record RoomInfoResponse(

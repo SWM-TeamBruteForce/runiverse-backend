@@ -88,8 +88,8 @@ class CloseMatchingHandlerTest {
     }
 
     @Test
-    @DisplayName("확정된 순간에는 MATCH_STARTED로 알린다")
-    void publishesStartedOnClose() {
+    @DisplayName("확정된 순간에는 MATCH_CONFIRMED로 알린다")
+    void publishesConfirmedOnClose() {
         // given -> 재연결 스냅샷(UPDATED)과 갈라야 확정 연출이 반복되지 않는다
         givenRoom(room(RunningRoomStatus.MATCHING, 3));
         given(roomInfoAssembler.assemble(any(RunningRoom.class))).willReturn(ROOM_INFO);
@@ -99,7 +99,7 @@ class CloseMatchingHandlerTest {
 
         // then
         verify(eventPublisher).publishEvent(new MatchRoomChangedEvent(
-                MatchStreamEvent.started(ROOM_INFO)));
+                MatchStreamEvent.confirmed(ROOM_INFO)));
     }
 
     @Test

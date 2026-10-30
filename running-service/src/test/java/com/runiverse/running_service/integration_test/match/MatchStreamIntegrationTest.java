@@ -186,7 +186,7 @@ public class MatchStreamIntegrationTest extends IntegrationTestSupport {
         // then -> 스냅샷 다음에 인원이 늘어난 방 정보가 온다
         List<MatchStreamEvent> received = connection.received();
         assertThat(received).hasSize(2);
-        // 인원 변동은 갱신이다 — 확정(MATCH_STARTED)은 마감 때만 나간다
+        // 인원 변동은 갱신이다 — 확정(MATCH_CONFIRMED)은 마감 때만 나간다
         assertThat(received.get(1).type()).isEqualTo(MatchEventType.MATCH_ROOM_UPDATED);
         assertThat(received.get(1).room().runningRoomId()).isEqualTo(runningRoomId);
         assertThat(received.get(1).room().players())

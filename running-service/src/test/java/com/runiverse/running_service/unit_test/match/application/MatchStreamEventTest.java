@@ -96,14 +96,14 @@ class MatchStreamEventTest {
 
     @Test
     @DisplayName("확정 통지와 시작 통지는 남은 시간 필드를 쓰지 않는다")
-    void startedAndReadyCarryNoEntranceTime() {
+    void confirmedAndReadyCarryNoEntranceTime() {
         // when
-        MatchStreamEvent started = MatchStreamEvent.started(roomOf(RunningRoomType.MATCH));
+        MatchStreamEvent confirmed = MatchStreamEvent.confirmed(roomOf(RunningRoomType.MATCH));
         MatchStreamEvent ready = MatchStreamEvent.runningReady(new RunningReady(ROOM_ID, START, 10_000L));
 
         // then -> RUNNING_READY의 남은 시간은 ready 페이로드가 갖는다
-        assertThat(started.type()).isEqualTo(MatchEventType.MATCH_STARTED);
-        assertThat(started.startsInMs()).isNull();
+        assertThat(confirmed.type()).isEqualTo(MatchEventType.MATCH_CONFIRMED);
+        assertThat(confirmed.startsInMs()).isNull();
         assertThat(ready.type()).isEqualTo(MatchEventType.RUNNING_READY);
         assertThat(ready.startsInMs()).isNull();
         assertThat(ready.ready().startsInMs()).isEqualTo(10_000L);
