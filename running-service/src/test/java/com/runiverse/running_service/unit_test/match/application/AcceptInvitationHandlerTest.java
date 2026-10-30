@@ -112,6 +112,7 @@ class AcceptInvitationHandlerTest {
     private UserId otherInviter;
     private UserId invitee;
     private LocalDateTime startAt;
+    private RoomInfo assembledRoom;
 
     @BeforeEach
     void setUp() {
@@ -175,9 +176,10 @@ class AcceptInvitationHandlerTest {
                 .build());
         given(loadMatchPlayersPort.loadPlayers(new RunningRoomId(ROOM_ID)))
                 .willReturn(List.of(new MatchPlayer(host.value(), HOST_PACE)));
-        given(roomInfoAssembler.assemble(any())).willReturn(new RoomInfo(
+        assembledRoom = new RoomInfo(
                 ROOM_ID, RunningRoomType.INVITE, RunningRoomStatus.MATCHING, startAt, startAt.minus(CLOSE_OFFSET),
-                TARGET_DISTANCE, HOST_PACE, List.of(), List.of()));
+                TARGET_DISTANCE, HOST_PACE, List.of(), List.of());
+        given(roomInfoAssembler.assemble(any())).willReturn(assembledRoom);
     }
 
     private AcceptInvitationResult accept() {
@@ -236,7 +238,7 @@ class AcceptInvitationHandlerTest {
         }
 
         @Test
-        @DisplayName("수락하면 수락한 사람을 넘겨 초대한 사람에게 갈 푸시를 요청한다")
+        @DisplayName("수락하면 수락한 사람과 스트림에 보낸 방 정보를 넘겨 초대한 사람에게 갈 푸시를 요청한다")
         void requestsInvitationAcceptedPush() {
             // given
             RunningRoom room = pendingRoom(1);
@@ -246,8 +248,8 @@ class AcceptInvitationHandlerTest {
             // when
             accept();
 
-            // then -> 받는 사람은 요청기가 자리를 잡은 뒤의 방으로 고른다
-            verify(matchPushRequester).invitationAccepted(room, invitee);
+            // then -> 받는 사람은 요청기가 자리를 잡은 뒤의 방으로, 닉네임은 이미 조립한 방 정보로 고른다
+            verify(matchPushRequester).invitationAccepted(room, invitee, assembledRoom);
         }
     }
 

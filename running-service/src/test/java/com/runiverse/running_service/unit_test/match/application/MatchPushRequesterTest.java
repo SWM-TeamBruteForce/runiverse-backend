@@ -1,12 +1,11 @@
 package com.runiverse.running_service.unit_test.match.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
-import com.runiverse.running_service.application.common.port.out.LoadPlayerProfilesPort;
-import com.runiverse.running_service.application.common.port.out.PlayerProfile;
 import com.runiverse.running_service.application.device.command.push.PushRequestedEvent;
 import com.runiverse.running_service.application.device.port.out.PushMessage;
 import com.runiverse.running_service.application.device.port.out.PushType;
 import com.runiverse.running_service.application.match.common.MatchPushRequester;
+import com.runiverse.running_service.application.match.port.out.RoomInfo;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerId;
 import com.runiverse.running_service.domain.running.room.InvitationDraft;
@@ -29,8 +28,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -43,9 +40,6 @@ class MatchPushRequesterTest {
     private static final LocalDateTime START_AT = LocalDateTime.of(2026, 10, 29, 21, 30);
 
     @Mock
-    private LoadPlayerProfilesPort loadPlayerProfilesPort;
-
-    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     private MatchPushRequester requester;
@@ -54,7 +48,7 @@ class MatchPushRequesterTest {
 
     @BeforeEach
     void setUp() {
-        requester = new MatchPushRequester(loadPlayerProfilesPort, eventPublisher);
+        requester = new MatchPushRequester(eventPublisher);
     }
 
     @Test
@@ -110,10 +104,9 @@ class MatchPushRequesterTest {
                 List.of(new InvitationDraft(host, invitee, RoomInvitationStatus.ACCEPTED, 1),
                         new InvitationDraft(leftInviter, invitee, RoomInvitationStatus.ACCEPTED, 1),
                         new InvitationDraft(host, otherInvitee, RoomInvitationStatus.PENDING, 1)));
-        givenProfile(invitee, "영희");
 
         // when
-        requester.invitationAccepted(room, invitee);
+        requester.invitationAccepted(room, invitee, roomInfo(player(host, "철수"), player(invitee, "영희")));
 
         // then
         PushRequestedEvent event = publishedEvents(1).getFirst();
@@ -134,10 +127,10 @@ class MatchPushRequesterTest {
                 List.of(session(host, true), session(reInviter, true), session(invitee, true)),
                 List.of(new InvitationDraft(host, invitee, RoomInvitationStatus.ACCEPTED, 1),
                         new InvitationDraft(reInviter, invitee, RoomInvitationStatus.ACCEPTED, 1)));
-        givenProfile(invitee, "영희");
 
         // when
-        requester.invitationAccepted(room, invitee);
+        requester.invitationAccepted(room, invitee,
+                roomInfo(player(host, "철수"), player(reInviter, "민수"), player(invitee, "영희")));
 
         // then
         assertThat(publishedEvents(2)).extracting(PushRequestedEvent::userId)
@@ -145,7 +138,7 @@ class MatchPushRequesterTest {
     }
 
     @Test
-    @DisplayName("초대한 사람이 모두 나갔으면 프로필도 읽지 않고 보내지 않는다")
+    @DisplayName("초대한 사람이 모두 나갔으면 보내지 않는다")
     void invitationAcceptedWithoutStayingInviter() {
         // given
         UserId leftInviter = newUserId();
@@ -155,33 +148,54 @@ class MatchPushRequesterTest {
                 List.of(new InvitationDraft(leftInviter, invitee, RoomInvitationStatus.ACCEPTED, 1)));
 
         // when
-        requester.invitationAccepted(room, invitee);
+        requester.invitationAccepted(room, invitee, roomInfo(player(invitee, "영희")));
 
         // then
-        verifyNoInteractions(loadPlayerProfilesPort, eventPublisher);
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
-    @DisplayName("수락한 사람의 프로필이 없으면 던지지 않고 보내지 않는다")
-    void invitationAcceptedWithoutProfile() {
+    @DisplayName("수락한 사람이 탈퇴로 그려졌으면 던지지 않고 보내지 않는다")
+    void invitationAcceptedByDeletedInvitee() {
+        // given -> 닉네임 자리가 표시용 문구다. 던지면 수락까지 롤백된다
+        UserId host = newUserId();
+        UserId invitee = newUserId();
+        RunningRoom room = inviteRoom(
+                List.of(session(host, true), session(invitee, true)),
+                List.of(new InvitationDraft(host, invitee, RoomInvitationStatus.ACCEPTED, 1)));
+        RoomInfo.RoomPlayer deleted = new RoomInfo.RoomPlayer(invitee.value(), "탈퇴한 사용자", null, null, 360, true);
+
+        // when
+        requester.invitationAccepted(room, invitee, roomInfo(player(host, "철수"), deleted));
+
+        // then
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    @DisplayName("방 정보에 수락한 사람이 없으면 던지지 않고 보내지 않는다")
+    void invitationAcceptedWithoutInviteeInRoomInfo() {
         // given -> 던지면 수락까지 롤백된다
         UserId host = newUserId();
         UserId invitee = newUserId();
         RunningRoom room = inviteRoom(
                 List.of(session(host, true), session(invitee, true)),
                 List.of(new InvitationDraft(host, invitee, RoomInvitationStatus.ACCEPTED, 1)));
-        given(loadPlayerProfilesPort.loadProfiles(any())).willReturn(Map.of());
 
         // when
-        requester.invitationAccepted(room, invitee);
+        requester.invitationAccepted(room, invitee, roomInfo(player(host, "철수")));
 
         // then
         verifyNoInteractions(eventPublisher);
     }
 
-    private void givenProfile(UserId userId, String nickname) {
-        given(loadPlayerProfilesPort.loadProfiles(List.of(userId.value())))
-                .willReturn(Map.of(userId.value(), new PlayerProfile(userId.value(), nickname, null, null)));
+    private static RoomInfo roomInfo(RoomInfo.RoomPlayer... players) {
+        return new RoomInfo(ROOM_ID, RunningRoomType.INVITE, RunningRoomStatus.MATCHING, START_AT,
+                START_AT.minusMinutes(1), 5_000, 360, List.of(players), List.of());
+    }
+
+    private static RoomInfo.RoomPlayer player(UserId userId, String nickname) {
+        return new RoomInfo.RoomPlayer(userId.value(), nickname, null, null, 360, false);
     }
 
     private List<PushRequestedEvent> publishedEvents(int count) {

@@ -129,7 +129,7 @@ public class RunningInvitationIntegrationTest extends IntegrationTestSupport {
         doReturn(true).when(inviteStartPolicy).isSelectable(any(), any());
         InMemoryPlayerProfileStore profileStore = new InMemoryPlayerProfileStore(userStore, onboardingStore);
         // 푸시 요청은 위 발행기가 흘려보낸다 — 수락·마감이 요청 때문에 깨지지 않는지만 본다
-        MatchPushRequester matchPushRequester = new MatchPushRequester(profileStore, eventPublisher);
+        MatchPushRequester matchPushRequester = new MatchPushRequester(eventPublisher);
         RoomInfoAssembler roomInfoAssembler = new RoomInfoAssembler(
                 matchStore,                                                 // LoadMatchPlayersPort
                 profileStore,                                               // LoadPlayerProfilesPort

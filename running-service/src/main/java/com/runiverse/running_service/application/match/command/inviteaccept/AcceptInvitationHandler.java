@@ -16,6 +16,7 @@ import com.runiverse.running_service.application.match.common.MatchRoomChangedEv
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
 import com.runiverse.running_service.application.match.port.out.LoadMatchPlayersPort;
 import com.runiverse.running_service.application.match.port.out.MatchStreamEvent;
+import com.runiverse.running_service.application.match.port.out.RoomInfo;
 import com.runiverse.running_service.application.running.exception.AlreadyRunningException;
 import com.runiverse.running_service.application.user.exception.OnboardingNotCompletedException;
 import com.runiverse.running_service.domain.common.vo.UserId;
@@ -93,9 +94,9 @@ public class AcceptInvitationHandler implements AcceptInvitationUsecase {
         room.recalculateAvgPace(paces);
         updateMatchRoomPort.update(room);
         // 9. 기존 참가자에게 인원·초대 현황 변동을 알린다 — 수락한 사람은 응답을 받고 스트림을 열어 스냅샷을 받는다
-        eventPublisher.publishEvent(new MatchRoomChangedEvent(
-                MatchStreamEvent.updated(roomInfoAssembler.assemble(room))));
-        matchPushRequester.invitationAccepted(room, inviteeId);
+        RoomInfo roomInfo = roomInfoAssembler.assemble(room);
+        eventPublisher.publishEvent(new MatchRoomChangedEvent(MatchStreamEvent.updated(roomInfo)));
+        matchPushRequester.invitationAccepted(room, inviteeId, roomInfo);
         return new AcceptInvitationResult(roomId.value());
     }
 
