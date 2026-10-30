@@ -95,7 +95,7 @@ public class RoomInfoAssembler {
                 deleted);
     }
 
-    // 받는 사람이 탈퇴하면 초대 행은 FK CASCADE로 지워져 여기 오지 않는다 — 형식상 참가자와 같게 판정한다
+    // 받는 사람이 탈퇴하면 초대 행은 탈퇴 처리가 지워 여기 오지 않는다 — 형식상 참가자와 같게 판정한다
     private RoomInfo.RoomInvitee toInvitee(RoomInvitation invitation, Map<UUID, PlayerProfile> profiles) {
         UUID userId = invitation.getInviteeId().value();
         PlayerProfile profile = profiles.get(userId);

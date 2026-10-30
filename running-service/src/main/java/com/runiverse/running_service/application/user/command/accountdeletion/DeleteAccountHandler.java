@@ -4,6 +4,7 @@ import com.runiverse.running_service.application.auth.port.out.BlockAccessTokenP
 import com.runiverse.running_service.application.auth.port.out.DeleteRefreshTokenPort;
 import com.runiverse.running_service.application.common.port.out.LockUserPort;
 import com.runiverse.running_service.application.device.port.out.DeleteUserDevicesPort;
+import com.runiverse.running_service.application.match.port.out.DeleteReceivedInvitationsPort;
 import com.runiverse.running_service.application.running.command.accountdeletion.SettleRunningForAccountDeletionCommand;
 import com.runiverse.running_service.application.running.exception.RunningTrackUnavailableException;
 import com.runiverse.running_service.application.running.port.in.SettleRunningForAccountDeletionUsecase;
@@ -34,6 +35,7 @@ public class DeleteAccountHandler implements DeleteAccountUsecase {
     private final SettleRunningForAccountDeletionUsecase settleRunningForAccountDeletionUsecase;
     private final SaveDeletedUserPort saveDeletedUserPort;
     private final DeleteUserDevicesPort deleteUserDevicesPort;
+    private final DeleteReceivedInvitationsPort deleteReceivedInvitationsPort;
     private final DeleteUserPort deleteUserPort;
     private final DeleteRefreshTokenPort deleteRefreshTokenPort;
     private final BlockAccessTokenPort blockAccessTokenPort;
@@ -54,9 +56,11 @@ public class DeleteAccountHandler implements DeleteAccountUsecase {
         } catch (RunningTrackUnavailableException e) {
             throw new AccountDeletionUnavailableException();
         }
-        // 3. 스냅샷을 남긴 뒤 계정을 지운다. 기기는 FK CASCADE에 기대지 않고 먼저 지운다
+        // 3. 스냅샷을 남긴 뒤 계정을 지운다. 기기와 받은 초대는 FK CASCADE에 기대지 않고 먼저 지운다 —
+        //    받은 초대는 2에서 방을 나가며 고칠 수 있는 행이라 CASCADE가 지우면 커밋 때 갱신이 실패한다
         saveDeletedUserPort.saveDeletedUser(toDeletedUser(snapshot));
         deleteUserDevicesPort.deleteAll(userId);
+        deleteReceivedInvitationsPort.deleteAll(userId);
         deleteUserPort.deleteUser(userId);
         // 4. 토큰을 폐기한다 — 로그아웃과 같은 두 단계
         deleteRefreshTokenPort.delete(userId);

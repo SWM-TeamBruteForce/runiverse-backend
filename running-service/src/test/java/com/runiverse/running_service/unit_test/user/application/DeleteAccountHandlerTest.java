@@ -5,6 +5,7 @@ import com.runiverse.running_service.application.auth.port.out.BlockAccessTokenP
 import com.runiverse.running_service.application.auth.port.out.DeleteRefreshTokenPort;
 import com.runiverse.running_service.application.common.port.out.LockUserPort;
 import com.runiverse.running_service.application.device.port.out.DeleteUserDevicesPort;
+import com.runiverse.running_service.application.match.port.out.DeleteReceivedInvitationsPort;
 import com.runiverse.running_service.application.running.command.accountdeletion.SettleRunningForAccountDeletionCommand;
 import com.runiverse.running_service.application.running.exception.RunningTrackUnavailableException;
 import com.runiverse.running_service.application.running.port.in.SettleRunningForAccountDeletionUsecase;
@@ -66,6 +67,8 @@ public class DeleteAccountHandlerTest {
     @Mock
     private DeleteUserDevicesPort deleteUserDevicesPort;
     @Mock
+    private DeleteReceivedInvitationsPort deleteReceivedInvitationsPort;
+    @Mock
     private DeleteUserPort deleteUserPort;
     @Mock
     private DeleteRefreshTokenPort deleteRefreshTokenPort;
@@ -126,6 +129,26 @@ public class DeleteAccountHandlerTest {
         // then -> FK가 붙지 않은 DB도 있어 CASCADE에 기대지 않는다
         InOrder order = inOrder(deleteUserDevicesPort, deleteUserPort);
         order.verify(deleteUserDevicesPort).deleteAll(new UserId(userId));
+        order.verify(deleteUserPort).deleteUser(new UserId(userId));
+    }
+
+    @Test
+    @DisplayName("러닝을 정리한 뒤, 계정을 지우기 전에 받은 초대를 지운다")
+    void deletesReceivedInvitationsBetweenSettlingAndDeletingAccount() {
+        // given
+        UUID userId = UuidCreator.getTimeOrderedEpoch();
+        when(loadAccountSnapshotPort.loadAccountSnapshot(new UserId(userId)))
+                .thenReturn(Optional.of(notOnboardedSnapshot(userId)));
+
+        // when
+        handler.handle(new DeleteAccountCommand(userId, ACCESS_TOKEN_ID));
+
+        // then -> 정리가 고친 초대 행을 CASCADE가 지우면 커밋 때 갱신이 실패한다
+        InOrder order = inOrder(settleRunningForAccountDeletionUsecase, deleteReceivedInvitationsPort,
+                deleteUserPort);
+        order.verify(settleRunningForAccountDeletionUsecase)
+                .handle(new SettleRunningForAccountDeletionCommand(userId));
+        order.verify(deleteReceivedInvitationsPort).deleteAll(new UserId(userId));
         order.verify(deleteUserPort).deleteUser(new UserId(userId));
     }
 
