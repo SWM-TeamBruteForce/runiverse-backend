@@ -72,7 +72,7 @@
 
 | 이벤트 | 비고 |
 |--------|------|
-| `MATCH_STARTED` | 매칭 성사 통지 (`RoomInfo`) — 매칭 방만 |
+| `MATCH_CONFIRMED` | 매칭 성사 통지 (`RoomInfo`) — 매칭 방만 |
 | `MATCH_ROOM_UPDATED` | 방 상태 갱신 (`RoomInfo`) — 인원 변동·연결 직후 스냅샷. 매칭 방만 |
 | `INVITE_ROOM_ENTRANCE` | 초대 방 연결 직후 스냅샷 (`RoomInfo` + `startsInMs`) — 초대 방만 |
 | `INVITE_ROOM_UPDATED` | 초대 방 상태 갱신 (`RoomInfo`) — 인원·초대 현황 변동. 초대 방만 |
@@ -1076,7 +1076,7 @@
 - **keep-alive**: 15초마다 주석 라인(`:ping`)을 보낸다 — 이벤트가 아니므로 클라 이벤트 핸들러에 잡히지 않는다
 - **서버도 스트림을 닫는다** — 열린 지 운영값(현재 30분)이 지나면, 같은 사용자의 새 연결이 들어오면 닫는다(새 연결은 그 요청을 처리한 서버 인스턴스에 붙은 스트림만 닫는다). 클라는 다시 연결한다 — 끊겨 있던 사이의 알림은 2-4로 다시 받는다
   - 탈퇴 시 닫기는 아직 없다 — 탈퇴 개편 때 매칭 스트림과 같은 방식으로 붙인다. 그전까지 탈퇴한 사람의 스트림은 30분 만료로 정리된다
-- **이벤트 3종 — 알림 종류가 곧 이벤트 이름이다**(매칭 스트림처럼 SSE `event`로 가른다): `FRIEND_REQUESTED`(친구 요청 받음) · `FRIEND_ACCEPTED`(내 요청이 수락됨) · `RUNNING_INVITED`(러닝 초대 받음, 다시 초대 포함)
+- **이벤트 3종 — 알림 종류가 곧 이벤트 이름이다**(매칭 스트림처럼 SSE `event`로 가른다): `FRIEND_REQUEST_RECEIVED`(친구 요청 받음) · `FRIEND_REQUEST_ACCEPTED`(내 요청이 수락됨) · `RUNNING_INVITATION_RECEIVED`(러닝 초대 받음, 다시 초대 포함)
   - `data`는 셋 다 2-4 `items[]` 원소에서 **`type`만 뺀 모양**이다(같은 조립 코드로 만든다). 종류는 이벤트 이름이 말한다. 클라는 이벤트 이름을 `type`으로 붙여 목록 맨 위에 넣고 배지를 하나 올린다
   - 모르는 `event`는 무시한다 — 종류가 늘 수 있다
   - **받는 사람에게만 간다** — 알림을 만든 동작(친구 요청·수락·초대)이 커밋된 뒤에 보낸다. 실패해 롤백된 동작은 아무것도 보내지 않는다
@@ -1087,7 +1087,7 @@
 ```
 :connected
 
-event:FRIEND_REQUESTED
+event:FRIEND_REQUEST_RECEIVED
 data:{"notificationId":912,"isRead":false,"createdAt":"2026-10-28T12:03:00","actor":{"userId":"01a0f2d4-...","nickname":"철수","profileImageUrl":null,"isDeleted":false,"relationshipType":"FRIEND_REQUEST_RECEIVED"},"invitation":null}
 
 :ping
@@ -1104,7 +1104,7 @@ data:{"notificationId":912,"isRead":false,"createdAt":"2026-10-28T12:03:00","act
   "items": [
     {
       "notificationId": 912,
-      "type": "RUNNING_INVITED",            // FRIEND_REQUESTED | FRIEND_ACCEPTED | RUNNING_INVITED
+      "type": "RUNNING_INVITATION_RECEIVED", // FRIEND_REQUEST_RECEIVED | FRIEND_REQUEST_ACCEPTED | RUNNING_INVITATION_RECEIVED
       "isRead": false,
       "createdAt": "2026-07-25T12:03:00",
       "actor": {
@@ -1114,7 +1114,7 @@ data:{"notificationId":912,"isRead":false,"createdAt":"2026-10-28T12:03:00","act
         "isDeleted": false,
         "relationshipType": "FRIEND"        // 지금 나와 이 사람의 관계 — 모든 종류에 있다
       },
-      "invitation": {                       // RUNNING_INVITED만
+      "invitation": {                       // RUNNING_INVITATION_RECEIVED만
         "runningRoomId": 130,
         "status": "PENDING",                // PENDING | ACCEPTED | DECLINED | LEFT | EXPIRED — 지금 상태
         "scheduledStartAt": "2026-07-25T19:30:00",
@@ -1133,7 +1133,7 @@ data:{"notificationId":912,"isRead":false,"createdAt":"2026-10-28T12:03:00","act
 | `isRead` | Boolean | O | 읽음 여부 |
 | `actor` | Object | O | 알림을 일으킨 사람. 탈퇴했으면 §0 탈퇴 유저 형식 |
 | `actor.relationshipType` | String | X | **지금** 나와 이 사람의 관계(§0). 알림 종류와 무관하게 늘 싣는다. 탈퇴한 사람이면 `null` |
-| `invitation` | Object | X | `RUNNING_INVITED`일 때만 있고 그 밖에는 `null` |
+| `invitation` | Object | X | `RUNNING_INVITATION_RECEIVED`일 때만 있고 그 밖에는 `null` |
 | `invitation.status` | String | O | 초대의 **지금** 상태 — `PENDING`이면 수락·거절 버튼을 그린다 |
 
 - **알림은 사건의 기록이고 버튼은 지금 상태로 그린다** — 요청이 취소됐거나 초대가 만료됐어도 알림은 남는다. 그래서 `actor.relationshipType`·`invitation.status`는 저장값이 아니라 조회 시점 값이다(근거는 `feature-spec.md` 인앱 알림 저장 절)
@@ -1170,7 +1170,7 @@ data:{"notificationId":912,"isRead":false,"createdAt":"2026-10-28T12:03:00","act
 - **매칭 방에서는 초대할 수 없다** — 4-2는 초대 방이 아니면 404다.
 - **모집 마감(`closeAt`)은 `start_at - 초대 마감 오프셋`(운영 설정 `invite.close-offset`, 현재 1분)이다** — 매칭의 마감 오프셋(10분)과 따로 둔다. 초대·수락은 그 전까지만 된다. 시작 통지(`RUNNING_READY`, 시작 10초 전)는 매칭 방과 같다.
 - **제재가 없다** — 언제 나가든(5-A), 조기 종료하든(5-D) `_NO_PENALTY`이고 쿨다운을 걸지 않는다.
-- **방 상태 이벤트가 따로 있다** — 연결 직후 스냅샷은 `INVITE_ROOM_ENTRANCE`, 그 뒤 갱신은 `INVITE_ROOM_UPDATED`다(5-B). 매칭 방의 `MATCH_STARTED`·`MATCH_ROOM_UPDATED`는 보내지 않는다 — 초대 방의 마감은 "더 이상 초대받지 않는다"일 뿐 매칭 성사가 아니라 확정 연출을 두지 않는다. `RUNNING_READY`(5-C)는 매칭 방과 같다.
+- **방 상태 이벤트가 따로 있다** — 연결 직후 스냅샷은 `INVITE_ROOM_ENTRANCE`, 그 뒤 갱신은 `INVITE_ROOM_UPDATED`다(5-B). 매칭 방의 `MATCH_CONFIRMED`·`MATCH_ROOM_UPDATED`는 보내지 않는다 — 초대 방의 마감은 "더 이상 초대받지 않는다"일 뿐 매칭 성사가 아니라 확정 연출을 두지 않는다. `RUNNING_READY`(5-C)는 매칭 방과 같다.
 
 ### 4-1. `POST /api/v1/match-rooms/invite` — 초대 방 개설
 
@@ -1243,7 +1243,7 @@ data:{"notificationId":912,"isRead":false,"createdAt":"2026-10-28T12:03:00","act
   - **못 보내면 건너뛰지 않고 이유를 에러로 돌려준다** — 아래 에러 표. 클라는 메시지를 그대로 보여주면 된다
   - **대기 중인 친구에게도 다시 보낼 수 있다** — 초대 상태는 `PENDING` 그대로이고 호출자의 보낸 횟수만 오른다(독촉)
   - 거절(`DECLINED`)했거나 수락 뒤 나간(`LEFT`) 친구는 같은 초대를 `PENDING`으로 되살린다. 보낸 횟수는 이어서 센다
-- **부수 효과**: 초대받은 사람에게 인앱 알림(`RUNNING_INVITED`)을 쌓고 푸시를 보내고, 방 참가자에게 `INVITE_ROOM_UPDATED`를 보낸다 — 초대 현황이 `RoomInfo.invitations`에 실린다
+- **부수 효과**: 초대받은 사람에게 인앱 알림(`RUNNING_INVITATION_RECEIVED`)을 쌓고 푸시를 보내고, 방 참가자에게 `INVITE_ROOM_UPDATED`를 보낸다 — 초대 현황이 `RoomInfo.invitations`에 실린다
 - **Response `204 No Content`** — 본문이 없다. 초대 현황은 스트림의 `INVITE_ROOM_UPDATED`가 나른다
 - **에러 (404 Not Found)**: 방이 없거나, 초대 방이 아니거나, 호출자가 이 방의 현재 참가자가 아니다
 - **에러 (409 Conflict)** — 판정 순서대로
@@ -1264,7 +1264,7 @@ data:{"notificationId":912,"isRead":false,"createdAt":"2026-10-28T12:03:00","act
 
 - **화면**: 알림함 (초대 알림의 수락 버튼)
 - **Request 본문이 없다** — 받는 사람은 토큰 주체다. 경로의 방에서 나에게 온 초대를 수락한다. 누가 보냈든 초대는 받는 사람 기준으로 하나라 보낸 사람을 고르지 않는다
-- **동작**: 방을 잠그고 다시 확인한 뒤 매칭 참가와 같게 `running_players(JOINED)`·배정 세션을 만들고, 인원·방 평균 페이스를 갱신하고, 나에게 온 초대 행을 모두 `ACCEPTED`로 바꾼다. 기존 방 참가자에게 `INVITE_ROOM_UPDATED`를 보낸다. 수락한 사람은 응답을 받은 뒤 스트림을 열어 `INVITE_ROOM_ENTRANCE`를 받는다. 수락한 사람을 초대했고 방에 남은 사람에게 초대 수락 푸시(`INVITATION_ACCEPTED`)를 보낸다
+- **동작**: 방을 잠그고 다시 확인한 뒤 매칭 참가와 같게 `running_players(JOINED)`·배정 세션을 만들고, 인원·방 평균 페이스를 갱신하고, 나에게 온 초대 행을 모두 `ACCEPTED`로 바꾼다. 기존 방 참가자에게 `INVITE_ROOM_UPDATED`를 보낸다. 수락한 사람은 응답을 받은 뒤 스트림을 열어 `INVITE_ROOM_ENTRANCE`를 받는다. 수락한 사람을 초대했고 방에 남은 사람에게 초대 수락 푸시(`RUNNING_INVITATION_ACCEPTED`)를 보낸다
   - **먼저 수락한 순서로 자리가 찬다** — 방 행 잠금이 순서를 정한다
   - 매칭 쿨다운 중에도 수락할 수 있다
 - 응답을 받으면 클라는 `GET /match-rooms/stream`을 연다
@@ -1370,7 +1370,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 | 이벤트 | 시점 |
 |---|---|
-| `MATCH_STARTED` | 매칭 확정 — `data` = `RoomInfo`. 매칭 방만 |
+| `MATCH_CONFIRMED` | 매칭 확정 — `data` = `RoomInfo`. 매칭 방만 |
 | `MATCH_ROOM_UPDATED` | 인원 변동·연결 직후 스냅샷 — `data` = `RoomInfo`. 러닝 시작은 이 이벤트로 알리지 않는다. 매칭 방만 |
 | `INVITE_ROOM_ENTRANCE` | 연결 직후 스냅샷 — `data` = `RoomInfo` + `startsInMs`. 초대 방만 |
 | `INVITE_ROOM_UPDATED` | 인원 변동·초대 현황 변동·모집 마감(초대 만료) — `data` = `RoomInfo`. 초대 방만 |
@@ -1587,7 +1587,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 #### 공통 객체 `RoomInfo` — 매칭방 전체 정보
 
-방 상태 SSE 이벤트가 아래 **같은 구조를 싣는다** — 매칭 방의 `MATCH_STARTED`·`MATCH_ROOM_UPDATED`, 초대 방(4번)의 `INVITE_ROOM_ENTRANCE`·`INVITE_ROOM_UPDATED`. **`INVITE_ROOM_ENTRANCE`만 `startsInMs`를 하나 더 싣는다**(아래 해당 절).
+방 상태 SSE 이벤트가 아래 **같은 구조를 싣는다** — 매칭 방의 `MATCH_CONFIRMED`·`MATCH_ROOM_UPDATED`, 초대 방(4번)의 `INVITE_ROOM_ENTRANCE`·`INVITE_ROOM_UPDATED`. **`INVITE_ROOM_ENTRANCE`만 `startsInMs`를 하나 더 싣는다**(아래 해당 절).
 
 ```json
 {
@@ -1641,7 +1641,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **참가자별 `status`는 내려보내지 않는다** — 이탈자는 배정 행이 `is_connected=false`가 되어 목록에서 빠지므로 남아 있는 참가자는 아직 끝나지 않은 참가자(`JOINED`·`RUNNING`)다. 방의 진행 단계는 위 `status`가 나른다
 - **탈퇴한 참가자는 목록에서 빠진다** — 시작 전 탈퇴는 일반 취소처럼 방에서 빠지며 인원도 줄고, 시작 후 탈퇴는 배정이 끊겨 목록에서 빠진다(접속 전이었으면 인원도 준다). `isDeleted`는 §0 공통 형식이라 계약에 남지만 이 목록에서는 현재 항상 `false`다
 
-#### `MATCH_STARTED` (SSE) — 매칭 성사 통지
+#### `MATCH_CONFIRMED` (SSE) — 매칭 성사 통지
 
 - `data` = `RoomInfo`. 수신 시 클라는 대기 화면 → 매칭방 화면으로 전환
 - **발화 시점은 모집 마감(`start_at - 오프셋`)이다** — 방이 `MATCHING`→`MATCHED`로 넘어가는 순간 한 번. **방 생성 시점이 아니다** — 방은 신청 즉시 생기지만 그건 모집 시작이고, 그 구간의 인원 변동은 `MATCH_ROOM_UPDATED`가 담당한다. 자리가 다 차도 앞당겨 쏘지 않는다(`feature-spec.md` 확정 판정)
@@ -1659,7 +1659,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | `STARTED` | 이미 시작된 방이다(재연결 스냅샷 등) — 러닝 화면으로 이어가고 WS `RUNNING_START`를 보낸다 |
 | `CANCELLED` | 홈으로 — 현재 서버는 보내지 않는다(아래) |
 
-- **`MATCH_STARTED`와 나뉘는 이유는 "전이"와 "상태"의 차이다.** `status=MATCHED`는 재연결 스냅샷으로도 오므로, 그것만 보면 확정 연출을 볼 때마다 반복하게 된다. 확정된 그 순간은 `MATCH_STARTED`가, 그 밖의 모든 갱신은 이 이벤트가 맡는다
+- **`MATCH_CONFIRMED`와 나뉘는 이유는 "전이"와 "상태"의 차이다.** `status=MATCHED`는 재연결 스냅샷으로도 오므로, 그것만 보면 확정 연출을 볼 때마다 반복하게 된다. 확정된 그 순간은 `MATCH_CONFIRMED`가, 그 밖의 모든 갱신은 이 이벤트가 맡는다
 - 방 취소는 마지막 참가자가 나갈 때만 일어나 받을 사람이 없으므로 이벤트를 보내지 않는다. `CANCELLED`는 방어적으로만 처리한다
 
 #### `INVITE_ROOM_ENTRANCE` (SSE) — 초대 방 입장 스냅샷
@@ -2877,8 +2877,8 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 }
 ```
 
-- `user_relationships`에 `(요청자→대상, FRIEND_REQUEST_SENT)`·`(대상→요청자, FRIEND_REQUEST_RECEIVED)` 두 행을 쓰고(이전 관계로 `NONE` 행이 남아 있으면 그 행을 갱신한다) 대상에게 "친구 요청 도착" 인앱 알림(`FRIEND_REQUESTED`, 2-4)을 쌓고 푸시를 보낸다
-- **이미 상대가 나에게 요청해 둔 상태면(내 행이 `FRIEND_REQUEST_RECEIVED`) 새 요청을 만들지 않고 수락으로 처리한다.** 서로 요청을 주고받은 상황은 이미 합의된 것이라 한 번 더 수락을 요구할 이유가 없다. 이때 응답은 10-5 수락과 같은 `200 OK` `{ "relationshipType": "FRIEND" }`이고(요청을 새로 만들지 않으므로 `201`이 아니다), 역방향 요청자에게 `FRIEND_ACCEPTED` 알림을 쌓는다
+- `user_relationships`에 `(요청자→대상, FRIEND_REQUEST_SENT)`·`(대상→요청자, FRIEND_REQUEST_RECEIVED)` 두 행을 쓰고(이전 관계로 `NONE` 행이 남아 있으면 그 행을 갱신한다) 대상에게 "친구 요청 도착" 인앱 알림(`FRIEND_REQUEST_RECEIVED`, 2-4)을 쌓고 푸시를 보낸다
+- **이미 상대가 나에게 요청해 둔 상태면(내 행이 `FRIEND_REQUEST_RECEIVED`) 새 요청을 만들지 않고 수락으로 처리한다.** 서로 요청을 주고받은 상황은 이미 합의된 것이라 한 번 더 수락을 요구할 이유가 없다. 이때 응답은 10-5 수락과 같은 `200 OK` `{ "relationshipType": "FRIEND" }`이고(요청을 새로 만들지 않으므로 `201`이 아니다), 역방향 요청자에게 `FRIEND_REQUEST_ACCEPTED` 알림을 쌓는다
   - **동시에 서로 요청해도 같다** — 두 요청 중 뒤에 처리되는 쪽이 앞쪽이 만든 요청을 받은 상태로 보고 수락한다. 둘 다 `FRIEND_REQUEST_SENT`로 끝나는 일은 없다
 - **에러 (400 Bad Request)**: `CANNOT_FRIEND_SELF` — 자기 자신에게는 요청할 수 없다
 - **에러 (409 Conflict)**: `FRIEND_REQUEST_ALREADY_EXISTS` — 이미 요청했거나 이미 친구다
@@ -2901,7 +2901,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **경로의 `{userId}`는 요청을 보낸 사람이다.** 그 사람이 나에게 보낸 요청의 두 행(`FRIEND_REQUEST_SENT`·`FRIEND_REQUEST_RECEIVED`)을 `FRIEND`로 바꾼다 — 요청 리소스를 친구로 확정된 상태로 갈아끼우는 것이라 `PUT`이다
 - **Request 본문이 없다** — 수락 말고 바꿀 수 있는 값이 없다. `PATCH`로 상태 값을 받으면 `FRIEND_REQUEST_SENT` 같은 의미 없는 값까지 검증해야 한다
-- 요청자에게 "친구 요청 수락됨" 인앱 알림(`FRIEND_ACCEPTED`)을 쌓고 푸시를 보낸다
+- 요청자에게 "친구 요청 수락됨" 인앱 알림(`FRIEND_REQUEST_ACCEPTED`)을 쌓고 푸시를 보낸다
 - **멱등이다** — 이미 그 사람과 친구(`FRIEND`)면 아무것도 바꾸지 않고 같은 응답을 준다. 알림도 다시 쌓지 않는다. 응답을 못 받은 앱이 다시 보내도 에러가 나지 않는다
 - **Response `200 OK`**: `{ "relationshipType": "FRIEND" }`
 - **에러 (404 Not Found)**: 그 사람이 나에게 보낸 요청이 없다 — 내가 보낸 요청을 내가 수락하려는 경우도 여기다

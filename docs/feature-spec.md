@@ -349,10 +349,10 @@
 
 | `type` | 받는 사람 | 만료 |
 |---|---|---|
-| `FRIEND_REQUESTED` | 요청받은 사람 | 없음 |
-| `FRIEND_ACCEPTED` | 요청한 사람 | 없음 |
-| `RUNNING_INVITED` | 초대받은 사람 | 모집 마감 |
-| `INVITATION_ACCEPTED` | 수락한 사람을 초대했고 아직 방에 있는 사람 | 시작 시각 |
+| `FRIEND_REQUEST_RECEIVED` | 요청받은 사람 | 없음 |
+| `FRIEND_REQUEST_ACCEPTED` | 요청한 사람 | 없음 |
+| `RUNNING_INVITATION_RECEIVED` | 초대받은 사람 | 모집 마감 |
+| `RUNNING_INVITATION_ACCEPTED` | 수락한 사람을 초대했고 아직 방에 있는 사람 | 시작 시각 |
 | `MATCH_CONFIRMED` | 매칭 방에 남은 사람 전원 — 초대 방 마감에는 보내지 않는다 | 시작 시각 |
 | `RUNNING_REMINDER` | 시작 5분 전 방에 남은 사람 | 시작 시각 |
 
@@ -380,7 +380,7 @@
 - 매칭 구간은 클라가 보내는 것이 신청·취소 둘뿐이라 양방향 채널이 필요 없다 — REST로 보내고 현황은 SSE 스트림(`/match-rooms/stream`)으로 받는다. 러닝 구간은 위치를 주기 발신하는 고빈도 양방향 구간이라 WebSocket을 쓴다.
 - 대기 인원·성사·취소는 SSE 이벤트로 전달된다(`api-spec.md` 5번).
 - **SSE 연결은 화면 생명주기에 묶지 않는다.** 매칭 대기 중 현황 배너가 모든 화면에서 유지돼야 하므로 홈을 벗어나도 스트림은 살아 있어야 한다. 이는 클라이언트 아키텍처 제약이다.
-- 방 상태 이벤트(`MATCH_STARTED`·`MATCH_ROOM_UPDATED`, 초대 방은 `INVITE_ROOM_ENTRANCE`·`INVITE_ROOM_UPDATED`)는 **전체 상태를 담는다** — 놓친 이벤트를 되짚을 필요가 없어 재연결은 곧 스냅샷 재수신이다. 앱 재시작처럼 스트림이 끊긴 뒤에는 다시 연결할 때 오는 스냅샷이 같은 정보를 돌려준다. `RUNNING_READY`는 스냅샷으로 다시 오지 않으며, 놓치면 아래처럼 기기 시각으로 대신한다.
+- 방 상태 이벤트(`MATCH_CONFIRMED`·`MATCH_ROOM_UPDATED`, 초대 방은 `INVITE_ROOM_ENTRANCE`·`INVITE_ROOM_UPDATED`)는 **전체 상태를 담는다** — 놓친 이벤트를 되짚을 필요가 없어 재연결은 곧 스냅샷 재수신이다. 앱 재시작처럼 스트림이 끊긴 뒤에는 다시 연결할 때 오는 스냅샷이 같은 정보를 돌려준다. `RUNNING_READY`는 스냅샷으로 다시 오지 않으며, 놓치면 아래처럼 기기 시각으로 대신한다.
 - **SSE → WS 전환**: `start_at` 직전에 WS를 연결하고(`RUNNING_READY`를 기다리지 않는다), 서버의 `RUNNING_READY`가 준 `startsInMs`로 타이머를 걸어 `start_at`에 `RUNNING_START`를 보낸다. `RUNNING_STARTED` ack를 받은 뒤 SSE를 닫는다. 이벤트가 유실되면 기기 시각으로 `start_at`을 넘겼는지 보고 그냥 보낸다.
 - 메시지 네이밍 규칙: 클라 발신 현재형 / 서버 발신 과거형.
 
@@ -654,7 +654,7 @@
 - **방에 남은 사람이 없으면** 매칭 방과 같이 `CANCELLED`로 닫는다. 만든 사람이 나가도 방은 유지된다 — 방장이 없다.
 - **나가기는 매칭과 같고 제재는 없다.** 나가기는 `POST /match-rooms/leave`를 그대로 쓴다. 초대 방에서는 시점·인원과 무관하게 이탈은 `MATCHED_LEFT_NO_PENALTY`, 조기 종료는 `RUNNING_LEFT_NO_PENALTY`(목표를 채우면 `COMPLETED`), 미출석 강제 종료도 `_NO_PENALTY`로 남기고 쿨다운을 걸지 않는다. 제재는 모르는 사람끼리 모이는 매칭에서 약속을 지키게 하려는 장치라, 서로 아는 사이인 초대 방에는 필요 없다.
 - **방 상태 이벤트는 초대 방 전용이다** — 스트림(`/match-rooms/stream`)은 같지만, 연결 직후 스냅샷은 `INVITE_ROOM_ENTRANCE`(방 정보 + 시작까지 남은 시간 `startsInMs`), 그 뒤 변화는 `INVITE_ROOM_UPDATED`가 나른다. 초대 현황도 방 정보(`RoomInfo`)에 실린다.
-  - 매칭 방의 `MATCH_STARTED`·`MATCH_ROOM_UPDATED`는 보내지 않는다. 초대 방의 마감은 "더 이상 초대받지 않는다"일 뿐 매칭 성사가 아니라 확정 연출이 없다. 마감은 `INVITE_ROOM_UPDATED`(초대 만료 반영)로만 알리고, 카운트다운은 매칭과 같이 `RUNNING_READY`로 들어간다.
+  - 매칭 방의 `MATCH_CONFIRMED`·`MATCH_ROOM_UPDATED`는 보내지 않는다. 초대 방의 마감은 "더 이상 초대받지 않는다"일 뿐 매칭 성사가 아니라 확정 연출이 없다. 마감은 `INVITE_ROOM_UPDATED`(초대 만료 반영)로만 알리고, 카운트다운은 매칭과 같이 `RUNNING_READY`로 들어간다.
 
 **업적**: 저장된 기록에서 **조회할 때 계산하는 파생값이다.** 획득 테이블을 두지 않는다 — 달성 시각·달성 알림이 없어 굳혀 둘 이유가 없고, 기준값을 바꾸면 바로 반영된다.
 
@@ -682,7 +682,7 @@
 
 **인앱 알림 저장**: `user_notifications`에 받는 사람 기준으로 쌓는다. **알림을 만드는 동작과 같은 트랜잭션에서 넣는다** — 요청은 됐는데 알림이 없거나, 알림만 남는 상태를 만들지 않는다.
 
-- 친구 요청 → 받는 사람에게 `FRIEND_REQUESTED` / 수락(서로 요청해 바로 성립한 경우 포함) → 요청했던 사람에게 `FRIEND_ACCEPTED` / 러닝 초대(다시 초대 포함) → 받는 사람에게 `RUNNING_INVITED`.
+- 친구 요청 → 받는 사람에게 `FRIEND_REQUEST_RECEIVED` / 수락(서로 요청해 바로 성립한 경우 포함) → 요청했던 사람에게 `FRIEND_REQUEST_ACCEPTED` / 러닝 초대(다시 초대 포함) → 받는 사람에게 `RUNNING_INVITATION_RECEIVED`.
 - **알림은 사건의 기록이라 원 상태가 바뀌어도 지우지 않는다.** 요청이 취소되거나 초대가 만료돼도 행은 남고, 화면에 보일 현재 상태는 조회할 때 `user_relationships`·`running_room_invitations`에서 읽어 붙인다.
 - 보관 기간이 지난 알림은 조회에서 빠진다. 정리 주기는 운영에서 정한다.
 
