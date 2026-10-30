@@ -239,7 +239,7 @@ class AcceptInvitationHandlerTest {
 
         @Test
         @DisplayName("수락하면 수락한 사람과 스트림에 보낸 방 정보를 넘겨 초대한 사람에게 갈 푸시를 요청한다")
-        void requestsInvitationAcceptedPush() {
+        void requestsRunningInvitationAcceptedPush() {
             // given
             RunningRoom room = pendingRoom(1);
             givenLocked(room);
@@ -249,7 +249,7 @@ class AcceptInvitationHandlerTest {
             accept();
 
             // then -> 받는 사람은 요청기가 자리를 잡은 뒤의 방으로, 닉네임은 이미 조립한 방 정보로 고른다
-            verify(matchPushRequester).invitationAccepted(room, invitee, assembledRoom);
+            verify(matchPushRequester).runningInvitationAccepted(room, invitee, assembledRoom);
         }
     }
 

@@ -93,7 +93,7 @@ class MatchPushRequesterTest {
 
     @Test
     @DisplayName("초대 수락은 그 사람을 초대했고 아직 방에 있는 사람에게만 보낸다")
-    void invitationAcceptedToStayingInviters() {
+    void runningInvitationAcceptedToStayingInviters() {
         // given -> 초대한 사람 둘 중 하나는 나갔고, 다른 사람이 초대한 손님은 따로 있다
         UserId host = newUserId();
         UserId leftInviter = newUserId();
@@ -106,19 +106,19 @@ class MatchPushRequesterTest {
                         new InvitationDraft(host, otherInvitee, RoomInvitationStatus.PENDING, 1)));
 
         // when
-        requester.invitationAccepted(room, invitee, roomInfo(player(host, "철수"), player(invitee, "영희")));
+        requester.runningInvitationAccepted(room, invitee, roomInfo(player(host, "철수"), player(invitee, "영희")));
 
         // then
         PushRequestedEvent event = publishedEvents(1).getFirst();
         assertThat(event.userId()).isEqualTo(host.value());
-        assertThat(event.message()).isEqualTo(new PushMessage(PushType.INVITATION_ACCEPTED,
+        assertThat(event.message()).isEqualTo(new PushMessage(PushType.RUNNING_INVITATION_ACCEPTED,
                 "초대를 수락했어요", "영희님이 21:30 러닝에 들어왔어요",
                 Map.of("actorId", invitee.value().toString(), "runningRoomId", "125"), START_AT));
     }
 
     @Test
     @DisplayName("나갔다 다시 초대받아 수락하면 지금 방에 있는 초대한 사람 모두가 받는다")
-    void invitationAcceptedAgain() {
+    void runningInvitationAcceptedAgain() {
         // given -> 처음 초대한 사람과 다시 초대한 사람 둘 다 방에 있다
         UserId host = newUserId();
         UserId reInviter = newUserId();
@@ -129,7 +129,7 @@ class MatchPushRequesterTest {
                         new InvitationDraft(reInviter, invitee, RoomInvitationStatus.ACCEPTED, 1)));
 
         // when
-        requester.invitationAccepted(room, invitee,
+        requester.runningInvitationAccepted(room, invitee,
                 roomInfo(player(host, "철수"), player(reInviter, "민수"), player(invitee, "영희")));
 
         // then
@@ -139,7 +139,7 @@ class MatchPushRequesterTest {
 
     @Test
     @DisplayName("초대한 사람이 모두 나갔으면 보내지 않는다")
-    void invitationAcceptedWithoutStayingInviter() {
+    void runningInvitationAcceptedWithoutStayingInviter() {
         // given
         UserId leftInviter = newUserId();
         UserId invitee = newUserId();
@@ -148,7 +148,7 @@ class MatchPushRequesterTest {
                 List.of(new InvitationDraft(leftInviter, invitee, RoomInvitationStatus.ACCEPTED, 1)));
 
         // when
-        requester.invitationAccepted(room, invitee, roomInfo(player(invitee, "영희")));
+        requester.runningInvitationAccepted(room, invitee, roomInfo(player(invitee, "영희")));
 
         // then
         verifyNoInteractions(eventPublisher);
@@ -156,7 +156,7 @@ class MatchPushRequesterTest {
 
     @Test
     @DisplayName("수락한 사람이 탈퇴로 그려졌으면 던지지 않고 보내지 않는다")
-    void invitationAcceptedByDeletedInvitee() {
+    void runningInvitationAcceptedByDeletedInvitee() {
         // given -> 닉네임 자리가 표시용 문구다. 던지면 수락까지 롤백된다
         UserId host = newUserId();
         UserId invitee = newUserId();
@@ -166,7 +166,7 @@ class MatchPushRequesterTest {
         RoomInfo.RoomPlayer deleted = new RoomInfo.RoomPlayer(invitee.value(), "탈퇴한 사용자", null, null, 360, true);
 
         // when
-        requester.invitationAccepted(room, invitee, roomInfo(player(host, "철수"), deleted));
+        requester.runningInvitationAccepted(room, invitee, roomInfo(player(host, "철수"), deleted));
 
         // then
         verifyNoInteractions(eventPublisher);
@@ -174,7 +174,7 @@ class MatchPushRequesterTest {
 
     @Test
     @DisplayName("방 정보에 수락한 사람이 없으면 던지지 않고 보내지 않는다")
-    void invitationAcceptedWithoutInviteeInRoomInfo() {
+    void runningInvitationAcceptedWithoutInviteeInRoomInfo() {
         // given -> 던지면 수락까지 롤백된다
         UserId host = newUserId();
         UserId invitee = newUserId();
@@ -183,7 +183,7 @@ class MatchPushRequesterTest {
                 List.of(new InvitationDraft(host, invitee, RoomInvitationStatus.ACCEPTED, 1)));
 
         // when
-        requester.invitationAccepted(room, invitee, roomInfo(player(host, "철수")));
+        requester.runningInvitationAccepted(room, invitee, roomInfo(player(host, "철수")));
 
         // then
         verifyNoInteractions(eventPublisher);

@@ -47,7 +47,7 @@ public class MatchPushRequester {
 
     // 들어온 사람을 초대했고 아직 방에 있는 사람만 받는다.
     // 닉네임은 방 정보 조립이 이미 읽은 값을 쓴다 — 여기서 다시 읽으면 그 조회가 실패할 때 수락까지 롤백된다
-    public void invitationAccepted(RunningRoom room, UserId inviteeId, RoomInfo roomInfo) {
+    public void runningInvitationAccepted(RunningRoom room, UserId inviteeId, RoomInfo roomInfo) {
         List<UserId> recipients = room.getInvitations().stream()
                 .filter(invitation -> invitation.isFor(inviteeId))
                 .map(RoomInvitation::getInviterId)
@@ -65,7 +65,7 @@ public class MatchPushRequester {
                     roomIdOf(room), inviteeId.value());
             return;
         }
-        PushMessage message = new PushMessage(PushType.INVITATION_ACCEPTED, "초대를 수락했어요",
+        PushMessage message = new PushMessage(PushType.RUNNING_INVITATION_ACCEPTED, "초대를 수락했어요",
                 "%s님이 %s 러닝에 들어왔어요".formatted(invitee.get().nickname(), room.getStartAt().format(TIME_FORMAT)),
                 Map.of("actorId", inviteeId.value().toString(), "runningRoomId", String.valueOf(roomIdOf(room))),
                 room.getStartAt());
