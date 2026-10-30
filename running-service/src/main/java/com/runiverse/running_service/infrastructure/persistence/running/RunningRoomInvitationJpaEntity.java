@@ -31,7 +31,7 @@ import java.util.UUID;
 @Entity
 @Table(
         name = "running_room_invitations",
-        // 받은 초대 목록 — 받는 사람이 탈퇴할 때 CASCADE 삭제도 이 인덱스를 탄다
+        // 받은 초대 목록 — 받는 사람이 탈퇴할 때 받은 초대 삭제도 이 인덱스를 탄다
         indexes = @Index(name = "idx_room_invitation_invitee", columnList = "invitee_id")
 )
 @IdClass(RunningRoomInvitationJpaEntity.Pk.class)
@@ -63,7 +63,7 @@ public class RunningRoomInvitationJpaEntity extends BaseTimeEntity {
     @Column(name = "invite_count", nullable = false)
     private int inviteCount;
 
-    // FK 제약 — 받는 사람이 탈퇴하면 받은 초대가 함께 지워진다
+    // FK 제약 — 받는 사람이 탈퇴하면 받은 초대가 남지 않는다. 지우는 건 탈퇴 처리가 계정보다 먼저 한다
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(
             name = "invitee_id",

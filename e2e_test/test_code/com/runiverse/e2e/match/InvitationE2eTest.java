@@ -227,6 +227,27 @@ class InvitationE2eTest extends E2eTestSupport {
     }
 
     @Test
+    @DisplayName("초대받아 들어온 방에 혼자 남아도 탈퇴는 막히지 않는다")
+    void inviteeLeftAloneCanDeleteAccount() {
+        // given -> 만든 사람이 먼저 나가 초대받아 들어온 사람만 남았다 — 탈퇴하며 나가면 방이 닫힌다
+        TestUser host = signUpAndOnboard();
+        TestUser friend = signUpAndOnboard();
+        befriend(host, friend);
+        int roomId = openRoom(host);
+        assertThat(invite(host, roomId, friend).status()).isEqualTo(204);
+        assertThat(accept(friend, roomId).status()).isEqualTo(201);
+        assertThat(post("/match-rooms/leave", null, host.accessToken()).status()).isEqualTo(204);
+
+        // when
+        Response deleted = delete("/users/me", friend.accessToken());
+
+        // then
+        assertThat(deleted.status()).isEqualTo(204);
+        assertThat(post("/auth/login",
+                Map.of("email", friend.email(), "password", friend.password())).status()).isEqualTo(401);
+    }
+
+    @Test
     @DisplayName("같은 친구에게 상한(5회)만큼 보내면 그다음은 횟수 초과로 거절된다")
     void inviteCountExceeded() {
         // given

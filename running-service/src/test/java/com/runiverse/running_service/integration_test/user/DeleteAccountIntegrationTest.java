@@ -74,6 +74,7 @@ public class DeleteAccountIntegrationTest {
                 command -> settledUserIds.add(command.userId()),  // SettleRunningForAccountDeletionUsecase
                 deletedUserStore,                                 // SaveDeletedUserPort
                 userDeviceStore,                                  // DeleteUserDevicesPort
+                id -> { },                                        // DeleteReceivedInvitationsPort — 초대는 이 테스트가 다루지 않는다
                 deletedUserStore,                                 // DeleteUserPort
                 refreshTokenStore,                                // DeleteRefreshTokenPort
                 accessTokenBlacklist,                             // BlockAccessTokenPort
