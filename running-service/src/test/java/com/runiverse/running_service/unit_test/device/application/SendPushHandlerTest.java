@@ -4,6 +4,7 @@ import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.auth.port.out.LoadRefreshTokenPort;
 import com.runiverse.running_service.application.common.port.out.LoadUserByIdPort;
 import com.runiverse.running_service.application.device.command.push.PushListener;
+import com.runiverse.running_service.application.device.command.push.PushProperties;
 import com.runiverse.running_service.application.device.command.push.PushRequestedEvent;
 import com.runiverse.running_service.application.device.command.push.PushTargetReader;
 import com.runiverse.running_service.application.device.command.push.SendPushCommand;
@@ -31,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -63,14 +65,39 @@ public class SendPushHandlerTest {
             LocalDateTime.now().plusMinutes(5));
     private final SendPushCommand command = new SendPushCommand(userId, message);
 
-    // 읽기·기기 끄기 컴포넌트는 트랜잭션 경계만 나눈 것이라 포트 목을 감싼 진짜 객체로 넣는다
     @BeforeEach
     void setUp() {
-        handler = new SendPushHandler(
-                new PushTargetReader(loadPushTargetPort, loadUserByIdPort),
-                loadRefreshTokenPort,
-                sendPushPort,
-                new StaleDeviceDeactivator(deactivateStaleDevicePort));
+        handler = handlerDisabling(Set.of());
+    }
+
+    @Test
+    @DisplayName("꺼 둔 종류는 기기를 읽지도 보내지도 않는다")
+    void skipsDisabledType() {
+        // given
+        handler = handlerDisabling(Set.of(PushType.RUNNING_REMINDER));
+
+        // when
+        handler.handle(command);
+
+        // then
+        verifyNoInteractions(loadPushTargetPort, loadUserByIdPort, loadRefreshTokenPort, sendPushPort);
+    }
+
+    @Test
+    @DisplayName("다른 종류를 꺼 둬도 이 종류는 그대로 보낸다")
+    void sendsWhenOtherTypeDisabled() {
+        // given
+        handler = handlerDisabling(Set.of(PushType.FRIEND_REQUEST_RECEIVED));
+        givenTarget();
+        givenUser(true);
+        givenSession();
+        when(sendPushPort.send(any(), any(), any())).thenReturn(PushSendStatus.SENT);
+
+        // when
+        handler.handle(command);
+
+        // then
+        verify(sendPushPort).send(new UserId(userId), new PushToken("token-1"), message);
     }
 
     @Test
@@ -242,6 +269,16 @@ public class SendPushHandlerTest {
                 .getAnnotation(Transactional.class).readOnly()).isTrue();
         assertThat(StaleDeviceDeactivator.class.getMethod("deactivate", PushTarget.class)
                 .getAnnotation(Transactional.class)).isNotNull();
+    }
+
+    // 읽기·기기 끄기 컴포넌트는 트랜잭션 경계만 나눈 것이라 포트 목을 감싼 진짜 객체로 넣는다
+    private SendPushHandler handlerDisabling(Set<PushType> disabledTypes) {
+        return new SendPushHandler(
+                new PushTargetReader(loadPushTargetPort, loadUserByIdPort),
+                loadRefreshTokenPort,
+                sendPushPort,
+                new StaleDeviceDeactivator(deactivateStaleDevicePort),
+                new PushProperties(disabledTypes));
     }
 
     private void givenTarget() {
