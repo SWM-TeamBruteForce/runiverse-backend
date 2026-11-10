@@ -6,9 +6,9 @@ import com.runiverse.running_service.application.running.common.TrackAnalysis;
 import com.runiverse.running_service.application.running.common.TrackAnalyzer;
 import com.runiverse.running_service.application.running.common.TrackFilter;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
+import com.runiverse.running_service.domain.running.record.RunningRecord.SegmentDraft;
+import com.runiverse.running_service.domain.running.record.RunningRecord.SplitDraft;
 import com.runiverse.running_service.domain.running.record.RunningRecord;
-import com.runiverse.running_service.domain.running.record.SegmentDraft;
-import com.runiverse.running_service.domain.running.record.SplitDraft;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

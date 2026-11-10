@@ -25,7 +25,7 @@ class MatchE2eTest extends E2eTestSupport {
     // 같은 슬롯·거리면 테스트끼리 한 방에 합쳐져 테스트마다 다른 내일 슬롯을 쓴다
     private static final LocalDate TOMORROW = LocalDate.now(APP_ZONE).plusDays(1);
     private static final LocalDateTime FLOW_SLOT = TOMORROW.atTime(18, 0);
-    private static final LocalDateTime GUARD_SLOT = TOMORROW.atTime(18, 30);
+    private static final LocalDateTime GUARD_SLOT = TOMORROW.atTime(20, 0);
     private static final LocalDateTime DELETION_SLOT = TOMORROW.atTime(19, 0);
     private static final int DISTANCE = 3000;
 
@@ -100,7 +100,7 @@ class MatchE2eTest extends E2eTestSupport {
         assertThat(cancelWithout.text("code")).isEqualTo("NOT_FOUND");
 
         assertThat(apply(user, GUARD_SLOT, DISTANCE).status()).isEqualTo(201);
-        Response duplicated = apply(user, GUARD_SLOT.plusMinutes(30), DISTANCE);
+        Response duplicated = apply(user, GUARD_SLOT.plusHours(1), DISTANCE);
         assertThat(duplicated.status()).isEqualTo(409);
         assertThat(duplicated.text("code")).isEqualTo("MATCH_ALREADY_IN_PROGRESS");
 
@@ -173,7 +173,7 @@ class MatchE2eTest extends E2eTestSupport {
         // when
         Response closed = apply(user, yesterday, DISTANCE);
         Response offSlot = apply(user, TOMORROW.atTime(21, 15), DISTANCE);
-        Response offDistance = apply(user, TOMORROW.atTime(21, 30), 4000);
+        Response offDistance = apply(user, TOMORROW.atTime(21, 0), 4000);
 
         // then - 마감은 운영값·현재 시각에 걸린 정책이라 유스케이스가 409로 막는다
         assertThat(closed.status()).isEqualTo(409);
@@ -181,9 +181,10 @@ class MatchE2eTest extends E2eTestSupport {
         assertThat(offSlot.status()).isEqualTo(400);
         assertThat(offSlot.text("code")).isEqualTo("INVALID_REQUEST");
         // 선택지 검증이 DTO에서 유스케이스로 옮겨 가도 문구는 명세 그대로다(설정값으로 만든다)
-        assertThat(offSlot.text("message")).isEqualTo("시작 시각은 18:00부터 22:00까지 30분 간격으로만 선택할 수 있습니다.");
+        assertThat(offSlot.text("message")).isEqualTo("시작 시각은 18:00부터 22:00까지 60분 간격으로만 선택할 수 있습니다.");
         assertThat(offDistance.status()).isEqualTo(400);
         assertThat(offDistance.text("code")).isEqualTo("INVALID_REQUEST");
+        assertThat(offDistance.text("message")).isEqualTo("목표 거리는 3000, 5000, 10000 중 하나여야 합니다.");
         assertThat(get("/users/me/status", user.accessToken()).text("status")).isEqualTo("IDLE");
     }
 
@@ -205,7 +206,7 @@ class MatchE2eTest extends E2eTestSupport {
         Response pastDate = get("/match-rooms/slots?date=" + LocalDate.now(APP_ZONE).minusDays(1),
                 first.accessToken());
 
-        // then - 거리 오름차순, 거리마다 9개 슬롯이 오름차순이고 같은 시각이어도 거리끼리 합산하지 않는다
+        // then - 거리 오름차순, 거리마다 5개 슬롯이 오름차순이고 같은 시각이어도 거리끼리 합산하지 않는다
         //        (JPQL 집계가 실제 DB에서 돈다)
         assertThat(slots.status()).isEqualTo(200);
         assertThat(slots.body().keySet()).containsExactly("distances");
@@ -214,15 +215,14 @@ class MatchE2eTest extends E2eTestSupport {
                 .containsExactly(3000, 5000, 10000);
         assertThat(slotsOf(distances, 3000)).extracting(slot -> LocalDateTime.parse((String) slot.get("scheduledStartAt")))
                 .containsExactly(
-                        slotDate.atTime(18, 0), slotDate.atTime(18, 30), slotDate.atTime(19, 0),
-                        slotDate.atTime(19, 30), slotDate.atTime(20, 0), slotDate.atTime(20, 30),
-                        slotDate.atTime(21, 0), slotDate.atTime(21, 30), slotDate.atTime(22, 0));
+                        slotDate.atTime(18, 0), slotDate.atTime(19, 0), slotDate.atTime(20, 0),
+                        slotDate.atTime(21, 0), slotDate.atTime(22, 0));
         assertThat(slotsOf(distances, 3000)).extracting(slot -> slot.get("waitingCount"))
-                .containsExactly(0, 0, 0, 0, 0, 0, 0, 0, 0);
+                .containsExactly(0, 0, 0, 0, 0);
         assertThat(slotsOf(distances, 5000)).extracting(slot -> slot.get("waitingCount"))
-                .containsExactly(0, 0, 0, 0, 1, 0, 0, 0, 0);
+                .containsExactly(0, 0, 1, 0, 0);
         assertThat(slotsOf(distances, 10000)).extracting(slot -> slot.get("waitingCount"))
-                .containsExactly(0, 0, 0, 0, 2, 0, 0, 0, 0);
+                .containsExactly(0, 0, 2, 0, 0);
         for (int distanceMeters : List.of(3000, 5000, 10000)) {
             assertThat(slotsOf(distances, distanceMeters)).extracting(slot -> slot.get("selectable")).containsOnly(true);
         }

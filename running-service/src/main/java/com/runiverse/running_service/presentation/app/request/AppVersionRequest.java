@@ -6,8 +6,8 @@ import jakarta.validation.constraints.Pattern;
 public record AppVersionRequest(
         @NotBlank(message = "플랫폼은 필수입니다.")
         @Pattern(
-                regexp = "^(?i)(IOS|ANDROID)$",
-                message = "플랫폼은 IOS 또는 ANDROID이어야 합니다."
+                regexp = "^(?i)(IOS|ANDROID|WATCH_IOS|WATCH_ANDROID)$",
+                message = "플랫폼은 IOS, ANDROID, WATCH_IOS, WATCH_ANDROID 중 하나여야 합니다."
         )
         String platform
 ) {

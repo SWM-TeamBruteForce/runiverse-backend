@@ -33,7 +33,7 @@ class MatchSlotPolicyTest {
 
     private static final LocalDate DATE = LocalDate.of(2026, 9, 11);
     // api-spec.md 매칭 신청 400 문구 — 운영 설정이면 이 문장 그대로 나가야 클라 계약이 유지된다
-    private static final String START_TIME_MESSAGE = "시작 시각은 18:00부터 22:00까지 30분 간격으로만 선택할 수 있습니다.";
+    private static final String START_TIME_MESSAGE = "시작 시각은 18:00부터 22:00까지 60분 간격으로만 선택할 수 있습니다.";
     private static final String DISTANCE_MESSAGE = "목표 거리는 3000, 5000, 10000 중 하나여야 합니다.";
 
     private static ValidatorFactory validatorFactory;
@@ -51,11 +51,11 @@ class MatchSlotPolicyTest {
     }
 
     @Nested
-    @DisplayName("운영 설정(18:00~22:00, 30분, 3·5·10km)")
+    @DisplayName("운영 설정(18:00~22:00, 60분, 3·5·10km)")
     class OperatingPolicy {
 
         private final MatchSlotPolicy policy = policyOf(
-                LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
+                LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(60), List.of(3_000, 5_000, 10_000));
 
         @Test
         @DisplayName("그날의 슬롯을 첫 시각부터 마지막 시각까지 오름차순으로 만든다")
@@ -63,11 +63,10 @@ class MatchSlotPolicyTest {
             // when
             List<LocalDateTime> startTimes = policy.startTimesOf(DATE);
 
-            // then -> 양 끝을 포함한 9개
+            // then -> 양 끝을 포함한 5개
             assertThat(startTimes).containsExactly(
-                    DATE.atTime(18, 0), DATE.atTime(18, 30), DATE.atTime(19, 0),
-                    DATE.atTime(19, 30), DATE.atTime(20, 0), DATE.atTime(20, 30),
-                    DATE.atTime(21, 0), DATE.atTime(21, 30), DATE.atTime(22, 0));
+                    DATE.atTime(18, 0), DATE.atTime(19, 0), DATE.atTime(20, 0),
+                    DATE.atTime(21, 0), DATE.atTime(22, 0));
         }
 
         @Test
@@ -78,7 +77,7 @@ class MatchSlotPolicyTest {
         }
 
         @ParameterizedTest(name = "{0}")
-        @ValueSource(strings = {"18:00", "18:30", "19:00", "21:30", "22:00"})
+        @ValueSource(strings = {"18:00", "19:00", "21:00", "22:00"})
         @DisplayName("범위 안의 간격 시각은 받는다")
         void allowsAlignedTimeInRange(String time) {
             // when & then -> 양 끝 경계도 선택지에 들어간다
@@ -94,7 +93,7 @@ class MatchSlotPolicyTest {
         }
 
         @ParameterizedTest(name = "{0}")
-        @ValueSource(strings = {"18:01", "19:15", "21:45"})
+        @ValueSource(strings = {"18:01", "18:30", "19:15", "21:30", "21:45"})
         @DisplayName("범위 안이어도 간격에 맞지 않으면 거절한다")
         void rejectsUnalignedTime(String time) {
             // when & then
@@ -270,7 +269,7 @@ class MatchSlotPolicyTest {
         void operatingSettingsPass() {
             // when & then
             assertThat(validate(LocalTime.of(18, 0), LocalTime.of(22, 0),
-                    Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000))).isEmpty();
+                    Duration.ofMinutes(60), List.of(3_000, 5_000, 10_000))).isEmpty();
         }
 
         @Test

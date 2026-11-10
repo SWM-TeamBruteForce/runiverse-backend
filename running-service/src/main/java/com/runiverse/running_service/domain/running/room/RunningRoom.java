@@ -35,6 +35,14 @@ public class RunningRoom {
     private static final int SOLO_MAX_PLAYER = 1;
     private static final int MATCH_MAX_PLAYER = 4;
     private static final int INVITE_MAX_PLAYER = 4;
+
+    public record SessionDraft(UserId userId, RunningPlayerId runningPlayerId, int leaveCount, boolean connected) {
+    }
+
+    public record InvitationDraft(UserId inviterId, UserId inviteeId,
+                                  RoomInvitationStatus status, int inviteCount) {
+    }
+
     private final RunningRoomId runningRoomId;   // 저장 전에는 null
     private final RunningRoomType type;          // 생성 후 바뀌지 않는다
     private final LocalDateTime startAt;

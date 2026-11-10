@@ -68,6 +68,7 @@ class AppVersionFilterTest {
             "IOS,",
             ",1.0.0",
             "WEB, 1.0.0",
+            "WATCH_ANDROID, 1.0.0",
             "'', 1.0.0",
             "IOS, 1.0",
             "IOS, v1.0.0",

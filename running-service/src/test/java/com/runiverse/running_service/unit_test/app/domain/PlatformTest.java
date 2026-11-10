@@ -6,6 +6,7 @@ import com.runiverse.running_service.domain.common.vo.Platform;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,6 +27,14 @@ public class PlatformTest {
     void readsAndroidIgnoringCase() {
         // when & then
         assertThat(Platform.from("android")).isEqualTo(Platform.ANDROID);
+    }
+
+    @ParameterizedTest(name = "{0} -> {1}")
+    @CsvSource({"watch_ios, WATCH_IOS", "Watch_Android, WATCH_ANDROID"})
+    @DisplayName("워치 플랫폼도 대소문자를 가리지 않는다")
+    void readsWatchPlatformsIgnoringCase(String value, Platform expected) {
+        // when & then
+        assertThat(Platform.from(value)).isEqualTo(expected);
     }
 
     @ParameterizedTest
@@ -53,6 +62,6 @@ public class PlatformTest {
         // when & then
         assertThatThrownBy(() -> Platform.from(value))
                 .isInstanceOf(UnsupportedPlatformException.class)
-                .hasMessage("플랫폼은 IOS 또는 ANDROID이어야 합니다.");
+                .hasMessage("플랫폼은 IOS, ANDROID, WATCH_IOS, WATCH_ANDROID 중 하나여야 합니다.");
     }
 }

@@ -32,7 +32,7 @@ import com.runiverse.running_service.domain.running.metric.vo.Pace;
 import com.runiverse.running_service.domain.running.player.RunningPlayer;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerId;
 import com.runiverse.running_service.domain.running.room.RunningRoom;
-import com.runiverse.running_service.domain.running.room.SessionDraft;
+import com.runiverse.running_service.domain.running.room.RunningRoom.SessionDraft;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
 import com.runiverse.running_service.domain.scheduling.vo.ScheduledJobType;
@@ -79,7 +79,7 @@ public class ApplyMatchIntegrationTest extends IntegrationTestSupport {
     private static final Duration COOLDOWN = Duration.ofMinutes(20);
     private static final MatchProperties MATCH_PROPERTIES = new MatchProperties(
             CLOSE_OFFSET, REMINDER_OFFSET, READY_OFFSET, FORCE_FINISH_OFFSET, 10, COOLDOWN,
-            LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
+            LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(60), List.of(3_000, 5_000, 10_000));
     private static final InviteProperties INVITE_PROPERTIES = new InviteProperties(
             Duration.ofMinutes(10), Duration.ofMinutes(1), 1_000, 42_195, 5);
 
@@ -214,7 +214,7 @@ public class ApplyMatchIntegrationTest extends IntegrationTestSupport {
         Long runningRoomId = apply(onboardedUser(330), SLOT, TARGET_DISTANCE);
 
         // when
-        Long otherSlotRoomId = apply(onboardedUser(330), SLOT.plusMinutes(30), TARGET_DISTANCE);
+        Long otherSlotRoomId = apply(onboardedUser(330), SLOT.plusHours(1), TARGET_DISTANCE);
         Long otherDistanceRoomId = apply(onboardedUser(330), SLOT, 10_000);
 
         // then
@@ -298,7 +298,7 @@ public class ApplyMatchIntegrationTest extends IntegrationTestSupport {
         // when & then -> 둘 다 어긋나 두 문장이 한 번에 나간다
         assertThatThrownBy(() -> apply(userId, SLOT.withHour(23), 7_000))
                 .isInstanceOf(InvalidMatchOptionException.class)
-                .hasMessage("시작 시각은 18:00부터 22:00까지 30분 간격으로만 선택할 수 있습니다."
+                .hasMessage("시작 시각은 18:00부터 22:00까지 60분 간격으로만 선택할 수 있습니다."
                         + " 목표 거리는 3000, 5000, 10000 중 하나여야 합니다.");
         assertThat(runningStore.playerCount()).isZero();
         assertThat(runningStore.roomCount()).isZero();
@@ -327,7 +327,7 @@ public class ApplyMatchIntegrationTest extends IntegrationTestSupport {
         apply(userId, SLOT, TARGET_DISTANCE);
 
         // when & then
-        assertThatThrownBy(() -> apply(userId, SLOT.plusMinutes(30), TARGET_DISTANCE))
+        assertThatThrownBy(() -> apply(userId, SLOT.plusHours(1), TARGET_DISTANCE))
                 .isInstanceOf(MatchAlreadyInProgressException.class);
         assertThat(runningStore.playerCount()).isEqualTo(1);
     }

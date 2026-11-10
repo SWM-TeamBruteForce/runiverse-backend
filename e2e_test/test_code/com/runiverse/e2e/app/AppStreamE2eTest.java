@@ -18,7 +18,7 @@ class AppStreamE2eTest extends E2eTestSupport {
 
     private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");   // 호스트 시간대로 만들면 슬롯이 어긋난다
     // 다른 매칭 테스트와 한 방에 합쳐지지 않게 그쪽이 쓰지 않는 슬롯·거리를 쓴다
-    private static final LocalDateTime SLOT = LocalDate.now(APP_ZONE).plusDays(1).atTime(21, 30);
+    private static final LocalDateTime SLOT = LocalDate.now(APP_ZONE).plusDays(1).atTime(21, 0);
     private static final int DISTANCE = 5000;
 
     @Test

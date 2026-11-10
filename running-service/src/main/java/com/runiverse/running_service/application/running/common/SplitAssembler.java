@@ -4,7 +4,7 @@ import com.runiverse.running_service.application.running.port.out.TrackPoint;
 import com.runiverse.running_service.domain.running.metric.vo.Cadence;
 import com.runiverse.running_service.domain.running.metric.vo.ElapsedTime;
 import com.runiverse.running_service.domain.running.metric.vo.ElevationChange;
-import com.runiverse.running_service.domain.running.record.SplitDraft;
+import com.runiverse.running_service.domain.running.record.RunningRecord.SplitDraft;
 
 import java.math.BigDecimal;
 import java.time.Duration;

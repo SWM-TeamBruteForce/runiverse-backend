@@ -1,13 +1,13 @@
 package com.runiverse.running_service.unit_test.running.domain;
 
+import com.runiverse.running_service.domain.common.exception.InvalidRunningRecordIdException;
+import com.runiverse.running_service.domain.common.vo.RunningRecordId;
 import com.runiverse.running_service.domain.running.player.exception.InvalidRunningPlayerIdException;
-import com.runiverse.running_service.domain.running.record.exception.InvalidRunningRecordIdException;
-import com.runiverse.running_service.domain.running.room.exception.InvalidRunningRoomIdException;
-import com.runiverse.running_service.domain.running.record.exception.InvalidSplitIdException;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerId;
-import com.runiverse.running_service.domain.running.record.vo.RunningRecordId;
-import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
+import com.runiverse.running_service.domain.running.record.exception.InvalidSplitIdException;
 import com.runiverse.running_service.domain.running.record.vo.RunningSplitId;
+import com.runiverse.running_service.domain.running.room.exception.InvalidRunningRoomIdException;
+import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

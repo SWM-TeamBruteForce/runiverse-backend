@@ -3,8 +3,8 @@ package com.runiverse.running_service.application.running.common;
 import com.runiverse.running_service.application.running.port.out.TrackPoint;
 import com.runiverse.running_service.domain.running.metric.vo.ElevationGain;
 import com.runiverse.running_service.domain.running.metric.vo.Pace;
-import com.runiverse.running_service.domain.running.record.SegmentDraft;
-import com.runiverse.running_service.domain.running.record.SplitDraft;
+import com.runiverse.running_service.domain.running.record.RunningRecord.SegmentDraft;
+import com.runiverse.running_service.domain.running.record.RunningRecord.SplitDraft;
 
 import java.math.BigDecimal;
 import java.util.List;

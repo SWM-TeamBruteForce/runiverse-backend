@@ -1,5 +1,6 @@
 package com.runiverse.running_service.domain.running.record;
 
+import com.runiverse.running_service.domain.running.record.RunningRecord.SegmentDraft;
 import com.runiverse.running_service.domain.running.record.vo.RoutePolyline;
 import com.runiverse.running_service.domain.running.record.vo.SegmentNumber;
 import lombok.Getter;

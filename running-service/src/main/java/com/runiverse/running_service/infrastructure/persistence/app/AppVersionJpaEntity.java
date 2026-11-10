@@ -27,7 +27,8 @@ import org.hibernate.annotations.Check;
                 columnNames = "platform"
         )
 )
-@Check(name = "ck_app_version_platform", constraints = "platform in ('IOS', 'ANDROID')")
+@Check(name = "ck_app_version_platform",
+        constraints = "platform in ('IOS', 'ANDROID', 'WATCH_IOS', 'WATCH_ANDROID')")
 // VersionName과 같은 규칙(부분마다 9자리까지) — DB가 받은 값은 서버도 읽을 수 있어야 한다
 @Check(name = "ck_app_version_format",
         constraints = "minimum_version ~ '^[0-9]{1,9}\\.[0-9]{1,9}\\.[0-9]{1,9}$' "
@@ -45,7 +46,7 @@ public class AppVersionJpaEntity extends BaseTimeEntity {
     private Long appVersionId;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "platform", nullable = false, length = 10)
+    @Column(name = "platform", nullable = false, length = 20)
     private Platform platform;
 
     @Column(name = "minimum_version", nullable = false, length = 30)

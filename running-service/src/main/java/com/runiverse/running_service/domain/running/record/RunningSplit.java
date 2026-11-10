@@ -8,6 +8,7 @@ import com.runiverse.running_service.domain.running.metric.vo.ElapsedTime;
 import com.runiverse.running_service.domain.running.metric.vo.ElevationChange;
 import com.runiverse.running_service.domain.running.metric.vo.RunningPeriod;
 import com.runiverse.running_service.domain.running.metric.vo.SplitPace;
+import com.runiverse.running_service.domain.running.record.RunningRecord.SplitDraft;
 import com.runiverse.running_service.domain.running.record.vo.RouteRange;
 import com.runiverse.running_service.domain.running.record.vo.RunningSplitId;
 import com.runiverse.running_service.domain.running.record.vo.SegmentNumber;

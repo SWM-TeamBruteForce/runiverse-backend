@@ -74,7 +74,7 @@ class MatchPropertiesTest {
     private static List<String> violationsOf(Duration closeOffset, Duration reminderOffset, Duration readyOffset) {
         MatchProperties properties = new MatchProperties(closeOffset, reminderOffset, readyOffset,
                 Duration.ofHours(6), 10, Duration.ofMinutes(20),
-                LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(30), List.of(3_000, 5_000, 10_000));
+                LocalTime.of(18, 0), LocalTime.of(22, 0), Duration.ofMinutes(60), List.of(3_000, 5_000, 10_000));
         return validator.validate(properties).stream().map(ConstraintViolation::getMessage).toList();
     }
 }

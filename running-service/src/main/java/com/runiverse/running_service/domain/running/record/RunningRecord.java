@@ -1,5 +1,6 @@
 package com.runiverse.running_service.domain.running.record;
 
+import com.runiverse.running_service.domain.common.vo.RunningRecordId;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.metric.exception.CaloriesRequiredException;
 import com.runiverse.running_service.domain.running.metric.exception.WeatherCodeRequiredException;
@@ -25,7 +26,6 @@ import com.runiverse.running_service.domain.running.record.exception.SplitSegmen
 import com.runiverse.running_service.domain.running.record.exception.SplitsRequiredException;
 import com.runiverse.running_service.domain.running.record.vo.GpsTrackKey;
 import com.runiverse.running_service.domain.running.record.vo.RouteRange;
-import com.runiverse.running_service.domain.running.record.vo.RunningRecordId;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
 import lombok.Builder;
 import lombok.Getter;
@@ -38,6 +38,28 @@ import java.util.UUID;
 
 @Getter
 public class RunningRecord {
+
+    // 기록이 조립할 경로 조각 하나 — 끊긴 곳에서 나뉜 10m 경계점(encoded polyline)이다
+    public record SegmentDraft(int segmentNumber, String routePolyline) {
+    }
+
+    public record SplitDraft(Long runningSplitId, int splitNumber, int segmentNumber, int avgPace,
+                             int distance, int duration,
+                             int routeStartIndex, int routeEndIndex,
+                             LocalDateTime startAt, LocalDateTime endAt,
+                             Integer calories, Integer avgCadence, Integer elevationChange) {
+
+        // 러닝 종료 시 새로 만든다 — 아직 ID가 없다 (RunningRecord.finish()와 짝).
+        // 경로 범위는 segmentNumber 조각 안의 점 번호다
+        public static SplitDraft create(int splitNumber, int segmentNumber, int avgPace, int distance,
+                                        int duration, int routeStartIndex, int routeEndIndex,
+                                        LocalDateTime startAt, LocalDateTime endAt,
+                                        Integer calories, Integer avgCadence, Integer elevationChange) {
+            return new SplitDraft(null, splitNumber, segmentNumber, avgPace, distance, duration,
+                    routeStartIndex, routeEndIndex, startAt, endAt,
+                    calories, avgCadence, elevationChange);
+        }
+    }
 
     private final RunningRecordId runningRecordId;
     private final RunningRoomId runningRoomId;

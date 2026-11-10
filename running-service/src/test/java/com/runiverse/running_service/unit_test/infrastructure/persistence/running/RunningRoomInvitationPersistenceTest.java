@@ -3,10 +3,10 @@ package com.runiverse.running_service.unit_test.infrastructure.persistence.runni
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.player.vo.RunningPlayerId;
-import com.runiverse.running_service.domain.running.room.InvitationDraft;
 import com.runiverse.running_service.domain.running.room.RoomInvitation;
+import com.runiverse.running_service.domain.running.room.RunningRoom.InvitationDraft;
+import com.runiverse.running_service.domain.running.room.RunningRoom.SessionDraft;
 import com.runiverse.running_service.domain.running.room.RunningRoom;
-import com.runiverse.running_service.domain.running.room.SessionDraft;
 import com.runiverse.running_service.domain.running.room.vo.RoomInvitationStatus;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomId;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;

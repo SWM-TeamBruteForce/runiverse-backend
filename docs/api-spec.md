@@ -58,13 +58,18 @@
 **매칭 HTTP**
 
 - 모집 단계(매칭 방·초대 방)의 API는 `/match-rooms` 아래 둔다. 시작 뒤의 방 단위 동작(솔로 개설·결과 조회)은 `/running-rooms`다
-  - 예전 경로 `/running-matches`(신청·취소·슬롯·스트림)는 1.2.0 심사 기간에만 1.1.x 앱용으로 남겨 둔다(아래 「1.1.x 호환 경로」). 1.2.0 앱은 쓰지 않는다. `/running-rooms/invite`·`/running-rooms/{runningRoomId}/invitations`는 배포된 적이 없어 없앴다. 취소는 `DELETE`가 아니라 `POST /match-rooms/leave`다
+  - 예전 경로 `/running-matches`(신청·취소·슬롯·스트림)는 1.2.0 심사 기간에 1.1.x 앱용으로 열었고, 지금은 로드 밸런서에서 막혀 있다(아래 「1.1.x 호환 경로」). 1.2.0 앱은 쓰지 않는다. `/running-rooms/invite`·`/running-rooms/{runningRoomId}/invitations`는 배포된 적이 없어 없앴다. 취소는 `DELETE`가 아니라 `POST /match-rooms/leave`다
 
-**1.1.x 호환 경로 (1.2.0 심사 기간 한정)**
+**1.1.x 호환 경로 (운영에서 차단됨, 코드는 보존)**
 
-1.2.0 앱이 스토어 심사를 받는 동안 이미 깔린 1.1.x 앱이 계속 쓸 수 있게, 1.2.0 서버가 1.1.1 서버의 계약을 그대로 함께 받는다. 동작은 1.2.0 유스케이스와 같고 경로·형식만 옛것이다(코드는 `legacy/v1_1`).
+1.2.0 앱이 스토어 심사를 받는 동안 이미 깔린 1.1.x 앱이 계속 쓸 수 있게, 1.2.0 서버가 1.1.1 서버의 계약을 그대로 함께 받았다. 동작은 1.2.0 유스케이스와 같고 경로·형식만 옛것이다(코드는 `legacy/v1_1`).
 
-- **언제까지**: 1.2.0이 두 스토어에 공개되면 운영이 `app_versions.minimum_version`을 IOS·ANDROID 모두 `1.2.0`으로 올린다 — 그 뒤 1.1.x 요청은 `403 APP_UPDATE_REQUIRED`라 아래 경로는 쓰이지 않고, 다음 배포에서 지운다.
+- **최소 버전 상향**: 1.2.0이 두 스토어에 공개된 뒤 운영 `app_versions.minimum_version`을 IOS·ANDROID 모두 `1.2.0`으로 올렸다 — 1.1.x 앱의 요청은 `403 APP_UPDATE_REQUIRED`다.
+- **로드 밸런서 차단 (2026-11-03)**: 최소 버전 검사는 클라이언트가 보낸 `X-App-Version`만 보므로, 헤더를 `1.2.0`으로 바꿔 직접 호출하면 아래 경로에 들어올 수 있었다. 그래서 운영 ALB(`alb-runiverse-deploy`, HTTPS:443) 리스너 규칙으로 경로를 막았다.
+  - 규칙: 우선순위 `10`, 경로 `/api/v1/running-matches` 또는 `/api/v1/running-matches/*` → 고정 응답 `404` `application/json` `{"code":"NOT_FOUND","message":"요청한 리소스를 찾을 수 없습니다."}`(서버 404와 같은 형식). 고정 응답에는 charset을 붙일 수 없어 본문의 한글은 `\uXXXX`로 이스케이프해 넣었다
+  - 메서드와 쿼리스트링은 가리지 않는다 — 4개 경로(GET 슬롯·POST 신청·DELETE 취소·GET 스트림)가 모두 막힌다
+  - 2026-11-03 운영 확인: 위 경로와 퍼센트 인코딩(`running%2Dmatches`)·`/./`는 ALB가 404로 막는다. ALB를 지나가는 변형도 컨트롤러에 닿지 않는다 — 대소문자를 바꾸면 서버 404, `;`·`//`를 넣으면 Spring Security 방화벽이 거절한다(유효한 토큰을 실어도 401로 나간다)
+- **코드는 지우지 않고 보존한다**: `legacy/v1_1`은 운영에서 쓰이지 않지만 참조용으로 남긴다. 격리 규칙(`legacy` 밖에서 `legacy` 참조 금지, [architecture.md](architecture.md))은 그대로 지킨다. 지우기로 하면 ALB 규칙도 함께 지운다 — 규칙만 지우면 다시 열린다.
 
 | 1.1.x 경로·필드 | 1.2.0 대응 | 다른 점 |
 |---|---|---|
@@ -119,30 +124,23 @@
 |---|--------|------|------|
 | 28 | GET | `/api/v1/users/me/running-records` | 내 러닝 기록 목록(기간 조회, 최대 31일) — 사용 화면: 기록 |
 
-### 8. 피드 목록 페이지 (+댓글 모달) [MVP 제외]
+### 8. 기록 카드 보기
 
 | # | Method | Path | 설명 |
 |---|--------|------|------|
-| 29 | GET | `/api/v1/feeds` | 피드 목록, `tab=FRIENDS\|ALL`, 무한 스크롤 |
-| 30 | GET | `/api/v1/feeds/{feedId}` | 피드 단건 — 사용 화면: 푸시 랜딩, 프로필 그리드 탭 |
-| 31 | POST | `/api/v1/feeds/{feedId}/like` | 좋아요 (응답에 갱신 카운트) |
-| 32 | DELETE | `/api/v1/feeds/{feedId}/like` | 좋아요 취소 |
-| 33 | GET | `/api/v1/feeds/{feedId}/comments` | 댓글 목록 (등록순, 답글 제외) |
-| 34 | POST | `/api/v1/feeds/{feedId}/comments` | 댓글/답글 작성 (`parentCommentId` 옵션, depth 1 제한) |
-| 35 | PATCH | `/api/v1/comments/{commentId}` | 댓글 수정 (작성자 본인만) |
-| 36 | GET | `/api/v1/comments/{commentId}/replies` | 답글 지연 로딩 ("답글 N개 보기") |
-| 37 | DELETE | `/api/v1/comments/{commentId}` | 댓글 삭제 (작성자 or 피드 소유자, 레딧 방식) |
-| 38 | POST | `/api/v1/comments/{commentId}/like` | 댓글 좋아요 |
-| 39 | DELETE | `/api/v1/comments/{commentId}/like` | 댓글 좋아요 취소 |
+| 29 | GET | `/api/v1/record-cards/{recordCardId}` | 기록 카드 상세 — 지도+기본곡, 사진별 음악 캐러셀. 사용 화면: 프로필 카드 탭, 기록 화면 |
 
-### 9. 피드 작성 페이지 (+프로필의 피드 편집) [MVP 제외]
+> 피드 타임라인·좋아요·댓글(예전 30~39)은 설계에서 뺐다. 번호는 다시 매기지 않는다.
+
+### 9. 기록 카드 작성·편집
 
 | # | Method | Path | 설명 |
 |---|--------|------|------|
-| 40 | POST | `/api/v1/feeds/images/presigned-url` | 피드 이미지 업로드 URL 발급 (여러 장) |
-| 41 | POST | `/api/v1/feeds` | 피드 작성 (텍스트/이미지 최소 1, 공개범위, 기록 템플릿 `runningRecordId`) |
-| 42 | PATCH | `/api/v1/feeds/{feedId}` | 피드 수정 (내용·이미지·공개범위) — 사용 화면: 프로필(피드 편집) |
-| 43 | DELETE | `/api/v1/feeds/{feedId}` | 피드 삭제 (소프트delete) |
+| 40 | POST | `/api/v1/record-cards/images/presigned-url` | 카드 사진 업로드 URL 발급 (여러 장) |
+| 41 | POST | `/api/v1/record-cards` | 기록 카드 생성 — 기록 하나에 메모·사진(0~10장)·공개 범위. 음악 생성을 요청한다 |
+| 42 | PATCH | `/api/v1/record-cards/{recordCardId}` | 기록 카드 수정 (메모·공개 범위·사진) — 새로 넣은 사진만 음악을 만든다 |
+| 43 | DELETE | `/api/v1/record-cards/{recordCardId}` | 기록 카드 삭제 (소프트 삭제) |
+| — | Kafka | `record-card.music.requested` / `record-card.music.generated` | 음악 생성 요청·완료 이벤트 — AI 서비스와의 내부 계약(9-5) |
 
 ### 10. 프로필 페이지 (본인/타인)
 
@@ -150,7 +148,7 @@
 |---|--------|------|------|
 | 44 | GET | `/api/v1/users/me` | 내 기본 정보 — 이메일·로그인 수단 포함(설정 화면이 재사용) — 사용 화면: 전역 |
 | 45 | GET | `/api/v1/users/{userId}` | 프로필 요약 (기본 정보·친구 수·관계) |
-| 46 | GET | `/api/v1/users/{userId}/feeds` | 피드 그리드 (경량: 썸네일+장수) **[MVP 제외]** |
+| 46 | GET | `/api/v1/users/{userId}/record-cards` | 기록 카드 목록 (경량: 썸네일+장수, 무한 스크롤) |
 | 47 | POST | `/api/v1/users/{userId}/friend-request` | 친구 요청 — 사용 화면: 프로필, 사용자 검색 |
 | 48 | PUT | `/api/v1/users/{userId}/friend-request` | 친구 요청 수락 — 요청을 친구로 확정 |
 | 49 | DELETE | `/api/v1/users/{userId}/friend-request` | 요청 취소(보낸 쪽) · 거절(받은 쪽) |
@@ -201,11 +199,11 @@
 ## 0. 공통 규칙
 
 - **refreshToken**: 바디로 전달하고 클라이언트 Keychain/Keystore에 보관한다.
-- **경로**: 저장 원본은 Google Encoded Polyline, precision 5(소수점 5자리, 약 1m)다. **기록 하나를 크게 그리는 화면(6-1·6-2)은 서버가 풀어 좌표 배열 `routes`로 내리고**(6-1은 조각별 배열, 6-2는 구간별로 잘라 `splits[].routes`에 싣는다), 피드 카드(8-1)는 `routePolyline` 문자열로 내린다. 기록 목록(7-1)은 경로를 싣지 않는다. 어느 쪽이든 정밀도는 precision 5를 넘지 않는다. **`route`라는 단수 필드는 어디에도 두지 않는다** — 좌표 배열은 `routes`, 문자열은 `routePolyline` 두 이름뿐이다.
+- **경로**: 저장 원본은 Google Encoded Polyline, precision 5(소수점 5자리, 약 1m)다. **기록 하나를 크게 그리는 화면(6-1·6-2)은 서버가 풀어 좌표 배열 `routes`로 내리고**(6-1은 조각별 배열, 6-2는 구간별로 잘라 `splits[].routes`에 싣는다), 기록 카드 상세(8-1)도 6-1과 같은 조각별 배열이다. 기록 목록(7-1)과 프로필 카드 목록(10-3)은 경로를 싣지 않는다. 어느 쪽이든 정밀도는 precision 5를 넘지 않는다. **`route`라는 단수 필드는 어디에도 두지 않는다** — 경로는 좌표 배열 `routes` 하나로만 내린다. encoded polyline 문자열을 내리는 응답은 없다.
   - **경로는 끊긴 곳에서 조각으로 나뉘어 저장된다**(`running_segments`). 서버가 기록에서 뺀 구간(일시정지·관측하지 못한 이동·GPS 튐)이 경계다. 버튼 없이 멈춘 정지 구간은 끊지 않는다 — 제자리라 이어 그려도 모양이 틀어지지 않는다([feature-spec.md](feature-spec.md) 트랙 필터)
   - 6-1 `routes`는 조각마다 배열 하나로 내린다. 클라는 조각 안의 점만 선으로 잇고 조각 사이는 잇지 않는다
   - 6-2 `splits[].routes`는 구간이 속한 조각 하나에서 자른 배열이라 조각 사이를 걸치지 않는다. 끊긴 곳에 걸친 구간은 점 하나만 실린다
-  - `routePolyline`(8-1)은 서버가 조각을 이어 한 줄로 다시 인코딩한 값이다 — 이웃한 두 점이 30m 넘게 떨어져 있으면 끊긴 곳으로 보고 잇지 않는다. 카드 미리보기용이라 일시정지 중 짧게(약 40m 이하) 옮긴 자리가 이어 그려지는 것은 감수한다
+  - 8-1 `record.routes`는 6-1 `routes`와 같다
 - **좌표 배열 형식**: `[[위도, 경도], [위도, 경도], …]`. 안쪽 배열은 항상 **위도가 먼저**다 — GeoJSON은 경도가 먼저라 반대이므로 그 관례를 따르지 않는다. 단일 지점도 같은 `[위도, 경도]` 두 칸 배열이다. 키 이름을 반복하지 않아 점 수백 개를 실어도 응답이 작다.
   - **조각으로 나뉜 경로**(6-1 `routes`)는 이 배열을 한 겹 더 감싼다 — `[[[위도, 경도], …], [[위도, 경도], …]]`. 끊긴 곳이 없어도 바깥 배열은 있다(조각 하나). 조각에는 점이 하나만 있을 수 있다.
 - **친구 관계**: 토글이 아니다. **성립 전 요청은 `/users/{userId}/friend-request` 한 리소스를 메서드로 다룬다** — 요청 `POST`(10-4), 수락 `PUT`(10-5), 취소·거절 `DELETE`(10-6). 성립한 친구의 삭제만 `/users/{userId}/friend`(10-6)다.
@@ -1035,7 +1033,7 @@
 ### 2-3. `GET /api/v1/app/version` — 앱 버전 확인
 
 - **화면**: 앱 진입(스플래시)·포그라운드 복귀 — 스플래시에서는 토큰 복원보다 먼저 부른다
-- **Query**: `platform`(필수, `IOS` | `ANDROID`, 대소문자 무시)
+- **Query**: `platform`(필수, `IOS` | `ANDROID` | `WATCH_IOS` | `WATCH_ANDROID`, 대소문자 무시)
 - **Response `200 OK`**
 
 ```json
@@ -1061,6 +1059,7 @@
 - **버전은 `MAJOR.MINOR.PATCH` 숫자 세 부분이고, 부분마다 9자리까지다.** 부분마다 정수로 비교한다 — 문자열로 비교하면 `1.10.0`이 `1.9.0`보다 낮게 나온다
 - **비교 대상은 빌드 번호가 아니라 버전 이름이다**(스토어에 표시되는 버전). 빌드 번호는 업로드 순번이라 기준으로 쓰지 않는다 — 대신 운영에 내보내는 빌드는 버전 이름을 반드시 올린다
 - **값은 플랫폼마다 따로 둔다** — 심사·공개 시점이 플랫폼마다 달라, 한쪽에만 나온 버전을 다른 쪽에 요구하지 않기 위해서다
+- **워치 앱 기준은 폰 앱이 묻는다** — 워치는 서버에 직접 붙지 않는다. 폰이 `WATCH_IOS`(애플워치)·`WATCH_ANDROID`(갤럭시워치 등 Wear OS)로 물어 낮은 워치와의 연결을 막는다. 서버의 구버전 요청 거절에는 쓰지 않는다
 - **스토어 주소는 내려주지 않는다** — 바뀌지 않는 값이라 앱이 가진다
 - **`Authorization` 헤더를 싣지 않는다** — 공개 API도 헤더가 있으면 토큰을 검증하므로, 만료된 토큰을 실으면 버전 확인이 401로 막힌다
 - 스플래시에서 서버에 닿지 못하면 다른 요청과 같이 재시도한다 — 판정 없이 진입시키지 않는다. 포그라운드 복귀 때 실패하면 쓰던 화면을 그대로 둔다
@@ -1075,7 +1074,7 @@
 
 {
   "code": "INVALID_REQUEST",
-  "message": "플랫폼은 IOS 또는 ANDROID이어야 합니다."
+  "message": "플랫폼은 IOS, ANDROID, WATCH_IOS, WATCH_ANDROID 중 하나여야 합니다."
 }
 ```
 
@@ -1368,7 +1367,7 @@ data:{"notificationId":912,"isRead":false,"createdAt":"2026-10-28T12:03:00","act
 
 - **인증**: 필요 / **Content-Type**: `text/event-stream`
 - **매칭 방·초대 방이 같은 스트림을 쓴다** — 활성 신청이 사람당 하나라 스트림도 하나면 된다. 방 종류는 이벤트 이름(`MATCH_*`·`INVITE_ROOM_*`)과 `RoomInfo.type`이 가른다
-  - 예전 경로 `/running-matches/stream`은 1.2.0 심사 기간에만 1.1.x 앱용으로 남겨 둔다(5번 머리말 「1.1.x 호환 경로」)
+  - 예전 경로 `/running-matches/stream`은 1.2.0 심사 기간에 1.1.x 앱용으로 열었고, 지금은 로드 밸런서에서 막혀 있다(5번 머리말 「1.1.x 호환 경로」)
 - **연결 시점**: 매칭 신청·초대 방 개설(4-1)·초대 수락(4-3) 성공 직후. 활성 신청이 없으면 연결하지 않는다 — 서버가 보낼 것이 없다.
   - **어기면 서버가 `404 Not Found`로 거절한다(본문 없음).** 열어주면 붙을 방이 없어 아무 채널도 구독하지 못하고, 그 뒤에 신청해도 이벤트가 영영 오지 않는 연결이 된다 — 에러도 없이 조용히 망가지므로 연결 자체를 막는다.
   - **이 응답에만 본문이 없다.** 요청 `Accept`가 `text/event-stream`이라 다른 에러처럼 JSON 본문을 실을 수 없다. 클라는 상태 코드로 판단하고, 신청 응답을 받기 전에는 스트림을 열지 않는다.
@@ -1408,16 +1407,16 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
       "targetDistanceMeters": 3000,
       "slots": [
         { "scheduledStartAt": "2026-07-25T18:00:00", "waitingCount": 0, "selectable": false },
-        { "scheduledStartAt": "2026-07-25T18:30:00", "waitingCount": 2, "selectable": true },
-        { "scheduledStartAt": "2026-07-25T19:00:00", "waitingCount": 0, "selectable": true }
+        { "scheduledStartAt": "2026-07-25T19:00:00", "waitingCount": 2, "selectable": true },
+        { "scheduledStartAt": "2026-07-25T20:00:00", "waitingCount": 0, "selectable": true }
       ]
     },
     {
       "targetDistanceMeters": 5000,
       "slots": [
         { "scheduledStartAt": "2026-07-25T18:00:00", "waitingCount": 0, "selectable": false },
-        { "scheduledStartAt": "2026-07-25T18:30:00", "waitingCount": 3, "selectable": true },
-        { "scheduledStartAt": "2026-07-25T19:00:00", "waitingCount": 1, "selectable": true }
+        { "scheduledStartAt": "2026-07-25T19:00:00", "waitingCount": 3, "selectable": true },
+        { "scheduledStartAt": "2026-07-25T20:00:00", "waitingCount": 1, "selectable": true }
       ]
     }
   ]
@@ -1425,7 +1424,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 ```
 
 - `distances`는 신청 가능한 거리(현재 운영값 3000·5000·10000) 전부를 **`targetDistanceMeters` 오름차순**으로 담는다. 대기자가 하나도 없는 거리도 빠지지 않는다. 거리가 다르면 같은 방에 모이지 않으므로 거리끼리 인원을 합산하지 않는다
-- 각 거리의 `slots`는 `date` 하루의 신청 가능 시각(현재 운영값 18:00~22:00, 30분 간격) 9개를 **`scheduledStartAt` 오름차순**으로 담는다. 대기자가 없는 슬롯도 `waitingCount: 0`으로 빠짐없이 내려준다. 시각 범위·간격·거리 목록은 운영 설정값(`match.allowed-*`)이라, 매칭 신청이 받는 선택지와 이 목록은 항상 같다
+- 각 거리의 `slots`는 `date` 하루의 신청 가능 시각(현재 운영값 18:00~22:00, 1시간 간격) 5개를 **`scheduledStartAt` 오름차순**으로 담는다. 대기자가 없는 슬롯도 `waitingCount: 0`으로 빠짐없이 내려준다. 시각 범위·간격·거리 목록은 운영 설정값(`match.allowed-*`)이라, 매칭 신청이 받는 선택지와 이 목록은 항상 같다
 - 응답에 조회 날짜를 따로 싣지 않는다 — `scheduledStartAt`이 날짜를 담는다
 - `waitingCount`는 아직 확정되지 않은 대기자 수다 — `type='MATCH' AND status='MATCHING'`인 방의 참가자만 센다. 이미 `MATCHED`된 방(들어갈 수 없는 자리)과 솔로 방(`type='SOLO'`)은 제외. 같은 슬롯에 방이 여럿이면 인원을 합산한다
 - `selectable=false`는 마감이 지난 슬롯 — 목록에는 남기되 선택은 막는다. 경계는 매칭 신청의 `409 MATCH_SLOT_CLOSED`와 같다(마감 정각도 마감). 마감은 시각으로만 갈리므로 같은 시각이면 거리가 달라도 값이 같다
@@ -1460,7 +1459,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| `scheduledStartAt` | String | O | KST 시작 시각. **18:00~22:00**, **30분 간격**(`18:00`, `18:30`, … `22:00`) |
+| `scheduledStartAt` | String | O | KST 시작 시각. **18:00~22:00**, **1시간 간격**(`18:00`, `19:00`, … `22:00`) |
 | `targetDistanceMeters` | Integer | O | 목표 거리(m). **3000 / 5000 / 10000** 셋 중 하나 |
 
 - **입력값은 정해진 선택지 안에서만 받는다** — 자유 입력이 아니다. 위 시각 범위·간격·거리 목록은 운영 설정값(`match.allowed-*`)이며, 설정이 바뀌면 선택지와 400 문구가 함께 바뀐다. 시각 선택지는 하드코딩하지 말고 `GET /match-rooms/slots`가 내려 주는 목록을 따른다. 거리 목록은 그 응답에 없다
@@ -1496,7 +1495,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 {
   "code": "INVALID_REQUEST",
-  "message": "시작 시각은 18:00부터 22:00까지 30분 간격으로만 선택할 수 있습니다."
+  "message": "시작 시각은 18:00부터 22:00까지 60분 간격으로만 선택할 수 있습니다."
 }
 
 {
@@ -1559,7 +1558,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 #### `POST /api/v1/match-rooms/leave` — 매칭 취소·방 나가기 (겸용)
 
 - **토큰 주체의 활성 신청 하나를 끝낸다** — 신청은 유저당 하나뿐이라 경로에 식별자를 두지 않는다. `DELETE /match-rooms`가 아니라 동작 경로(`/leave`)인 이유는 **방을 지우는 게 아니라 내가 빠지는 것**이라서다 — 혼자 나가도 방은 남은 사람과 함께 그대로 있다
-- 예전 경로 `DELETE /running-matches`는 1.2.0 심사 기간에만 1.1.x 앱용으로 남겨 둔다(5번 머리말 「1.1.x 호환 경로」)
+- 예전 경로 `DELETE /running-matches`는 1.2.0 심사 기간에 1.1.x 앱용으로 열었고, 지금은 로드 밸런서에서 막혀 있다(5번 머리말 「1.1.x 호환 경로」)
 - **솔로 방의 시작 전 신청도 이 경로로 닫는다** — 솔로를 열고 WS에 붙기 전에 그만둘 때 쓴다. 방은 `CANCELLED`, 신청은 `MATCHED_LEFT_NO_PENALTY`이며 제재는 없다. 이미 뛰는 중(`RUNNING`)이면 아래와 같이 409다
 - **서버가 모집 마감 시각으로 분기**
   - 대기 중(마감 전) = 대기 취소(`status=MATCHED_LEFT_NO_PENALTY` + `deleted_at` 기록). **본인이 마지막 참가자였으면 방도 `CANCELLED`**. 제재 없음
@@ -2185,7 +2184,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **`routes`는 서버가 조각별 폴리라인을 풀어서 내린다** — 저장은 `running_segments.route_polyline`(조각마다 encoded polyline)이지만 응답은 조각 번호 순의 좌표 배열이다. 클라가 디코더를 붙일 필요도, 6-2를 기다릴 필요도 없이 진입 즉시 지도를 그린다. 좌표 정밀도는 폴리라인을 따라 소수점 5자리(약 1m)이며 그보다 정밀한 값은 존재하지 않는다. **러닝 결과(6-1·6-2) 중 전체 경로를 한 번에 주는 곳은 여기뿐이다** — 6-2의 `routes`는 같은 경로를 구간별로 자른 것이다
 - **조각은 서버가 기록에서 뺀 곳에서만 나뉜다** — 일시정지 경계, 관측하지 못한 이동, GPS 튐. 클라는 조각 사이를 선으로 잇지 않고, 30m 같은 간격 규칙으로 따로 판단하지 않는다(feature-spec 트랙 필터)
 - **지도 마커용 시작·끝 좌표는 따로 싣지 않는다** — 첫 조각의 첫 원소와 끝 조각의 끝 원소가 그대로 시작·끝 지점이다
-- **피드 카드(8-1)는 `routePolyline`을 유지한다** — 한 응답에 기록이 여러 건이라 좌표 배열로 바꾸면 응답 크기가 건수만큼 곱해진다. 서버가 조각을 이어 한 줄로 다시 인코딩해 내린다. 좌표 배열은 기록 하나를 크게 그리는 화면(6-1·6-2)에만 쓴다. 기록 목록(7-1)은 경로를 싣지 않는다
+- **기록 카드 상세(8-1)도 같은 `routes`를 쓴다** — 카드 한 장이 기록 하나라 크기가 6-1과 같다. 여러 건을 한 번에 내리는 기록 목록(7-1)·프로필 카드 목록(10-3)은 경로를 싣지 않는다
 
 - **에러 (404 Not Found)**: `runningRoomId`에 해당하는 방이 없다
 
@@ -2363,13 +2362,15 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
       "totalDistanceMeters": 5020,
       "totalDurationSeconds": 1800,
       "averagePaceSecondsPerKm": 359,
-      "totalElevationGainMeters": 42  // 유효 표본이 부족하면 null
+      "totalElevationGainMeters": 42, // 유효 표본이 부족하면 null
+      "recordCardId": 88              // 이 기록의 기록 카드. 없으면 null
     }
   ]
 }
 ```
 
 - 기간에 기록이 없으면 `runningRecords`는 빈 배열이다
+- **`recordCardId`는 살아 있는 카드만 가리킨다** — 지운 카드(`deleted_at` 있음)는 null이다. null이면 기록 화면에 "카드 만들기"를, 값이 있으면 8-1로 가는 진입점을 띄운다. 기록당 카드는 한 장이라 단일 값이다. 필드를 더한 것이라 이 필드를 모르는 앱은 그대로 동작한다
 - **숨긴 방(`running_rooms.deleted_at` 있음)의 기록은 빠진다** — 6-1·6-2가 그 방을 404로 보는 것과 맞춘다. 숨김은 [MVP 제외]라 지금은 해당하는 방이 없다
 - **페이지를 나누지 않는다** — 한 번에 받는 범위가 31일로 묶여 있어 커서를 두지 않는다
 - **`type`은 방 종류다** — `SOLO`는 솔로 러닝, `MATCH`는 매칭 러닝, `INVITE`는 초대 러닝이다
@@ -2411,207 +2412,99 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - 날짜가 `YYYY-MM-DD` 형식이 아니거나 없는 날짜(`2026-02-30`)면 마지막 기본 문구다. 형식 오류가 난 날짜는 순서·기간 검사를 하지 않는다
 - **인증**: 필요 (본인 기록만)
 
-## 8. 피드 목록 페이지 (+댓글 모달) [MVP 제외]
+## 8. 기록 카드 보기
 
-**피드 카드 공통 객체** (8-1/8-2/9-2 응답):
+기록 카드는 러닝 기록 하나에 메모·사진·음악을 붙인 카드다. 화면은 옆으로 넘기는 캐러셀이다 — **첫 장은 기록 지도와 기본곡**, 다음 장부터 **사진 한 장마다 그 사진의 음악**이 나온다. 음악은 AI 서비스가 만들어 S3에 올리고, 서버는 key와 생성 상태만 갖는다(9-5).
+
+**기록 카드 공통 객체** (8-1·9-2·9-3 응답):
 
 ```json
 {
-  "feedId": 77,
+  "recordCardId": 88,
   "author": {
     "userId": "01a0f2d4-6180-7000-8000-446655440015",
     "nickname": "동완러너",
-    "profileImageUrl": "...",
-    "isDeleted": false
+    "profileImageUrl": "https://..."
   },
-  "content": "오늘도 5km 완주!",
-  "images": [
-    {
-      "feedImageId": 11,
-      "url": "https://...",
-      "sortOrder": 0
-    }
-  ],
-  "visibility": "PUBLIC",              // FRIENDS | PUBLIC | PRIVATE
-  "likeCount": 12,
-  "commentCount": 3,
-  "likedByMe": false,
-  "record": {                           // nullable — 러닝기록 템플릿 카드
+  "isMine": true,
+  "visibility": "PUBLIC",
+  "memo": "한강 야간 러닝, 바람이 좋았다",
+  "record": {
     "runningRecordId": 501,
+    "runningRoomId": 125,
+    "type": "MATCH",
+    "startedAt": "2026-07-25T19:00:30",
     "totalDistanceMeters": 5020,
     "totalDurationSeconds": 1800,
     "averagePaceSecondsPerKm": 359,
-    "routePolyline": "u{~vFvyys@fS]pT_@..."   // 10m 경계점 경로(encoded polyline) — 카드 지도 미리보기. running_segments.route_polyline을 조각 순으로 이어 다시 인코딩
+    "routes": [
+      [[37.52801, 126.93241], [37.52809, 126.93252]]
+    ]
   },
-  "createdAt": "2026-07-25T11:00:00",
-  "updatedAt": "2026-07-25T11:00:00"
-}
-```
-
-### 8-1. `GET /api/v1/feeds` — 피드 목록 (무한 스크롤)
-
-- **Query**: `tab=FRIENDS|ALL`(필수), `cursor`/`limit`
-- **공개범위 필터**: `FRIENDS` = 친구의 `FRIENDS`/`PUBLIC` 피드 + 내 피드 전부, 최신순 / `ALL` = `PUBLIC` 피드 + 친구의 `FRIENDS` 피드, 최신순 + 가벼운 가중치(개인화 추천은 이후 확장)
-- **Response `200 OK`**
-
-```json
-{
-  "items": [피드 카드],
-  "nextCursor": "..."
-}
-```
-
-- **인증**: 필요
-
-### 8-2. `GET /api/v1/feeds/{feedId}` — 피드 단건
-
-- **화면**: 푸시 랜딩(좋아요/댓글 알림), 프로필 그리드 탭
-- **Response `200 OK`**: 피드 카드
-
-- **에러 (403 Forbidden — 비공개 — `PRIVATE` 타인, `FRIENDS` 비친구)**
-
-```json
-{
-  "code": "FEED_NOT_VISIBLE",
-  "message": "비공개 피드입니다."
-}
-```
-
-- **에러 (404 Not Found — 삭제 포함)**
-
-```json
-{
-  "code": "NOT_FOUND",
-  "message": "요청한 리소스를 찾을 수 없습니다."
-}
-```
-
-- **인증**: 필요
-
-### 8-3. `POST /api/v1/feeds/{feedId}/like` — 좋아요 / 8-4. `DELETE` — 취소
-
-- **Response `200 OK`** (재조회 방지)
-
-```json
-{
-  "likeCount": 13,
-  "likedByMe": true
-}
-```
-
-- 좋아요 시 피드 소유자에게 푸시 (수신 동의 시)
-
-- **에러 (403 Forbidden)**
-
-```json
-{
-  "code": "FEED_NOT_VISIBLE",
-  "message": "비공개 피드입니다."
-}
-```
-
-- **에러 (404 Not Found)**
-
-```json
-{
-  "code": "NOT_FOUND",
-  "message": "요청한 리소스를 찾을 수 없습니다."
-}
-```
-
-- **인증**: 필요
-
-### 8-5. `GET /api/v1/feeds/{feedId}/comments` — 댓글 목록
-
-- **정렬**: 등록순(오래된 것부터). 답글은 미포함 — `replyCount`만 제공(“답글 N개 보기” 지연 로딩)
-- **Response `200 OK`**
-
-```json
-{
-  "items": [
+  "baseMusic": {
+    "status": "READY",
+    "musicUrl": "https://..."
+  },
+  "images": [
     {
-      "commentId": 201,
-      "author": {
-        "userId": "01a0f2d4-6180-7000-8000-446655440013",
-        "nickname": "철수",
-        "profileImageUrl": "...",
-        "isDeleted": false
-      },
-      "content": "고생하셨어요!",
-      "likeCount": 2,
-      "likedByMe": false,
-      "replyCount": 1,
-      "isDeleted": false,               // true면 톰스톤(댓글 삭제) — content=null, "삭제된 댓글입니다" 자리표시. author.isDeleted(작성자 탈퇴)와는 다른 의미
-      "createdAt": "2026-07-25T11:05:00"
+      "recordCardImageId": 301,
+      "imageUrl": "https://...",
+      "isThumbnail": true,
+      "music": {
+        "status": "PENDING",
+        "musicUrl": null
+      }
     }
   ],
-  "nextCursor": null
+  "createdAt": "2026-07-25T21:10:00",
+  "updatedAt": "2026-07-25T21:10:00"
 }
 ```
 
-- **인증**: 필요
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `recordCardId` | Integer | O | 기록 카드 ID |
+| `author` | Object | O | 작성자 — `userId`·`nickname`·`profileImageUrl`(사진이 없으면 null) |
+| `isMine` | Boolean | O | 내 카드 여부 — 수정·삭제 버튼을 가른다 |
+| `visibility` | String | O | `FRIENDS`(친구만) · `PUBLIC`(전체) · `PRIVATE`(나만) |
+| `memo` | String | X | 메모. 없으면 null |
+| `record` | Object | O | 카드가 붙은 러닝 기록 — 첫 장(지도)에 그린다 |
+| `record.runningRecordId` | Integer | O | 러닝 기록 ID |
+| `record.runningRoomId` | Integer | O | 방 ID — 6-1·6-2로 기록 상세를 열 때 쓴다 |
+| `record.type` | String | O | `SOLO` · `MATCH` · `INVITE` (7-1과 같다) |
+| `record.startedAt` | String | O | 러닝 시작 시각 |
+| `record.totalDistanceMeters` | Integer | O | 총 이동 거리(m) |
+| `record.totalDurationSeconds` | Integer | O | 총 러닝 시간(초) — 움직인 시간(6-1과 같다) |
+| `record.averagePaceSecondsPerKm` | Integer | O | 평균 페이스(초/km) |
+| `record.routes` | Number[][][] | O | 경로 — **6-1 `routes`와 같은 형식**(조각 배열, 조각마다 `[[위도, 경도], …]`) |
+| `baseMusic` | Object | O | 기본곡 — 첫 장에서 재생 |
+| `images` | Array | O | 사진 장 — **배열 순서가 캐러셀 순서다**(지도 장 다음부터). 사진이 없으면 빈 배열 |
+| `images[].recordCardImageId` | Integer | O | 사진 ID — 수정(9-3)에서 남길 사진을 가리킬 때 쓴다 |
+| `images[].imageUrl` | String | O | 사진 URL |
+| `images[].isThumbnail` | Boolean | O | 썸네일 사진 여부 — 사진이 있으면 정확히 한 장이 `true`다. 편집 화면에서 현재 썸네일을 표시할 때 쓴다 |
+| `images[].music` | Object | O | 이 사진의 음악 |
+| `*.status` | String | O | 음악 생성 상태 — `PENDING`(생성 중) · `READY`(재생 가능) · `FAILED`(생성 실패) |
+| `*.musicUrl` | String | X | 음악 URL. **`READY`일 때만 값이 있고** 나머지는 null |
+| `createdAt` · `updatedAt` | String | O | 카드 생성·수정 시각 |
 
-### 8-6. `POST /api/v1/feeds/{feedId}/comments` — 댓글/답글 작성
+- **음악은 카드를 만든 직후 `PENDING`이다** — AI가 만드는 데 시간이 걸린다. 클라는 `PENDING`이면 생성 중으로 표시하고, 다시 보려면 8-1을 다시 조회한다. 완료를 밀어 주는 통지는 아직 없다 — **[이후]** 앱 스트림(`/app/stream`)으로 완료 이벤트를 보낼 수 있다
+- **`FAILED`면 그 장은 음악 없이 보여준다** — 다시 생성하는 경로는 아직 없다(9-5)
+- **URL은 전부 presigned GET이다** — `imageUrl`·`musicUrl`·`profileImageUrl`은 운영값(현재 1시간) 동안만 유효하다. 만료되면 8-1을 다시 조회한다
+- **기록 수치는 조회할 때 `running_records`에서 읽는다** — 카드가 값을 복사해 두지 않는다. `routes`는 6-1과 같은 규칙(조각 사이를 잇지 않는다, 시작·끝 마커는 첫·끝 좌표)이다
+- **`sortOrder`는 싣지 않는다** — 배열 순서가 곧 순서다
 
-- **Request** — `parentCommentId`는 답글일 때만(선택)
+### 8-1. `GET /api/v1/record-cards/{recordCardId}` — 기록 카드 상세
 
-```json
-{
-  "content": "...",
-  "parentCommentId": 201
-}
-```
+- **화면**: 프로필 카드 목록(10-3)에서 탭, 기록 화면(7-1 `recordCardId`)에서 진입, 생성(9-2) 직후
+- **Request**: 본문 없음
+- **Response `200 OK`**: 기록 카드 공통 객체
+- **누가 볼 수 있나**
+  - 본인: 공개 범위와 상관없이 전부
+  - 타인: `PUBLIC`은 누구나, `FRIENDS`는 작성자와 친구(`user_relationships.type = FRIEND`)일 때만, `PRIVATE`는 볼 수 없다
+  - **차단 관계면 어느 쪽이 차단했든 볼 수 없다**(feature-spec 차단 절)
+  - `users.profile_visibility`는 카드를 가리지 않는다 — 카드는 자기 공개 범위만 따른다
 
-- **depth 1 제한**: `parentCommentId`가 이미 답글인 댓글이면 `400 REPLY_DEPTH_EXCEEDED`
-- **Response `201 Created`**: 작성된 댓글 객체 (8-5 형식)
-- 피드 소유자(답글이면 원댓글 작성자)에게 푸시 (수신 동의 시)
-
-- **에러 (403 Forbidden)**
-
-```json
-{
-  "code": "FEED_NOT_VISIBLE",
-  "message": "비공개 피드입니다."
-}
-```
-
-- **에러 (404 Not Found — feedId 피드 없음, 또는 parentCommentId 부모 댓글 없음)**
-
-```json
-{
-  "code": "NOT_FOUND",
-  "message": "요청한 리소스를 찾을 수 없습니다."
-}
-```
-
-- **에러 (400 Bad Request)**
-
-```json
-{
-  "code": "REPLY_DEPTH_EXCEEDED",
-  "message": "답글에는 답글을 달 수 없습니다."
-}
-```
-
-- **인증**: 필요
-
-### 8-7. `PATCH /api/v1/comments/{commentId}` — 댓글 수정
-
-- **Request**: `{ "content": "..." }` (필수, 빈 값 불가)
-- **권한**: 댓글 **작성자 본인만** (피드 소유자는 삭제만 가능 — 남의 발언 내용 변경 불가)
-- 톰스톤(삭제된 댓글)은 수정 불가. 수정 시 이전 내용을 `delete_comments`에 스냅샷 저장(피드와 동일 — 신고 시 원본 확인용), `updated_at` 갱신
-- **Response `200 OK`**: 수정된 댓글 객체 (8-5 형식)
-
-- **에러 (403 Forbidden — 작성자 아님)**
-
-```json
-{
-  "code": "FORBIDDEN",
-  "message": "권한이 없습니다."
-}
-```
-
-- **에러 (404 Not Found)**
+- **에러 (404 Not Found)**: 카드가 없거나, 지워졌거나, 작성자가 탈퇴했거나, 볼 수 없는 카드다
 
 ```json
 {
@@ -2620,64 +2513,14 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 }
 ```
 
-- **에러 (409 Conflict — 톰스톤)**
-
-```json
-{
-  "code": "COMMENT_DELETED",
-  "message": "이미 삭제된 댓글입니다."
-}
-```
-
-- **인증**: 필요 (작성자)
-
-### 8-8. `GET /api/v1/comments/{commentId}/replies` — 답글 목록 (지연 로딩)
-
-- **Response `200 OK`**: 8-5와 동일 형식(등록순, `replyCount` 없음)
+- **볼 수 없는 카드도 404로 답한다** — 403으로 나누면 남의 `PRIVATE` 카드가 있다는 사실이 드러난다. 목록(10-3)이 이미 보이는 카드만 내리므로, 정상 흐름에서 여기에 닿는 경우는 공개 범위가 바뀐 사이 정도다
 - **인증**: 필요
 
-### 8-9. `DELETE /api/v1/comments/{commentId}` — 댓글 삭제
+## 9. 기록 카드 작성·편집
 
-- **권한**: 댓글 작성자 본인 **또는** 그 댓글이 달린 피드의 소유자
-- **동작(레딧 방식)**: 답글 없으면 하드delete, 답글 있으면 톰스톤(내용 비움 + `deleted_at`, 스레드 유지). 두 경우 모두 `delete_comments` 스냅샷 선저장
-- **Response**: `204 No Content`
+**흐름**: 기록 화면(7-1)에서 지난 러닝을 고른다 → 사진을 고르면 9-1로 업로드 URL을 받아 S3에 올린다 → 메모를 쓴다 → 생성을 누르면 9-2. 서버는 카드를 저장하고 기본곡 1개와 사진마다 음악 1개의 생성을 AI에 요청한다(9-5).
 
-- **에러 (403 Forbidden)**
-
-```json
-{
-  "code": "FORBIDDEN",
-  "message": "권한이 없습니다."
-}
-```
-
-- **에러 (404 Not Found)**
-
-```json
-{
-  "code": "NOT_FOUND",
-  "message": "요청한 리소스를 찾을 수 없습니다."
-}
-```
-
-- **인증**: 필요
-
-### 8-10. `POST /api/v1/comments/{commentId}/like` — 댓글 좋아요 / 8-11. `DELETE` — 취소
-
-- **Response `200 OK`**
-
-```json
-{
-  "likeCount": 3,
-  "likedByMe": true
-}
-```
-
-- **인증**: 필요
-
-## 9. 피드 작성 페이지 (+피드 편집) [MVP 제외]
-
-### 9-1. `POST /api/v1/feeds/images/presigned-url` — 피드 이미지 업로드 URL 발급 (여러 장)
+### 9-1. `POST /api/v1/record-cards/images/presigned-url` — 카드 사진 업로드 URL 발급 (여러 장)
 
 - **Request**
 
@@ -2685,54 +2528,132 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 {
   "files": [
     {
-      "originalFileName": "a.jpg",
-      "mimeType": "image/jpeg"
+      "mimeType": "image/jpeg",
+      "fileSizeBytes": 204800
     }
   ]
 }
 ```
 
-- **Response `200 OK`** — 순서대로 매핑
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `files` | Array | O | 1개 이상 10개 이하 |
+| `files[].mimeType` | String | O | `image/jpeg`·`image/png`·`image/webp`만 허용(대소문자 무시) — 11-1과 같다 |
+| `files[].fileSizeBytes` | Integer | O | 1 이상 10,485,760(10MB) 이하 — 서명에 포함되므로 실제 업로드 크기와 같아야 한다 |
+
+- **Response `200 OK`** — `files`와 같은 순서로 매핑
 
 ```json
 {
   "uploads": [
     {
-      "feedImageKey": "feeds/2026/07/....jpg",
+      "imageKey": "record-cards/01a0f2d4-.../images/9f1c2b7e-....jpg",
       "uploadUrl": "https://..."
     }
   ]
 }
 ```
 
+- `imageKey` 포맷은 `record-cards/{userId}/images/{imageId}.{확장자}`다 — 소유자 검증에 쓰이므로 클라가 임의로 만들지 않는다. 확장자·업로드 헤더(`Content-Type` 소문자 정규값)·`uploadUrl` 유효 시간(운영값, 현재 10분)은 11-1과 같다
+- **발급만으로는 카드에 붙지 않는다** — 9-2·9-3에 `imageKey`를 실어야 붙는다. 쓰지 않은 객체는 S3에 남는다
+
+- **에러 (400 Bad Request)**: 11-1의 형식·크기 문구에 아래가 더해진다
+
+```json
+{
+  "code": "INVALID_REQUEST",
+  "message": "사진은 1장 이상 10장 이하로 요청해야 합니다."
+}
+```
+
 - **인증**: 필요
 
-### 9-2. `POST /api/v1/feeds` — 피드 작성
+### 9-2. `POST /api/v1/record-cards` — 기록 카드 생성
 
 - **Request**
 
 ```json
 {
-  "content": "오늘도 5km 완주!",          // 선택
-  "imageKeys": ["feeds/2026/07/....jpg"],  // 선택 — 업로드 완료된 key, 배열 순서 = sortOrder
-  "visibility": "PUBLIC",                  // 필수. FRIENDS|PUBLIC|PRIVATE — 기본 선택값 PUBLIC(클라 프리셋)
-  "runningRecordId": 501                   // 선택 — 러닝기록 템플릿 (대시보드 진입 시 방금 기록 기본 선택). DB 매핑은 feeds.running_record_id
+  "runningRecordId": 501,
+  "visibility": "PUBLIC",
+  "memo": "한강 야간 러닝, 바람이 좋았다",
+  "imageKeys": [
+    "record-cards/01a0f2d4-.../images/9f1c2b7e-....jpg"
+  ],
+  "thumbnailIndex": 0
 }
 ```
 
-- **검증**: `content`/`imageKeys` 둘 다 비면 `400 EMPTY_FEED` (최소 하나 필수)
-- **Response `201 Created`**: 피드 카드 — 목록 최상단 노출
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `runningRecordId` | Integer | O | 카드를 붙일 내 러닝 기록 |
+| `visibility` | String | O | `FRIENDS` · `PUBLIC` · `PRIVATE`. 기본값을 서버에 두지 않는다 — 작성 화면 기본 선택은 클라가 `PUBLIC`으로 둔다 |
+| `memo` | String | X | 500자 이하. 생략하거나 빈 문자열이면 메모 없음(null) |
+| `imageKeys` | String[] | X | 0개 이상 10개 이하. 9-1이 발급하고 업로드를 마친 key. **배열 순서 = 캐러셀 순서**. 생략하면 빈 배열과 같다(사진 없이 지도+기본곡만) |
+| `thumbnailIndex` | Integer | X | 썸네일로 쓸 사진의 `imageKeys` 위치(0부터). **생략하면 0(첫 사진)**. 사진이 없으면 보내지 않는다 — 보내면 400 |
 
-- **에러 (400 Bad Request)**
+- **Response `201 Created`**: 기록 카드 공통 객체 — 음악은 전부 `status = PENDING`, `musicUrl = null`이다
+- **동작**
+  - 카드와 사진 행을 한 트랜잭션에 저장한다. **이 기록에 지운 카드가 있으면 새 행을 넣지 않고 그 행을 되살린다** — `deleted_at`을 비우고 공개 범위·메모를 새 값으로 덮고 새 사진 행을 넣는다(옛 사진 행은 9-4에서 이미 지워졌다). 기본곡도 새 key로 다시 만든다. 순위(`display_order`)는 맨 뒤(최댓값 + 1)가 된다. `recordCardId`·`createdAt`은 예전 값 그대로다(`erd.md` `record_cards` 되살리기). 음악 key는 서버가 이때 정해(`record-cards/{userId}/music/{musicId}`) 기본곡은 `record_cards.base_music_key`, 사진 음악은 `record_card_images.music_key`에 넣는다
+  - **순위는 그 사람의 살아 있는 카드 중 최댓값 + 1이다**(첫 카드면 1). 썸네일은 `thumbnailIndex` 위치 사진의 key를 `record_cards.thumbnail_image_key`에 복사한다
+  - **커밋한 뒤 음악마다 생성 요청 이벤트를 하나씩 보낸다**(기본곡 1 + 사진 수, 9-5)
+- **검증 순서**: 요청 형식(400) → 기록이 있고 내 것인지(404) → 이미 카드가 있는지(409) → 사진 key(400)
+  - 숨긴 방(`running_rooms.deleted_at` 있음)의 기록은 없는 기록으로 본다 — 7-1에서 빠지는 것과 맞춘다
+  - 사진 key는 11-2와 같이 본인 프리픽스(`record-cards/{userId}/images/`)인지, S3에 올라왔는지, 크기·`Content-Type`이 허용값인지 본다
+
+- **에러 (400 Bad Request — 요청 검증)**
 
 ```json
 {
-  "code": "EMPTY_FEED",
-  "message": "피드 내용이나 이미지를 최소 하나 입력해 주세요."
+  "code": "INVALID_REQUEST",
+  "message": "러닝 기록 ID는 필수입니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "공개 범위는 필수입니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "메모는 500자 이하여야 합니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "사진은 10장 이하만 넣을 수 있습니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "같은 사진을 두 번 넣을 수 없습니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "썸네일 위치가 사진 범위를 벗어났습니다."
 }
 ```
 
-- **에러 (404 Not Found — runningRecordId 없음/본인 것 아님)**
+- **에러 (400 Bad Request — 본인 key가 아니거나, 올라간 파일이 10MB를 넘거나 `Content-Type`이 허용값이 아님)**
+
+```json
+{
+  "code": "INVALID_RECORD_CARD_IMAGE",
+  "message": "기록 카드 사진이 올바르지 않습니다."
+}
+```
+
+- **에러 (400 Bad Request — key에 해당하는 객체가 S3에 없음)**
+
+```json
+{
+  "code": "RECORD_CARD_IMAGE_NOT_UPLOADED",
+  "message": "업로드되지 않은 이미지입니다."
+}
+```
+
+- **에러 (404 Not Found — 기록이 없거나 내 기록이 아님)**
 
 ```json
 {
@@ -2741,24 +2662,99 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 }
 ```
 
+- **에러 (409 Conflict — 이 기록에 지우지 않은 카드가 이미 있음)**
+
+```json
+{
+  "code": "RECORD_CARD_ALREADY_EXISTS",
+  "message": "이미 기록 카드가 있는 러닝입니다."
+}
+```
+
+- **기록과 카드는 1:1이다** — 다시 만들고 싶으면 9-3으로 고치거나 9-4로 지운 뒤 만든다. 처음 만드는 요청이 동시에 두 번 오면 `running_record_id` UNIQUE가 하나만 남기고 나머지는 409다. 지운 카드를 되살리는 요청이 겹치면 카드 행을 잠그고 처리해, 뒤의 요청은 살아 있는 카드를 보고 409다
 - **인증**: 필요
 
-### 9-3. `PATCH /api/v1/feeds/{feedId}` — 피드 수정
+### 9-3. `PATCH /api/v1/record-cards/{recordCardId}` — 기록 카드 수정
 
-- **화면**: 프로필(피드 편집 — 게시글 수정, 노출 범위 설정)
-- **Request**: `{ "content"?, "imageKeys"?, "visibility"? }` (부분 수정). 수정 시마다 **이전 내용을 `delete_feeds`에 스냅샷 저장** (신고/차단 등 활용 기능은 **[MVP 제외]**이나 이력은 처음부터 축적)
-- **Response `200 OK`**: 수정된 피드 카드
-
-- **에러 (403 Forbidden — 본인 피드 아님)**
+- **화면**: 기록 카드 상세(8-1)의 편집
+- **Request** (부분 수정 — 보낸 필드만 바꾼다)
 
 ```json
 {
-  "code": "FORBIDDEN",
-  "message": "권한이 없습니다."
+  "memo": "",
+  "visibility": "FRIENDS",
+  "images": [
+    { "recordCardImageId": 301 },
+    { "imageKey": "record-cards/01a0f2d4-.../images/2b7e9f1c-....jpg" }
+  ],
+  "thumbnailIndex": 1
 }
 ```
 
-- **에러 (404 Not Found)**
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `memo` | String | X | 500자 이하. **빈 문자열이면 메모를 지운다** |
+| `visibility` | String | X | `FRIENDS` · `PUBLIC` · `PRIVATE` |
+| `images` | Array | X | **수정 뒤의 사진 전체를 순서대로** 보낸다(0~10개). 항목마다 `recordCardImageId`(남길 기존 사진)나 `imageKey`(새 사진) 중 **정확히 하나** |
+| `thumbnailIndex` | Integer | X | 썸네일로 쓸 사진 위치(0부터) — `images`를 보냈으면 그 배열 기준, 생략했으면 지금 순서 기준 |
+
+- **필드를 생략하면 현재 값을 그대로 둔다** — `images`를 생략하면 사진은 그대로, 빈 배열이면 사진을 전부 뺀다
+- **사진 처리**
+  - 남긴 사진(`recordCardImageId`)은 음악과 생성 상태를 그대로 두고 순서만 다시 매긴다
+  - 새 사진(`imageKey`)은 음악 key를 새로 정해 `PENDING`으로 넣고, **커밋한 뒤 그 사진들의 음악만 생성을 요청한다**(9-5)
+  - 목록에서 빠진 사진은 행을 지운다 — 그 사진의 음악도 함께 버린다. 생성 중이었다면 나중에 오는 완료 이벤트는 무시된다
+- **썸네일 처리**: `thumbnailIndex`를 보내면 그 사진으로 바꾼다. 생략하면 지금 썸네일을 유지하되, 그 사진이 빠졌으면 수정 뒤 첫 사진으로, 사진이 하나도 없으면 null로 바꾼다
+- **기본곡은 다시 만들지 않는다** — 메모·공개 범위·사진을 바꿔도 기본곡은 그대로다
+- **Response `200 OK`**: 수정된 기록 카드 공통 객체
+
+- **에러 (400 Bad Request — 요청 검증)**
+
+```json
+{
+  "code": "INVALID_REQUEST",
+  "message": "메모는 500자 이하여야 합니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "사진은 10장 이하만 넣을 수 있습니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "사진 항목에는 기존 사진 ID와 새 사진 키 중 하나만 넣어야 합니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "같은 사진을 두 번 넣을 수 없습니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "썸네일 위치가 사진 범위를 벗어났습니다."
+}
+```
+
+- **에러 (400 Bad Request — 새 사진 key가 올바르지 않거나, `recordCardImageId`가 이 카드의 사진이 아님)**
+
+```json
+{
+  "code": "INVALID_RECORD_CARD_IMAGE",
+  "message": "기록 카드 사진이 올바르지 않습니다."
+}
+```
+
+- **에러 (400 Bad Request — 새 사진 key에 해당하는 객체가 S3에 없음)**
+
+```json
+{
+  "code": "RECORD_CARD_IMAGE_NOT_UPLOADED",
+  "message": "업로드되지 않은 이미지입니다."
+}
+```
+
+- **에러 (404 Not Found — 카드가 없거나, 지워졌거나, 내 카드가 아님)**
 
 ```json
 {
@@ -2767,32 +2763,18 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 }
 ```
 
-- **에러 (400 Bad Request)**
+- **내 카드가 아니어도 404다** — 8-1과 같이 남의 카드가 있는지 드러내지 않는다
+- **같은 카드에 대한 수정은 카드 행을 잠그고 처리한다** — 두 수정이 동시에 사진 순서를 다시 매기면 순서가 겹친다(`erd.md` `record_card_images`)
+- **인증**: 필요 (작성자)
 
-```json
-{
-  "code": "EMPTY_FEED",
-  "message": "피드 내용이나 이미지를 최소 하나 입력해 주세요."
-}
-```
+### 9-4. `DELETE /api/v1/record-cards/{recordCardId}` — 기록 카드 삭제
 
-- **인증**: 필요 (소유자)
-
-### 9-4. `DELETE /api/v1/feeds/{feedId}` — 피드 삭제
-
-- **동작**: `deleted_at` 소프트delete — 전체 조회에서 제외
+- **동작**: `record_cards.deleted_at` 소프트 삭제 — 8-1·10-3·7-1 `recordCardId`에서 빠진다. **순위(`display_order`)는 -1이 되고, 남은 카드의 순위는 당기지 않는다.** **사진 행은 지우고**(하드 삭제) 썸네일 key도 비운다. 카드 행과 S3 객체(사진·음악)는 그대로 둔다
+- **지운 뒤 같은 기록으로 다시 만들 수 있다** — 9-2가 지운 행을 되살린다. 행이 남아 있어 기록과 카드는 1:1을 유지한다
+- 생성 중이던 음악의 완료 이벤트는 무시된다(9-5)
 - **Response**: `204 No Content`
 
-- **에러 (403 Forbidden — 본인 피드 아님)**
-
-```json
-{
-  "code": "FORBIDDEN",
-  "message": "권한이 없습니다."
-}
-```
-
-- **에러 (404 Not Found)**
+- **에러 (404 Not Found — 카드가 없거나, 이미 지웠거나, 내 카드가 아님)**
 
 ```json
 {
@@ -2801,7 +2783,57 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 }
 ```
 
-- **인증**: 필요 (소유자)
+- **인증**: 필요 (작성자)
+
+### 9-5. 음악 생성 이벤트 (Kafka, 내부)
+
+앱이 부르는 API가 아니다 — running-service와 AI 서비스 사이의 계약이다. 서버는 **요청을 보내고 완료를 받아 상태만 바꾼다.** 음악을 어떻게 만드는지는 AI 서비스가 맡는다.
+
+> **아직 정하지 않은 것**: 토픽 이름·파티션 키·컨슈머 그룹·직렬화(아래는 초안), AI가 생성에 쓸 입력(아래 필드 외에 기록 수치·메모를 실을지), 음악 파일 형식. **Kafka는 저장소에 아직 없는 의존성이다** — 도입은 구현 PR에서 따로 정한다.
+
+**`record-card.music.requested`** (running-service → AI) — 음악 하나에 이벤트 하나
+
+```json
+{
+  "musicKey": "record-cards/01a0f2d4-.../music/5c3e1a9d-...",
+  "kind": "IMAGE",
+  "recordCardId": 88,
+  "runningRecordId": 501,
+  "imageKey": "record-cards/01a0f2d4-.../images/9f1c2b7e-....jpg",
+  "requestedAt": "2026-07-25T21:10:00"
+}
+```
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `musicKey` | String | O | **AI가 음악을 올릴 S3 key** — 서버가 정한다. 완료 이벤트도 이 값으로 돌아온다 |
+| `kind` | String | O | `BASE`(기본곡) · `IMAGE`(사진 음악) |
+| `recordCardId` | Integer | O | 카드 ID |
+| `runningRecordId` | Integer | O | 카드가 붙은 기록 ID |
+| `imageKey` | String | X | `IMAGE`일 때 그 사진의 S3 key. `BASE`이면 null |
+| `requestedAt` | String | O | 요청 시각 |
+
+**`record-card.music.generated`** (AI → running-service) — 음악 하나에 이벤트 하나
+
+```json
+{
+  "musicKey": "record-cards/01a0f2d4-.../music/5c3e1a9d-...",
+  "status": "READY",
+  "generatedAt": "2026-07-25T21:11:30"
+}
+```
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `musicKey` | String | O | 요청 이벤트의 `musicKey` 그대로 |
+| `status` | String | O | `READY`(그 key에 S3 객체를 올렸음) · `FAILED`(만들지 못함) |
+| `generatedAt` | String | O | 처리 시각 |
+
+- **받는 쪽 처리**: `musicKey`로 `record_cards.base_music_key`·`record_card_images.music_key`를 찾아 상태를 바꾼다. 둘 다 UNIQUE라 한 행만 나온다
+  - **`PENDING`인 행만 바꾼다** — Kafka는 같은 이벤트를 두 번 줄 수 있다. 이미 `READY`·`FAILED`면 무시한다
+  - **행이 없거나(수정에서 뺀 사진) 카드가 지워졌으면 무시하고 로그만 남긴다** — 오류로 보고 재시도하지 않는다
+- **요청 이벤트는 커밋한 뒤 보낸다** — 커밋 전에 보내면 롤백된 카드의 음악이 만들어진다. 커밋 뒤 발행이 실패하면 그 음악은 `PENDING`에 머문다. 아웃박스로 보장할지, 재발행 배치를 둘지는 구현 때 정한다
+- **`FAILED`를 다시 만드는 경로는 아직 없다** — 사용자가 다시 요청하는 API나 자동 재시도가 필요해지면 이 절에 더한다
 
 ## 10. 프로필 페이지
 
@@ -2863,24 +2895,50 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **인증**: 필요
 
-### 10-3. `GET /api/v1/users/{userId}/feeds` — 피드 그리드 (경량) [MVP 제외]
+### 10-3. `GET /api/v1/users/{userId}/record-cards` — 기록 카드 목록 (경량)
 
-- **Response `200 OK`** — 탭하면 8-2 단건 조회로 상세
+- **화면**: 프로필 하단 카드 그리드 (본인/타인 공통) — 탭하면 8-1로 상세
+- **Query**: `cursor`·`limit` (공통 커서 규칙 — 기본 20, 최대 50)
+- **정렬**: 카드 순위(`record_cards.display_order`) 역순 — 최신이 위다. 순위는 만든 순서대로 1부터 붙고, 지운 카드(-1)는 빠지며, 되살린 카드는 맨 뒤 순위라 맨 위에 보인다. 사용자가 순서를 바꾸는 기능은 아직 없다
+- **Response `200 OK`**
 
 ```json
 {
   "items": [
     {
-      "feedId": 77,
+      "recordCardId": 88,
       "thumbnailUrl": "https://...",
-      "imageCount": 3
+      "imageCount": 3,
+      "startedAt": "2026-07-25T19:00:30",
+      "totalDistanceMeters": 5020
     }
   ],
   "nextCursor": "..."
 }
 ```
 
-- **공개범위**: 본인 = 전부(`PRIVATE` 포함) / 타인 = `PUBLIC` (+친구면 `FRIENDS`)
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `recordCardId` | Integer | O | 기록 카드 ID |
+| `thumbnailUrl` | String | X | 썸네일 사진 URL(`record_cards.thumbnail_image_key`, presigned GET, 8-1과 같은 유효 시간) — 기본은 첫 사진, 작성자가 고르면 그 사진. **사진이 없는 카드는 null** — 클라가 기본 썸네일을 그린다 |
+| `imageCount` | Integer | O | 사진 장수(0~10) |
+| `startedAt` | String | O | 카드가 붙은 러닝의 시작 시각 |
+| `totalDistanceMeters` | Integer | O | 그 러닝의 총 이동 거리(m) |
+
+- **공개 범위**: 8-1과 같다 — 본인 = 전부(`PRIVATE` 포함) / 타인 = `PUBLIC` (+친구면 `FRIENDS`). 차단 관계면 빈 목록이 아니라 404다(프로필 자체가 보이지 않는다)
+- **경로·음악은 싣지 않는다** — 목록이 가벼워야 하고, 음악은 상세에서만 재생한다
+- `startedAt`·`totalDistanceMeters`는 `running_records`를 JOIN해 읽는다(카드에 복사해 두지 않는다)
+- **본인과 타인이 보는 범위가 다른 하나의 리소스라 `{userId}` 경로에 인가 규칙을 둔다**(`api-convention.md` 사용자 리소스 경로)
+
+- **에러 (404 Not Found — 대상 사용자 없음·탈퇴·차단 관계)**
+
+```json
+{
+  "code": "NOT_FOUND",
+  "message": "요청한 리소스를 찾을 수 없습니다."
+}
+```
+
 - **인증**: 필요
 
 ### 10-4. `POST /api/v1/users/{userId}/friend-request` — 친구 요청
@@ -2947,7 +3005,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 ### 10-7. `GET /api/v1/users/{userId}/friends` — 친구 목록
 
 - **화면**: 친구 목록 페이지(본인 — 이 목록 + 추천 친구 10-11) / 타인 프로필의 친구 목록
-- **본인과 타인이 보는 범위가 다른 하나의 리소스라 `{userId}` 경로에 인가 규칙을 둔다**(`api-convention.md` 사용자 리소스 경로). 10-3 피드 그리드와 같은 구조다
+- **본인과 타인이 보는 범위가 다른 하나의 리소스라 `{userId}` 경로에 인가 규칙을 둔다**(`api-convention.md` 사용자 리소스 경로). 10-3 기록 카드 목록과 같은 구조다
 
 | 조회자 | 담기는 항목 |
 |---|---|
@@ -3743,7 +3801,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 ```
 
 - **`alertConsent` = 단일 토글** — 매칭 확정, 러닝 시작 리마인더, 친구 요청 도착/수락, 러닝 초대 도착을 한 번에 on/off (`users.alert_consent`). **기본값 `true`**, OS 알림 권한과는 별개로 동작한다(둘 중 하나라도 꺼져 있으면 미도달)
-- **공개범위 설정**: `profileVisibility` 하나뿐이다. **피드 작성 기본값은 서버에 두지 않는다** — 매 피드마다 `feeds.visibility`를 개별 선택하고, 기본 선택값은 클라이언트가 PUBLIC으로 고정한다
+- **공개범위 설정**: `profileVisibility` 하나뿐이다. **기록 카드 공개 범위 기본값은 서버에 두지 않는다** — 카드마다 `record_cards.visibility`를 개별 선택하고, 기본 선택값은 클라이언트가 PUBLIC으로 고정한다
 - **인증**: 필요
 
 ### 12-3. `PATCH /api/v1/users/me/settings` — 설정 변경
@@ -3791,9 +3849,9 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **동작 (테이블별 정책)**:
   - 탈퇴는 활성 상태 때문에 막지 않는다. `MATCHING`이면 5-A의 대기 취소, `MATCHED`이면 방 나가기를 적용하고 인원을 갱신해 남은 참가자에게 이벤트를 보낸다. `STARTED`이면 본인이 `RUNNING`일 때 마지막 수신 데이터로 5-D의 종료 처리를, `JOINED`(미접속)일 때 강제 종료와 같은 기준의 이탈 처리를 먼저 적용한다. 미접속이면 시작 후 취소처럼 인원을 줄여 남은 참가자에게 이벤트를 보내고, 0이 되면 방을 `CANCELLED`로 닫는다.
   - `delete_users` 스냅샷 후 `users`를 하드 삭제한다. `delete_users.created_at`은 스냅샷 시각이다.
-  - **유지**: `feeds`/`comments`/`running_records`(+segments·splits)/좋아요. `running_players`와 `running_room_sessions`는 상태와 무관하게 전부 유지한다 — 시작 전 신청도 지우지 않고 일반 취소처럼 닫는다(쿨다운은 걸지 않는다). 시작한 방은 기록 없는 참가자도 결과에 남고, 신청 이력은 통계에 쓴다. 사용자는 공통 탈퇴 유저 형식으로 표시한다.
+  - **유지**: `running_records`(+segments·splits)/`record_cards`(+images — 작성자가 탈퇴하면 8-1·10-3에서 404라 보이지 않는다). `running_players`와 `running_room_sessions`는 상태와 무관하게 전부 유지한다 — 시작 전 신청도 지우지 않고 일반 취소처럼 닫는다(쿨다운은 걸지 않는다). 시작한 방은 기록 없는 참가자도 결과에 남고, 신청 이력은 통계에 쓴다. 사용자는 공통 탈퇴 유저 형식으로 표시한다.
   - **삭제**: `user_onboardings`(값은 `delete_users`로 스냅샷 후)/`user_devices`/`oauth_users`(`login_type` 판정 후 — 먼저 지우면 `LOCAL`로 보인다)/`user_relationships`(양쪽)/`user_colors`.
-  - **DB 밖**: 리프레시 토큰 삭제 + 액세스 토큰 블랙리스트 등록, S3 프로필·배경 사진 90일 뒤 삭제, GPS 원본 유지, 카카오 unlink(`provider_id` 선확보).
+  - **DB 밖**: 리프레시 토큰 삭제 + 액세스 토큰 블랙리스트 등록, S3 프로필·배경 사진과 기록 카드 사진·음악(`record-cards/{userId}/`) 90일 뒤 삭제, GPS 원본 유지, 카카오 unlink(`provider_id` 선확보).
   - `delete_users`의 `email`·`nickname`은 90일 뒤 `NULL`로 갱신한다(행은 유지).
 - **Response**: `204 No Content` (토큰 즉시 무효화)
 - **에러 (503 Service Unavailable — 진행 중인 러닝을 정리하다 저장소 장애)** — 탈퇴는 통째로 되돌려진다. 클라는 잠시 후 다시 시도하게 한다

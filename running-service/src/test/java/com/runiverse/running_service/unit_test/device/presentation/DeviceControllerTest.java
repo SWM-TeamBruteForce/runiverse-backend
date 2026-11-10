@@ -95,8 +95,8 @@ class DeviceControllerTest {
     }
 
     @ParameterizedTest(name = "platform={0}")
-    @ValueSource(strings = {"WEB", "AOS"})
-    @DisplayName("플랫폼 헤더가 정해진 값이 아니면 400이다")
+    @ValueSource(strings = {"WEB", "AOS", "WATCH_ANDROID"})
+    @DisplayName("플랫폼 헤더가 폰 값이 아니면 400이다")
     void unknownPlatformIs400(String platform) throws Exception {
         // when
         MvcResult result = mockMvc.perform(request(platform, "1.1.0", body("device-1", "token-1"))).andReturn();

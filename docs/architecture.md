@@ -16,7 +16,7 @@ presentation ──▶ [port/in] application [port/out] ◀── infrastructure
 - 그림은 코드 의존 방향이다.
 - `observability`는 레이어 바깥의 교차 관심사(로그 추적 등)다. 어떤 레이어도 import하지 않는 말단이며, `presentation`·`infrastructure`만 참조한다 — `domain`·`application`은 참조하지 않는다. 유스케이스의 로그는 SLF4J 호출만으로 MDC 값이 붙으므로 import가 필요 없다.
 - 메트릭은 application이 Micrometer를 import하지 않는다 — 업무 결과는 `port/out`의 기록 포트로 남기고 infrastructure가 구현한다([metrics-convention.md](metrics-convention.md)).
-- `legacy`는 구버전 앱 호환 계층이다. 다른 패키지를 참조해도 되지만 **`legacy` 밖에서 `legacy`를 참조하지 않는다** — 최소 버전을 올린 뒤 폴더째 지우므로, 하나라도 참조하면 삭제가 컴파일 오류가 된다. spec-check 스크립트가 확정 위반으로 잡는다. 동작은 새 유스케이스를 그대로 부르고, 옛 경로·이벤트 이름·와이어 형식만 맞춘다. 같은 경로라 폴더에 둘 수 없는 잔재(옛 필드)는 `// LEGACY(v<버전>)` 주석으로 표시한다.
+- `legacy`는 구버전 앱 호환 계층이다. 다른 패키지를 참조해도 되지만 **`legacy` 밖에서 `legacy`를 참조하지 않는다** — 운영에서 막은 뒤에도 언제든 폴더째 지울 수 있어야 하므로, 하나라도 참조하면 삭제가 컴파일 오류가 된다(1.1.x는 ALB에서 막고 폴더를 보존 중이다 — api-spec.md 「1.1.x 호환 경로」). spec-check 스크립트가 확정 위반으로 잡는다. 동작은 새 유스케이스를 그대로 부르고, 옛 경로·이벤트 이름·와이어 형식만 맞춘다. 같은 경로라 폴더에 둘 수 없는 잔재(옛 필드)는 `// LEGACY(v<버전>)` 주석으로 표시한다.
 
 ## 패키지 구조
 

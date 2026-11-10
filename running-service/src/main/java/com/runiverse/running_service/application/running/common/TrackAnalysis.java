@@ -1,7 +1,7 @@
 package com.runiverse.running_service.application.running.common;
 
-import com.runiverse.running_service.domain.running.record.SegmentDraft;
-import com.runiverse.running_service.domain.running.record.SplitDraft;
+import com.runiverse.running_service.domain.running.record.RunningRecord.SegmentDraft;
+import com.runiverse.running_service.domain.running.record.RunningRecord.SplitDraft;
 
 import java.time.LocalDateTime;
 import java.util.List;

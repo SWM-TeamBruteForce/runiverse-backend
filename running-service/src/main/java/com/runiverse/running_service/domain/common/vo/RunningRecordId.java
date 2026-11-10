@@ -1,6 +1,6 @@
-package com.runiverse.running_service.domain.running.record.vo;
+package com.runiverse.running_service.domain.common.vo;
 
-import com.runiverse.running_service.domain.running.record.exception.InvalidRunningRecordIdException;
+import com.runiverse.running_service.domain.common.exception.InvalidRunningRecordIdException;
 
 public record RunningRecordId(Long value) {
 

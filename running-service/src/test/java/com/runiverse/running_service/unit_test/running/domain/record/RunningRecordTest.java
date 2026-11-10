@@ -1,10 +1,13 @@
 package com.runiverse.running_service.unit_test.running.domain.record;
 
 import com.github.f4b6a3.uuid.UuidCreator;
-import com.runiverse.running_service.domain.running.record.RunningRecord;
-import com.runiverse.running_service.domain.running.record.SegmentDraft;
-import com.runiverse.running_service.domain.running.record.SplitDraft;
+import com.runiverse.running_service.domain.common.vo.RunningRecordId;
 import com.runiverse.running_service.domain.running.metric.exception.CaloriesRequiredException;
+import com.runiverse.running_service.domain.running.metric.exception.TemperatureRequiredException;
+import com.runiverse.running_service.domain.running.metric.exception.WeatherCodeRequiredException;
+import com.runiverse.running_service.domain.running.record.RunningRecord.SegmentDraft;
+import com.runiverse.running_service.domain.running.record.RunningRecord.SplitDraft;
+import com.runiverse.running_service.domain.running.record.RunningRecord;
 import com.runiverse.running_service.domain.running.record.exception.InvalidSegmentNumberException;
 import com.runiverse.running_service.domain.running.record.exception.RoutePolylineRequiredException;
 import com.runiverse.running_service.domain.running.record.exception.SegmentNumberNotSequentialException;
@@ -18,9 +21,6 @@ import com.runiverse.running_service.domain.running.record.exception.SplitRouteN
 import com.runiverse.running_service.domain.running.record.exception.SplitSegmentNotFoundException;
 import com.runiverse.running_service.domain.running.record.exception.SplitSegmentNotSequentialException;
 import com.runiverse.running_service.domain.running.record.exception.SplitsRequiredException;
-import com.runiverse.running_service.domain.running.metric.exception.TemperatureRequiredException;
-import com.runiverse.running_service.domain.running.metric.exception.WeatherCodeRequiredException;
-import com.runiverse.running_service.domain.running.record.vo.RunningRecordId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

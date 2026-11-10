@@ -1,6 +1,7 @@
 package com.runiverse.running_service.domain.running.room;
 
 import com.runiverse.running_service.domain.common.vo.UserId;
+import com.runiverse.running_service.domain.running.room.RunningRoom.InvitationDraft;
 import com.runiverse.running_service.domain.running.room.exception.SelfInvitationException;
 import com.runiverse.running_service.domain.running.room.vo.InviteCount;
 import com.runiverse.running_service.domain.running.room.vo.RoomInvitationStatus;

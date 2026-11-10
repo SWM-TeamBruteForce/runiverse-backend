@@ -89,7 +89,7 @@ class AppControllerTest {
         assertThat(result.getResponse().getStatus()).isEqualTo(400);
         assertThat(body(result))
                 .containsEntry("code", "INVALID_REQUEST")
-                .containsEntry("message", "플랫폼은 IOS 또는 ANDROID이어야 합니다.");
+                .containsEntry("message", "플랫폼은 IOS, ANDROID, WATCH_IOS, WATCH_ANDROID 중 하나여야 합니다.");
         then(getAppVersionUsecase).shouldHaveNoInteractions();
     }
 

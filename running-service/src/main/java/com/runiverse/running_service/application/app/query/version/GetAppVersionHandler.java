@@ -19,7 +19,7 @@ public class GetAppVersionHandler implements GetAppVersionUsecase {
     public GetAppVersionResult handle(GetAppVersionQuery query) {
         Platform platform = Platform.from(query.platform());
 
-        // 배포 SQL이 두 플랫폼 행을 미리 넣는다 — 없으면 운영 실수라 500으로 드러낸다
+        // 배포 SQL이 네 플랫폼 행을 미리 넣는다 — 없으면 운영 실수라 500으로 드러낸다
         AppVersion appVersion = loadAppVersionPort.load(platform)
                 .orElseThrow(() -> new IllegalStateException("앱 버전 행이 없다 — platform=" + platform));
         return new GetAppVersionResult(

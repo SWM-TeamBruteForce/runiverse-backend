@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 최소·최신 버전은 run-e2e.sh가 sql/app-versions.sql로 넣는다 —
- * iOS 최소 1.0.0·최신 1.1.0, 안드로이드 최소 1.1.0·최신 1.2.0.
+ * iOS 최소 1.0.0·최신 1.1.0, 안드로이드 최소 1.1.0·최신 1.2.0, 워치 둘은 최소·최신 1.0.0.
  */
 @DisplayName("배포 이미지 대상 앱 버전 확인·구버전 거절 E2E 테스트")
 class AppVersionE2eTest extends E2eTestSupport {
@@ -31,6 +31,20 @@ class AppVersionE2eTest extends E2eTestSupport {
         assertThat(ios.status()).isEqualTo(200);
         assertThat(ios.text("minimumVersion")).isEqualTo("1.0.0");
         assertThat(ios.text("latestVersion")).isEqualTo("1.1.0");
+    }
+
+    @Test
+    @DisplayName("워치 앱 기준도 플랫폼으로 조회한다")
+    void returnsWatchVersions() {
+        // when - 실제 DB의 늘린 컬럼 길이·CHECK가 워치 값을 받아야 한다
+        Response watchAndroid = get("/app/version?platform=WATCH_ANDROID", null);
+        Response watchIos = get("/app/version?platform=watch_ios", null);
+
+        // then
+        assertThat(watchAndroid.status()).isEqualTo(200);
+        assertThat(watchAndroid.text("minimumVersion")).isEqualTo("1.0.0");
+        assertThat(watchIos.status()).isEqualTo(200);
+        assertThat(watchIos.text("minimumVersion")).isEqualTo("1.0.0");
     }
 
     @Test

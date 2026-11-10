@@ -59,7 +59,7 @@ public class UserDeviceJpaEntity extends BaseTimeEntity {
     private String pushToken;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "platform", nullable = false, length = 10)
+    @Column(name = "platform", nullable = false, length = 20)
     private Platform platform;
 
     @Column(name = "device_id", nullable = false, updatable = false, length = 100)

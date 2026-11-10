@@ -26,7 +26,7 @@ class LegacyV11E2eTest extends E2eTestSupport {
     private static final Map<String, String> APP_1_2_0 = Map.of("X-App-Platform", "ANDROID", "X-App-Version", "1.2.0");
     // 다른 매칭 E2E(내일·모레)와 한 방에 섞이지 않게 사흘 뒤를 쓴다
     private static final LocalDate SLOT_DATE = LocalDate.now(APP_ZONE).plusDays(3);
-    private static final LocalDateTime SLOTS_SLOT = SLOT_DATE.atTime(20, 30);
+    private static final LocalDateTime SLOTS_SLOT = SLOT_DATE.atTime(20, 0);
     private static final LocalDateTime FLOW_SLOT = SLOT_DATE.atTime(21, 0);
     private static final int DISTANCE = 5000;
 
@@ -48,10 +48,10 @@ class LegacyV11E2eTest extends E2eTestSupport {
         assertThat(slots.status()).isEqualTo(200);
         assertThat(slots.body().keySet()).containsExactly("slots");
         List<Map<String, Object>> items = slots.objects("slots");
-        assertThat(items).hasSize(9);
+        assertThat(items).hasSize(5);
         assertThat(items.get(0).keySet()).containsExactlyInAnyOrder("scheduledStartAt", "waitingCount", "selectable");
         assertThat(items).extracting(slot -> slot.get("waitingCount"))
-                .containsExactly(0, 0, 0, 0, 0, 1, 0, 0, 0);
+                .containsExactly(0, 0, 1, 0, 0);
 
         assertThat(missing.status()).isEqualTo(400);
         assertThat(missing.text("message")).isEqualTo("목표 거리는 필수입니다.");
