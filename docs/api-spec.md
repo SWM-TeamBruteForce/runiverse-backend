@@ -138,7 +138,7 @@
 |---|--------|------|------|
 | 29 | GET | `/api/v1/record-cards/{recordCardId}` | 기록 카드 상세 — 지도+기본곡, 사진별 음악 캐러셀. 사용 화면: 프로필 카드 탭, 기록 화면 |
 
-> 피드 타임라인·좋아요·댓글(예전 30~39)은 설계에서 뺐다. 번호는 다시 매기지 않는다.
+> 피드 타임라인·좋아요·댓글(예전 30~39)과 컬러 컬렉션(예전 52, 10-8)은 설계에서 뺐다. 번호는 다시 매기지 않는다.
 
 ### 9. 기록 카드 작성·편집
 
@@ -162,7 +162,6 @@
 | 49 | DELETE | `/api/v1/users/{userId}/friend-request` | 요청 취소(보낸 쪽) · 거절(받은 쪽) |
 | 50 | DELETE | `/api/v1/users/{userId}/friend` | 친구 삭제 |
 | 51 | GET | `/api/v1/users/{userId}/friends` | 친구 목록 (+이름 검색) — 본인이면 확정·보낸 요청·받은 요청, 타인이면 확정만 |
-| 52 | GET | `/api/v1/users/{userId}/colors` | 컬러 컬렉션 (마스터 전체 + 획득 여부) **[MVP 제외]** |
 | 53 | GET | `/api/v1/users/search` | 사용자 검색 — 친구 추가 진입점 (`?q=검색어`) |
 | 54 | GET | `/api/v1/users/{userId}/achievements` | 업적 (활성 업적별 단계·기준값) |
 | 55 | GET | `/api/v1/users/me/friend-recommendations` | 추천 친구 (함께 뛴 사람 + 페이스 비슷한 사람) — 사용 화면: 친구 목록 페이지 |
@@ -3346,7 +3345,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 |---|---|
 | 본인(`userId`가 토큰 주체) | 확정(`FRIEND`) · 보낸 요청(`FRIEND_REQUEST_SENT`) · 받은 요청(`FRIEND_REQUEST_RECEIVED`) |
 | 타인 | 확정(`FRIEND`)만 — 누구에게 요청했고 누가 요청했는지는 본인만 안다 |
-| 차단 관계 | 차단 구현 때 정한다 — 목록을 열지 않는 방향이다(10-8의 `403 PROFILE_NOT_VISIBLE` 자리) |
+| 차단 관계 | 차단 구현 때 정한다 — 목록을 열지 않는 방향이다 |
 
 - `profile_visibility`로 가리지 않는다
 - **Query**: `q`(이름 필터), `cursor`/`limit`
@@ -3359,56 +3358,6 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - `user_relationships`에서 `user_id`가 대상인 행이다(`NONE`·`BLOCKED`는 담지 않는다) — 본인이면 `type`이 `FRIEND`·`FRIEND_REQUEST_SENT`·`FRIEND_REQUEST_RECEIVED`, 타인이면 `FRIEND`만. 행의 `type`이 곧 본인 목록의 `relationshipType`이다
 - **10-2 `friendCount`는 확정만 센다** — 본인 목록의 항목 수와 다를 수 있다
 - **에러 (404 Not Found)**: 대상이 없다(탈퇴 포함)
-- **인증**: 필요
-
-### 10-8. `GET /api/v1/users/{userId}/colors` — 컬러 컬렉션 [MVP 제외]
-
-- 자동 획득과 `user_colors` 신규 적재도 MVP에서 제외한다.
-- **화면**: 프로필 — 획득한 색을 `보유 수 / 전체 수`와 함께 보여준다
-- **Response `200 OK`** — 마스터 전체를 내리고 각 색에 획득 여부를 표시한다
-- 아래 조건·개수 값은 응답 형식 예시이며 실제 조건표는 확정하지 않았다
-
-```json
-{
-  "unlockedCount": 17,
-  "totalCount": 42,
-  "colors": [
-    {
-      "colorId": 2,
-      "category": "ENDURANCE",
-      "shadeNumber": 2,
-      "name": "딥 블루",
-      "hexCode": "#3c62e2",
-      "unlockDescription": "10km 이상 완주",
-      "unlocked": true,
-      "unlockedAt": "2026-08-01T09:12:00"
-    },
-    {
-      "colorId": 3,
-      "category": "ENDURANCE",
-      "shadeNumber": 3,
-      "name": "심해 블루",
-      "hexCode": "#1a3a8f",
-      "unlockDescription": "누적 100km",
-      "unlocked": false,
-      "unlockedAt": null
-    }
-  ]
-}
-```
-
-- **못 얻은 색도 함께 내린다.** 컬렉션 화면은 "무엇을 더 모을 수 있는지"를 보여주는 것이 목적이라, 미획득 색과 그 조건(`unlockDescription`)이 있어야 화면이 성립한다
-- `totalCount`는 마스터 행 수다 — **총 개수를 명세에 박지 않으므로** 클라도 이 값을 그대로 쓴다
-- **지인 마스킹**: `profile_visibility=FRIENDS`인 사용자를 친구가 아닌 사람이 조회하면 `403 PROFILE_NOT_VISIBLE`
-
-```json
-{
-  "code": "PROFILE_NOT_VISIBLE",
-  "message": "비공개 프로필입니다."
-}
-```
-
-- **에러 (404 Not Found)**: 대상이 없다
 - **인증**: 필요
 
 ### 10-9. `GET /api/v1/users/search` — 사용자 검색
@@ -4185,7 +4134,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   - 탈퇴는 활성 상태 때문에 막지 않는다. `MATCHING`이면 5-A의 대기 취소, `MATCHED`이면 방 나가기를 적용하고 인원을 갱신해 남은 참가자에게 이벤트를 보낸다. `STARTED`이면 본인이 `RUNNING`일 때 마지막 수신 데이터로 5-D의 종료 처리를, `JOINED`(미접속)일 때 강제 종료와 같은 기준의 이탈 처리를 먼저 적용한다. 미접속이면 시작 후 취소처럼 인원을 줄여 남은 참가자에게 이벤트를 보내고, 0이 되면 방을 `CANCELLED`로 닫는다.
   - `delete_users` 스냅샷 후 `users`를 하드 삭제한다. `delete_users.created_at`은 스냅샷 시각이다.
   - **유지**: `running_records`(+segments·splits)/`record_cards`(+images — 작성자가 탈퇴하면 8-1·10-3에서 404라 보이지 않는다). `running_players`와 `running_room_sessions`는 상태와 무관하게 전부 유지한다 — 시작 전 신청도 지우지 않고 일반 취소처럼 닫는다(쿨다운은 걸지 않는다). 시작한 방은 기록 없는 참가자도 결과에 남고, 신청 이력은 통계에 쓴다. 사용자는 공통 탈퇴 유저 형식으로 표시한다.
-  - **삭제**: `user_onboardings`(값은 `delete_users`로 스냅샷 후)/`user_devices`/`oauth_users`(`login_type` 판정 후 — 먼저 지우면 `LOCAL`로 보인다)/`user_relationships`(양쪽)/`user_colors`.
+  - **삭제**: `user_onboardings`(값은 `delete_users`로 스냅샷 후)/`user_devices`/`oauth_users`(`login_type` 판정 후 — 먼저 지우면 `LOCAL`로 보인다)/`user_relationships`(양쪽).
   - **DB 밖**: 리프레시 토큰 삭제 + 액세스 토큰 블랙리스트 등록, S3 프로필·배경 사진과 기록 카드 사진·음악(`record-cards/{userId}/`) 90일 뒤 삭제, GPS 원본 유지, 카카오 unlink(`provider_id` 선확보).
   - `delete_users`의 `email`·`nickname`은 90일 뒤 `NULL`로 갱신한다(행은 유지).
 - **Response**: `204 No Content` (토큰 즉시 무효화)

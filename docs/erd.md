@@ -264,7 +264,7 @@
 | total_elevation_gain | int | nullable | 누적 상승 고도(미터). 기기 GPS 고도를 운영 임계값으로 필터링해 계산하며 유효 표본이 부족하면 null. 일시정지 경계에서 기준 고도를 새로 잡아 일시정지 중 이동한 고도차는 들어가지 않는다. 구간(`running_splits.elevation_change`)의 합과는 다르다 |
 | total_calories | int | NOT NULL | 종료 시 서버가 확정 거리·시간과 사용자 체중으로 계산한 kcal |
 | gps_track_key | varchar(255) | NOT NULL | S3 key — 받은 좌표를 그대로(위치·시각·고도·정확도·속도·방위·케이던스·순간 페이스·일시정지 구간 번호) 담은 **원본 트랙**. 재계산·분석용이라 **API 응답에는 쓰지 않는다** |
-| weather_code | int | NOT NULL | WMO 4677 코드(0~99) — 날씨 API 원본값 그대로. 조회에 실패하거나 값이 없으면 폴백(`0` 맑음, 기온 `15.0`)이 들어간다. 악조건 여부는 저장하지 않고 판정 시 계산한다 |
+| weather_code | int | NOT NULL | WMO 4677 코드(0~99) — 날씨 API 원본값 그대로. 조회에 실패하거나 값이 없으면 폴백(`0` 맑음, 기온 `15.0`)이 들어간다 |
 | temperature | numeric(3,1) | NOT NULL | 섭씨. 영하 포함 |
 | start_at / end_at | timestamp | NOT NULL | |
 | created_at | timestamp | NOT NULL | 종료 메시지·목표 도달 자동 종료·강제 종료·탈퇴로 기록을 확정할 때 일괄 INSERT. 진행 중 PATCH 없음(write-once) |
