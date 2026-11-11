@@ -212,12 +212,12 @@ class RoomChatE2eTest extends E2eTestSupport {
     @Test
     @DisplayName("지운 메시지는 목록에서 자리를 지키되 내용 없이 isDeleted로만 드러나고, 원문은 DB에 남는다")
     void deletedChatKeepsPlaceWithoutContent() {
-        // given - 삭제 API는 다음 단계라 DB에서 직접 지운 시각을 찍는다
+        // given - 두 건을 보내고 뒤의 것을 삭제 API로 지운다
         TestUser member = signUpAndOnboard();
         int runningRoomId = apply(member).number("runningRoomId");
         int keptId = post(chatsPath(runningRoomId), Map.of("content", "남는 말"), member.accessToken()).number("chatId");
         int deletedId = post(chatsPath(runningRoomId), Map.of("content", "지울 말"), member.accessToken()).number("chatId");
-        executeSql("UPDATE running_room_chats SET deleted_at = now() WHERE running_room_chat_id = " + deletedId);
+        assertThat(delete(chatPath(runningRoomId, deletedId), member.accessToken()).status()).isEqualTo(204);
 
         try {
             // when
@@ -237,6 +237,112 @@ class RoomChatE2eTest extends E2eTestSupport {
                     .containsExactly("지울 말");
         } finally {
             leave(member);
+        }
+    }
+
+    @Test
+    @DisplayName("고친 채팅·지운 채팅은 다른 참가자에게만 ROOM_CHAT_EDITED·ROOM_CHAT_DELETED로 가고, 이력과 원문이 DB에 남는다")
+    void editAndDeleteReachOthersButNotSender() {
+        // given - 두 사람이 같은 방에 있고 host가 한 건 보냈다
+        TestUser host = signUpAndOnboard();
+        TestUser guest = signUpAndOnboard();
+        int runningRoomId = apply(host).number("runningRoomId");
+        assertThat(apply(guest).number("runningRoomId")).isEqualTo(runningRoomId);
+
+        try (SseStream hostStream = openMatchStream(host.accessToken());
+             SseStream guestStream = openMatchStream(guest.accessToken())) {
+            hostStream.await("MATCH_ROOM_ENTRANCE");
+            guestStream.await("MATCH_ROOM_ENTRANCE");
+            Response sent = post(chatsPath(runningRoomId), Map.of("content", "곧 출발해요"), host.accessToken());
+            int chatId = sent.number("chatId");
+            guestStream.await("ROOM_CHAT_SENT");
+
+            // when - host가 고친다
+            Response edited = patch(chatPath(runningRoomId, chatId), Map.of("content", "조금 늦어요"), host.accessToken());
+
+            // then - 200으로 고친 뒤의 Chat이고, guest는 같은 값을 이벤트로 받는다
+            assertThat(edited.status()).isEqualTo(200);
+            assertThat(edited.number("chatId")).isEqualTo(chatId);
+            assertThat(edited.text("content")).isEqualTo("조금 늦어요");
+            assertThat(LocalDateTime.parse(edited.text("editedAt"))).isNotNull();
+            assertThat(edited.text("createdAt")).isEqualTo(sent.text("createdAt"));
+            assertThat(guestStream.await("ROOM_CHAT_EDITED")).isEqualTo(edited.body());
+            // then - 행을 잠그고 직전 내용을 이력에 남긴 뒤 바꿨다(FOR UPDATE·이력 INSERT는 실제 DB에서만 확인된다)
+            assertThat(querySql("SELECT content FROM running_room_chat_histories WHERE running_room_chat_id = " + chatId))
+                    .containsExactly("곧 출발해요");
+            assertThat(querySql("SELECT content, edited_at IS NOT NULL FROM running_room_chats WHERE running_room_chat_id = " + chatId))
+                    .containsExactly("조금 늦어요|t");
+
+            // when - host가 지운다
+            Response deleted = delete(chatPath(runningRoomId, chatId), host.accessToken());
+
+            // then - 204이고, guest는 내용 없는 Chat을 받는다
+            assertThat(deleted.status()).isEqualTo(204);
+            Map<String, Object> deletedEvent = guestStream.await("ROOM_CHAT_DELETED");
+            assertThat(deletedEvent)
+                    .containsEntry("chatId", chatId)
+                    .containsEntry("content", null)
+                    .containsEntry("isDeleted", true);
+            // then - 원문은 행에 남고 이력은 늘지 않는다(삭제는 이력을 남기지 않는다)
+            assertThat(querySql("SELECT content, deleted_at IS NOT NULL FROM running_room_chats WHERE running_room_chat_id = " + chatId))
+                    .containsExactly("조금 늦어요|t");
+            assertThat(querySql("SELECT count(*) FROM running_room_chat_histories WHERE running_room_chat_id = " + chatId))
+                    .containsExactly("1");
+
+            // then - host는 자기 수정·삭제 이벤트를 받지 않는다: 뒤이어 guest가 보낸 것이 host의 첫 채팅 이벤트다
+            Response reply = post(chatsPath(runningRoomId), Map.of("content", "네"), guest.accessToken());
+            Map<String, Object> hostFirst = hostStream.awaitAny("ROOM_CHAT_SENT", "ROOM_CHAT_EDITED", "ROOM_CHAT_DELETED");
+            assertThat(hostFirst).containsEntry("chatId", reply.number("chatId"));
+
+            // then - 지운 메시지는 되살리거나 고칠 수 없다
+            assertThat(patch(chatPath(runningRoomId, chatId), Map.of("content", "다시"), host.accessToken()).status())
+                    .isEqualTo(404);
+            assertThat(delete(chatPath(runningRoomId, chatId), host.accessToken()).status()).isEqualTo(404);
+        } finally {
+            leave(host);
+            leave(guest);
+        }
+    }
+
+    @Test
+    @DisplayName("채팅 수정·삭제는 남의 메시지면 404, 빈 내용은 400, 러닝이 시작됐으면 409, 토큰이 없으면 401이다")
+    void editAndDeleteReject() {
+        // given
+        TestUser owner = signUpAndOnboard();
+        TestUser other = signUpAndOnboard();
+        int runningRoomId = apply(owner).number("runningRoomId");
+        assertThat(apply(other).number("runningRoomId")).isEqualTo(runningRoomId);
+        int chatId = post(chatsPath(runningRoomId), Map.of("content", "내 말"), owner.accessToken()).number("chatId");
+
+        try {
+            // when & then - 같은 방이어도 남의 메시지는 없는 것과 같다
+            Response othersEdit = patch(chatPath(runningRoomId, chatId), Map.of("content", "바꿈"), other.accessToken());
+            assertThat(othersEdit.status()).isEqualTo(404);
+            assertThat(othersEdit.text("code")).isEqualTo("NOT_FOUND");
+            assertThat(delete(chatPath(runningRoomId, chatId), other.accessToken()).status()).isEqualTo(404);
+            // when & then - 없는 메시지
+            assertThat(delete(chatPath(runningRoomId, chatId + 100_000), owner.accessToken()).status()).isEqualTo(404);
+            // when & then - 요청 검증은 보내기와 같다
+            Response blank = patch(chatPath(runningRoomId, chatId), Map.of("content", "   "), owner.accessToken());
+            assertThat(blank.status()).isEqualTo(400);
+            assertThat(blank.text("message")).isEqualTo("메시지 내용은 필수입니다.");
+            assertThat(patch(chatPath(runningRoomId, chatId), Map.of("content", "바꿈"), null).status()).isEqualTo(401);
+            assertThat(delete(chatPath(runningRoomId, chatId), null).status()).isEqualTo(401);
+
+            // when & then - 러닝이 시작되면 내 메시지라도 막힌다
+            executeSql("UPDATE running_rooms SET status = 'STARTED' WHERE running_room_id = " + runningRoomId);
+            Response closed = patch(chatPath(runningRoomId, chatId), Map.of("content", "바꿈"), owner.accessToken());
+            assertThat(closed.status()).isEqualTo(409);
+            assertThat(closed.text("code")).isEqualTo("ROOM_CHAT_CLOSED");
+            assertThat(delete(chatPath(runningRoomId, chatId), owner.accessToken()).status()).isEqualTo(409);
+
+            // then - 아무것도 바뀌지 않았다
+            assertThat(querySql("SELECT content, edited_at IS NULL, deleted_at IS NULL FROM running_room_chats "
+                    + "WHERE running_room_chat_id = " + chatId)).containsExactly("내 말|t|t");
+        } finally {
+            executeSql("UPDATE running_rooms SET status = 'MATCHING' WHERE running_room_id = " + runningRoomId);
+            leave(owner);
+            leave(other);
         }
     }
 
@@ -288,6 +394,10 @@ class RoomChatE2eTest extends E2eTestSupport {
 
     private void leave(TestUser user) {
         post("/match-rooms/leave", null, user.accessToken());
+    }
+
+    private static String chatPath(int runningRoomId, int chatId) {
+        return chatsPath(runningRoomId) + "/" + chatId;
     }
 
     private static String chatsPath(int runningRoomId) {

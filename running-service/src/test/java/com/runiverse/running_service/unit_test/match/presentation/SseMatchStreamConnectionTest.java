@@ -139,6 +139,50 @@ class SseMatchStreamConnectionTest {
     }
 
     @Test
+    @DisplayName("고친 채팅은 ROOM_CHAT_EDITED 이름으로 새 내용과 수정 시각을 싣는다")
+    void roomChatEditedCarriesChat() throws Exception {
+        // given
+        RoomChat chat = new RoomChat(3021L, ROOM_ID,
+                new RoomChat.Sender(INVITEE, "철수", null, false),
+                "조금 늦어요", false, START.minusMinutes(2), START.minusMinutes(8));
+
+        // when
+        connection.send(MatchStreamEvent.roomChatEdited(chat));
+
+        // then
+        ArgumentCaptor<SseEmitter.SseEventBuilder> sent = ArgumentCaptor.forClass(SseEmitter.SseEventBuilder.class);
+        verify(emitter).send(sent.capture());
+        assertThat(sent.getValue().build())
+                .anyMatch(part -> part.getData() instanceof String text
+                        && text.contains("event:ROOM_CHAT_EDITED\n"));
+        JsonNode json = JSON.valueToTree(sentBody());
+        assertThat(json.get("content").asString()).isEqualTo("조금 늦어요");
+        assertThat(json.get("editedAt").isNull()).isFalse();
+    }
+
+    @Test
+    @DisplayName("지운 채팅은 ROOM_CHAT_DELETED 이름으로 내용 null·isDeleted true를 싣는다")
+    void roomChatDeletedCarriesChat() throws Exception {
+        // given -> 조립기가 지운 메시지의 내용을 이미 비웠다
+        RoomChat chat = new RoomChat(3021L, ROOM_ID,
+                new RoomChat.Sender(INVITEE, "철수", null, false),
+                null, true, null, START.minusMinutes(8));
+
+        // when
+        connection.send(MatchStreamEvent.roomChatDeleted(chat));
+
+        // then
+        ArgumentCaptor<SseEmitter.SseEventBuilder> sent = ArgumentCaptor.forClass(SseEmitter.SseEventBuilder.class);
+        verify(emitter).send(sent.capture());
+        assertThat(sent.getValue().build())
+                .anyMatch(part -> part.getData() instanceof String text
+                        && text.contains("event:ROOM_CHAT_DELETED\n"));
+        JsonNode json = JSON.valueToTree(sentBody());
+        assertThat(json.get("content").isNull()).isTrue();   // 키는 있고 값이 null이다
+        assertThat(json.get("isDeleted").asBoolean()).isTrue();
+    }
+
+    @Test
     @DisplayName("초대 방 갱신은 방 정보만 싣고 남은 시간 키가 없다")
     void inviteUpdatedHasNoStartsInMs() throws Exception {
         // when

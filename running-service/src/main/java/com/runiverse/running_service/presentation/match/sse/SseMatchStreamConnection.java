@@ -63,7 +63,7 @@ public class SseMatchStreamConnection implements MatchStreamConnection {
             case INVITE_ROOM_ENTRANCE -> InviteRoomEntranceResponse.from(event);
             case MATCH_CONFIRMED, MATCH_ROOM_ENTRANCE, MATCH_ROOM_UPDATED, INVITE_ROOM_UPDATED ->
                     RoomInfoResponse.from(event.room());
-            case ROOM_CHAT_SENT -> RoomChatResponse.from(event.chat());
+            case ROOM_CHAT_SENT, ROOM_CHAT_EDITED, ROOM_CHAT_DELETED -> RoomChatResponse.from(event.chat());
         };
     }
 

@@ -13,7 +13,7 @@ import java.util.UUID;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class SupersedeRedisAdapter implements PublishSupersedePort {
+public class RunningSupersedeRedisAdapter implements PublishSupersedePort {
 
     private final StringRedisTemplate redisTemplate;
     private final JsonMapper jsonMapper;
@@ -21,7 +21,7 @@ public class SupersedeRedisAdapter implements PublishSupersedePort {
     @Override
     public void publish(UUID userId, Long runningRoomId, String winnerSessionId) {
         RunningRoomMessage envelope = new RunningRoomMessage(
-                RunningRoomMessageType.SUPERSEDE, new SupersedeMessage(userId, winnerSessionId));
+                RunningRoomMessageType.SUPERSEDE, new RunningSupersedeMessage(userId, winnerSessionId));
         try {
             redisTemplate.convertAndSend(
                     RunningChannel.room(runningRoomId), jsonMapper.writeValueAsString(envelope));

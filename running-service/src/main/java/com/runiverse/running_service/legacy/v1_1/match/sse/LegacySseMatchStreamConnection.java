@@ -63,7 +63,7 @@ public class LegacySseMatchStreamConnection implements MatchStreamConnection {
                     .name(RUNNING_READY)
                     .data(RunningReadyResponse.from(event.ready()), MediaType.APPLICATION_JSON);
             // 1.1.x에는 채팅이 없다 — 모르는 이벤트를 보내지 않는다
-            case ROOM_CHAT_SENT -> null;
+            case ROOM_CHAT_SENT, ROOM_CHAT_EDITED, ROOM_CHAT_DELETED -> null;
         };
         if (frame != null) {
             send(frame);

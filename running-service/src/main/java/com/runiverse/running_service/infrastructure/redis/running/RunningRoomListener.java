@@ -45,7 +45,7 @@ public class RunningRoomListener implements MessageListener {
     }
 
     private void handleSupersede(Object data) {
-        SupersedeMessage payload = jsonMapper.convertValue(data, SupersedeMessage.class);
+        RunningSupersedeMessage payload = jsonMapper.convertValue(data, RunningSupersedeMessage.class);
         closeSupersededSessionUsecase.handle(
                 new CloseSupersededSessionCommand(payload.userId(), payload.winnerSessionId()));
     }

@@ -9,6 +9,8 @@ import com.runiverse.running_service.application.match.command.broadcast.BroadMa
 import com.runiverse.running_service.application.match.command.broadcast.BroadcastMatchEventCommand;
 import com.runiverse.running_service.application.match.command.stream.CloseMatchStreamCommand;
 import com.runiverse.running_service.application.match.command.stream.CloseMatchStreamHandler;
+import com.runiverse.running_service.application.match.command.stream.CloseSupersededMatchStreamCommand;
+import com.runiverse.running_service.application.match.command.stream.CloseSupersededMatchStreamHandler;
 import com.runiverse.running_service.application.match.command.stream.OpenMatchStreamCommand;
 import com.runiverse.running_service.application.match.command.stream.OpenMatchStreamHandler;
 import com.runiverse.running_service.application.match.common.InviteProperties;
@@ -134,10 +136,15 @@ public class MatchStreamIntegrationTest extends IntegrationTestSupport {
                 roomInfoAssembler,
                 eventPublisher
         );
+        // 공용 채널은 보낸 인스턴스도 듣는다 — 인스턴스가 하나라 대체 알림은 곧바로 자기에게 돌아온다
+        CloseSupersededMatchStreamHandler supersedeHandler =
+                new CloseSupersededMatchStreamHandler(matchStreamRegistry, matchRoomMembership);
         openHandler = new OpenMatchStreamHandler(
                 matchStreamRegistry,   // MatchStreamPort
                 matchRoomMembership,   // MatchRoomMembershipPort
-                roomInfoAssembler
+                roomInfoAssembler,
+                (userId, winnerConnectionId) -> supersedeHandler.handle(
+                        new CloseSupersededMatchStreamCommand(userId.value(), winnerConnectionId)) // PublishMatchStreamSupersedePort
         );
         closeHandler = new CloseMatchStreamHandler(
                 matchStreamRegistry,   // MatchStreamPort

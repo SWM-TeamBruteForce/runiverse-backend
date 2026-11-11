@@ -2005,7 +2005,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
   - **`FINISHED`에서는 어디로도 가지 않는다.** 종료 ack를 받은 클라가 연결을 닫아도 `DISCONNECTED`로 퍼지지 않고, 종료 뒤 늦게 도착한 배치는 받지 않고(저장·누적·진행 알림 없음) `RUNNING_FINISHED`만 다시 보낸다
   - **`DISCONNECTED`로 바뀌는 것은 `RUNNING`·`PAUSED`에서뿐이다.** 한 번도 붙지 않은 참가자는 상태가 기록되지 않으며, `RUNNING_STARTED` 스냅샷에서만 `DISCONNECTED`로 실린다(5-C)
-  - **좌표·`RUNNING_PAUSE`·`RUNNING_RESUME`이 오면 `DISCONNECTED`도 풀린다.** 메시지가 왔다는 것 자체가 연결돼 있다는 뜻이다 — 재연결한 뒤 옛 연결의 끊김이 늦게 반영돼도 다음 메시지가 바로잡는다
+  - **좌표·`RUNNING_PAUSE`·`RUNNING_RESUME`이 오면 `DISCONNECTED`도 풀린다.** 메시지가 왔다는 것 자체가 연결돼 있다는 뜻이다 — 재연결한 뒤 옛 연결의 끊김이 늦게 반영돼도 다음 메시지가 바로잡는다. 서버가 여러 대라 재연결이 다른 서버로 붙으면, 옛 서버가 옛 연결을 닫으며 `RUNNING_START`의 `RUNNING` 뒤에 `DISCONNECTED`를 늦게 보낼 수 있다. 막지 않고 둔다 — 재연결만으로는 인정하지 않고, 새 연결로 메시지(보통 다음 좌표 배치, 약 10초)가 와야 `RUNNING`으로 돌아온다
   - **재전송분만 온 배치는 상태를 바꾸지 않는다.** 이미 받은 좌표뿐이면 `PAUSED`가 그대로다. 재연결은 `RUNNING_START`가 먼저 `RUNNING`으로 풀므로, 멈춘 채 재연결했으면 클라가 재전송 뒤 `RUNNING_PAUSE`를 다시 보낸다(5-C). 상태가 기록된 적 없는 참가자의 배치는 `RUNNING`으로 싣는다
   - 상태 변경으로 나간 통지의 `distanceMeters`·`currentPaceSecondsPerKm`은 마지막으로 저장된 누적값이다
 - **상태 변경 알림은 재전송하지 않는다.** 전송에 실패하면 다음 좌표 배치나 상태 변경 때 최신 상태가 다시 실리고, 재연결하면 `RUNNING_STARTED` 스냅샷으로 복구한다

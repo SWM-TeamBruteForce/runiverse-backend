@@ -8,6 +8,8 @@ import com.runiverse.running_service.application.match.command.invitedecline.Dec
 import com.runiverse.running_service.application.match.command.inviteopen.OpenInviteRoomCommand;
 import com.runiverse.running_service.application.match.command.inviteopen.OpenInviteRoomResult;
 import com.runiverse.running_service.application.match.command.invitesend.SendInvitationCommand;
+import com.runiverse.running_service.application.match.command.roomchatdelete.DeleteRoomChatCommand;
+import com.runiverse.running_service.application.match.command.roomchatedit.EditRoomChatCommand;
 import com.runiverse.running_service.application.match.command.roomchatsend.SendRoomChatCommand;
 import com.runiverse.running_service.application.match.exception.InvalidInviteOptionException;
 import com.runiverse.running_service.application.match.exception.InvitationNotFoundException;
@@ -18,12 +20,15 @@ import com.runiverse.running_service.application.match.exception.MatchCooldownEx
 import com.runiverse.running_service.application.match.exception.NotFriendException;
 import com.runiverse.running_service.application.match.exception.RunningInvitationNotPendingException;
 import com.runiverse.running_service.application.match.exception.RoomChatClosedException;
+import com.runiverse.running_service.application.match.exception.RoomChatNotFoundException;
 import com.runiverse.running_service.application.match.exception.RoomChatRoomNotFoundException;
 import com.runiverse.running_service.application.match.exception.RunningRoomFullException;
 import com.runiverse.running_service.application.match.port.in.AcceptInvitationUsecase;
 import com.runiverse.running_service.application.match.port.in.ApplyMatchUsecase;
 import com.runiverse.running_service.application.match.port.in.CancelMatchUsecase;
 import com.runiverse.running_service.application.match.port.in.DeclineInvitationUsecase;
+import com.runiverse.running_service.application.match.port.in.DeleteRoomChatUsecase;
+import com.runiverse.running_service.application.match.port.in.EditRoomChatUsecase;
 import com.runiverse.running_service.application.match.port.in.GetMatchSlotsUsecase;
 import com.runiverse.running_service.application.match.port.in.OpenInviteRoomUsecase;
 import com.runiverse.running_service.application.match.port.in.SendInvitationUsecase;
@@ -72,7 +77,9 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup;
 
@@ -117,6 +124,12 @@ class MatchRoomControllerTest {
     @Mock
     private GetRoomChatsUsecase getRoomChatsUsecase;
 
+    @Mock
+    private EditRoomChatUsecase editRoomChatUsecase;
+
+    @Mock
+    private DeleteRoomChatUsecase deleteRoomChatUsecase;
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -124,7 +137,8 @@ class MatchRoomControllerTest {
         mockMvc = standaloneSetup(new MatchRoomController(
                 getMatchSlotsUsecase, applyMatchUsecase, cancelMatchUsecase,
                 openInviteRoomUsecase, sendInvitationUsecase,
-                acceptInvitationUsecase, declineInvitationUsecase, sendRoomChatUsecase, getRoomChatsUsecase))
+                acceptInvitationUsecase, declineInvitationUsecase, sendRoomChatUsecase, getRoomChatsUsecase,
+                editRoomChatUsecase, deleteRoomChatUsecase))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setMessageConverters(new JacksonJsonHttpMessageConverter(JSON_MAPPER))
@@ -853,6 +867,107 @@ class MatchRoomControllerTest {
         // then
         assertThat(notInRoom.getResponse().getStatus()).isEqualTo(404);
         assertThat(body(notInRoom)).containsEntry("code", "NOT_FOUND");
+        assertThat(closed.getResponse().getStatus()).isEqualTo(409);
+        assertThat(body(closed)).containsEntry("code", "ROOM_CHAT_CLOSED");
+    }
+
+    @Test
+    @DisplayName("채팅 수정: 토큰 주체·경로 방·메시지 ID·내용을 넘기고 200으로 고친 뒤의 Chat을 돌려준다")
+    void 채팅_수정은_200으로_고친_채팅을_돌려준다() throws Exception {
+        // given
+        given(editRoomChatUsecase.handle(any())).willReturn(new RoomChat(3021L, 125L,
+                new RoomChat.Sender(USER_ID, "철수", null, false),
+                "조금 늦어요", false, LocalDateTime.of(2026, 7, 25, 18, 54, 0),
+                LocalDateTime.of(2026, 7, 25, 18, 52, 10)));
+
+        // when
+        MvcResult result = mockMvc.perform(patch("/match-rooms/125/chats/3021")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"content":"조금 늦어요"}
+                                """))
+                .andReturn();
+
+        // then -> 고친 사람의 화면은 이 응답이 바꾼다(이벤트는 본인에게 가지 않는다)
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        verify(editRoomChatUsecase).handle(new EditRoomChatCommand(USER_ID, 125L, 3021L, "조금 늦어요"));
+        assertThat(body(result))
+                .containsEntry("chatId", 3021)
+                .containsEntry("content", "조금 늦어요")
+                .containsEntry("isDeleted", false)
+                .containsEntry("editedAt", "2026-07-25T18:54:00")
+                .containsOnlyKeys("chatId", "runningRoomId", "sender", "content", "isDeleted", "editedAt", "createdAt");
+    }
+
+    @Test
+    @DisplayName("채팅 수정: 보내기와 같은 검증 — 비었거나 공백만이거나 200자를 넘으면 400이고 유스케이스를 부르지 않는다")
+    void 채팅_수정은_보내기와_같은_검증이다() throws Exception {
+        for (String body : List.of("{}", "{\"content\":\"   \"}")) {
+            // when
+            MvcResult result = mockMvc.perform(patch("/match-rooms/125/chats/3021")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andReturn();
+
+            // then
+            assertThat(result.getResponse().getStatus()).as(body).isEqualTo(400);
+            assertThat(body(result)).as(body).containsEntry("message", "메시지 내용은 필수입니다.");
+        }
+        MvcResult overLimit = mockMvc.perform(patch("/match-rooms/125/chats/3021")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"" + "가".repeat(201) + "\"}"))
+                .andReturn();
+        assertThat(overLimit.getResponse().getStatus()).isEqualTo(400);
+        assertThat(body(overLimit)).containsEntry("message", "메시지는 200자 이하여야 합니다.");
+        then(editRoomChatUsecase).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("채팅 수정·삭제: 방 ID나 메시지 ID가 1보다 작으면 400이고 유스케이스를 부르지 않는다")
+    void 채팅_수정_삭제는_잘못된_경로_변수에_400이다() throws Exception {
+        // when
+        MvcResult badRoom = mockMvc.perform(patch("/match-rooms/0/chats/3021")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"조금 늦어요\"}"))
+                .andReturn();
+        MvcResult badChat = mockMvc.perform(delete("/match-rooms/125/chats/0")).andReturn();
+
+        // then
+        assertInvalidRequest(badRoom);
+        assertInvalidRequest(badChat);
+        then(editRoomChatUsecase).shouldHaveNoInteractions();
+        then(deleteRoomChatUsecase).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("채팅 삭제: 토큰 주체·경로 방·메시지 ID를 넘기고 본문 없이 204다")
+    void 채팅_삭제는_204다() throws Exception {
+        // when
+        MvcResult result = mockMvc.perform(delete("/match-rooms/125/chats/3021")).andReturn();
+
+        // then -> 지운 사람은 그 말풍선을 "삭제된 메시지"로 바꾼다
+        assertThat(result.getResponse().getStatus()).isEqualTo(204);
+        assertThat(result.getResponse().getContentAsByteArray()).isEmpty();
+        verify(deleteRoomChatUsecase).handle(new DeleteRoomChatCommand(USER_ID, 125L, 3021L));
+    }
+
+    @Test
+    @DisplayName("채팅 수정·삭제: 메시지가 없음·지움·남의 것이면 404 NOT_FOUND, 러닝이 시작됐으면 409 ROOM_CHAT_CLOSED다")
+    void 채팅_수정_삭제는_404_409를_그대로_낸다() throws Exception {
+        // given
+        given(editRoomChatUsecase.handle(any())).willThrow(new RoomChatNotFoundException());
+        willThrow(new RoomChatClosedException()).given(deleteRoomChatUsecase).handle(any());
+
+        // when
+        MvcResult notFound = mockMvc.perform(patch("/match-rooms/125/chats/3021")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"조금 늦어요\"}"))
+                .andReturn();
+        MvcResult closed = mockMvc.perform(delete("/match-rooms/125/chats/3021")).andReturn();
+
+        // then
+        assertThat(notFound.getResponse().getStatus()).isEqualTo(404);
+        assertThat(body(notFound)).containsEntry("code", "NOT_FOUND");
         assertThat(closed.getResponse().getStatus()).isEqualTo(409);
         assertThat(body(closed)).containsEntry("code", "ROOM_CHAT_CLOSED");
     }

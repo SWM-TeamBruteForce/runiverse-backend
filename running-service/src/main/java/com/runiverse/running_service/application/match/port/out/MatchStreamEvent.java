@@ -53,4 +53,14 @@ public record MatchStreamEvent(MatchEventType type, Long runningRoomId,
         return new MatchStreamEvent(MatchEventType.ROOM_CHAT_SENT, chat.runningRoomId(),
                 null, null, null, chat, new UserId(chat.sender().userId()));
     }
+
+    public static MatchStreamEvent roomChatEdited(RoomChat chat) {
+        return new MatchStreamEvent(MatchEventType.ROOM_CHAT_EDITED, chat.runningRoomId(),
+                null, null, null, chat, new UserId(chat.sender().userId()));
+    }
+
+    public static MatchStreamEvent roomChatDeleted(RoomChat chat) {
+        return new MatchStreamEvent(MatchEventType.ROOM_CHAT_DELETED, chat.runningRoomId(),
+                null, null, null, chat, new UserId(chat.sender().userId()));
+    }
 }

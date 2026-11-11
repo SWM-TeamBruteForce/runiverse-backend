@@ -71,4 +71,12 @@ public class RunningRoomChatJpaEntity extends BaseTimeEntity {
     public static RunningRoomChatJpaEntity create(RunningRoomJpaEntity room, UUID userId, String content) {
         return new RunningRoomChatJpaEntity(room, userId, content);
     }
+
+    // 도메인이 바꾼 값을 옮긴다 — 고치기는 content·editedAt을, 지우기는 deletedAt을 바꾼다.
+    // 규칙(보낸 본인·지운 뒤 금지)은 도메인이 이미 지켰다. 잠가 읽은 행이라 커밋 때 UPDATE가 나간다
+    public void apply(String content, LocalDateTime editedAt, LocalDateTime deletedAt) {
+        this.content = content;
+        this.editedAt = editedAt;
+        this.deletedAt = deletedAt;
+    }
 }

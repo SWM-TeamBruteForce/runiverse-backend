@@ -10,6 +10,7 @@ import com.runiverse.running_service.application.match.port.out.MatchRoomMembers
 import com.runiverse.running_service.application.match.port.out.MatchStreamConnection;
 import com.runiverse.running_service.application.match.port.out.MatchStreamEvent;
 import com.runiverse.running_service.application.match.port.out.MatchStreamPort;
+import com.runiverse.running_service.application.match.port.out.PublishMatchStreamSupersedePort;
 import com.runiverse.running_service.application.match.port.out.RoomInfo;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
@@ -31,9 +32,11 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
@@ -60,6 +63,9 @@ class OpenMatchStreamHandlerTest {
 
     @Mock
     private RoomInfoAssembler roomInfoAssembler;
+
+    @Mock
+    private PublishMatchStreamSupersedePort publishMatchStreamSupersedePort;
 
     @InjectMocks
     private OpenMatchStreamHandler openMatchStreamHandler;
@@ -160,6 +166,45 @@ class OpenMatchStreamHandlerTest {
 
         // then
         verifyNoInteractions(matchStreamPort, matchRoomMembershipPort, newConnection);
+        // then -> 실패한 연결이 다른 인스턴스의 정상 연결을 닫으면 안 된다
+        verifyNoInteractions(publishMatchStreamSupersedePort);
+    }
+
+    @Test
+    @DisplayName("등록·구독 뒤, 스냅샷 전에 다른 인스턴스에 대체를 알린다")
+    void publishesSupersedeAfterRegisterAndJoin() {
+        // given
+        givenActiveMatch();
+        given(newConnection.id()).willReturn("conn-new");
+        given(matchStreamPort.register(new UserId(USER_ID), newConnection)).willReturn(Optional.empty());
+
+        // when
+        openMatchStreamHandler.handle(new OpenMatchStreamCommand(USER_ID, newConnection));
+
+        // then -> 이 인스턴스도 이 알림을 되받는다. 등록이 먼저여야 되받았을 때 새 연결을 이긴 연결로 알아본다
+        InOrder order = inOrder(matchStreamPort, matchRoomMembershipPort, publishMatchStreamSupersedePort, newConnection);
+        order.verify(matchStreamPort).register(new UserId(USER_ID), newConnection);
+        order.verify(matchRoomMembershipPort).join(new UserId(USER_ID), ROOM_ID);
+        order.verify(publishMatchStreamSupersedePort).publish(new UserId(USER_ID), "conn-new");
+        order.verify(newConnection).send(any());
+    }
+
+    @Test
+    @DisplayName("같은 인스턴스의 옛 연결을 닫았어도 다른 인스턴스에 대체를 알린다")
+    void publishesSupersedeEvenWhenLocalConnectionWasReplaced() {
+        // given -> 이 인스턴스에서 하나를 닫았다고 다른 인스턴스에 옛 연결이 없다는 보장은 없다
+        givenActiveMatch();
+        given(newConnection.id()).willReturn("conn-new");
+        given(matchStreamPort.register(new UserId(USER_ID), newConnection))
+                .willReturn(Optional.of(supersededConnection));
+
+        // when
+        openMatchStreamHandler.handle(new OpenMatchStreamCommand(USER_ID, newConnection));
+
+        // then
+        verify(supersededConnection).closeSuperseded();
+        verify(publishMatchStreamSupersedePort).publish(new UserId(USER_ID), "conn-new");
+        verify(supersededConnection, never()).send(any());
     }
 
     private void givenActiveMatch() {

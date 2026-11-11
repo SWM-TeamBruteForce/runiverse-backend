@@ -23,6 +23,10 @@ public class MatchRoomMemberRegistry implements LoadMatchRoomMembersPort {
         return Set.copyOf(usersByRoom.getOrDefault(runningRoomId, Set.of()));
     }
 
+    public Optional<Long> roomOf(UserId userId) {
+        return Optional.ofNullable(roomByUser.get(userId));
+    }
+
     // 그 방의 첫 참가자를 받았으면 방 번호 — 그때만 구독하면 된다
     public Optional<Long> join(UserId userId, Long runningRoomId) {
         roomByUser.put(userId, runningRoomId);

@@ -134,6 +134,22 @@ class LegacySseMatchStreamConnectionTest {
     }
 
     @Test
+    @DisplayName("채팅 수정·삭제도 1.1.x가 모르는 이벤트라 보내지 않는다")
+    void roomChatEditedAndDeletedAreNotSent() throws Exception {
+        // given
+        RoomChat chat = new RoomChat(3021L, ROOM_ID, new RoomChat.Sender(PLAYER, "철수", null, false),
+                null, true, null, START.minusMinutes(8));
+
+        // when
+        connection.send(MatchStreamEvent.roomChatEdited(chat));
+        connection.send(MatchStreamEvent.roomChatDeleted(chat));
+
+        // then
+        verify(emitter, never()).send(any(SseEmitter.SseEventBuilder.class));
+        verify(emitter, never()).complete();
+    }
+
+    @Test
     @DisplayName("전송이 실패하면 스트림을 닫는다")
     void closesOnSendFailure() throws Exception {
         // given

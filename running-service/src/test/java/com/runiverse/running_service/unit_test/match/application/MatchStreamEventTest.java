@@ -126,6 +126,24 @@ class MatchStreamEventTest {
         }
 
         @Test
+        @DisplayName("고친 채팅·지운 채팅도 채팅의 방으로 가며 보낸 사람을 받는 사람에서 뺀다")
+        void roomChatEditedAndDeletedExcludeSender() {
+            // when
+            MatchStreamEvent edited = MatchStreamEvent.roomChatEdited(chatOf(SENDER));
+            MatchStreamEvent deleted = MatchStreamEvent.roomChatDeleted(chatOf(SENDER));
+
+            // then -> 세 채팅 이벤트는 이름만 다르다 — 본인 화면은 REST 응답으로 바꾼다
+            assertThat(edited.type()).isEqualTo(MatchEventType.ROOM_CHAT_EDITED);
+            assertThat(deleted.type()).isEqualTo(MatchEventType.ROOM_CHAT_DELETED);
+            assertThat(List.of(edited, deleted)).allSatisfy(event -> {
+                assertThat(event.runningRoomId()).isEqualTo(ROOM_ID);
+                assertThat(event.excludedUserId()).isEqualTo(new UserId(SENDER));
+                assertThat(event.chat().chatId()).isEqualTo(3021L);
+                assertThat(event.room()).isNull();
+            });
+        }
+
+        @Test
         @DisplayName("방 상태 이벤트는 받는 사람을 빼지 않는다")
         void roomStateEventsExcludeNobody() {
             // when

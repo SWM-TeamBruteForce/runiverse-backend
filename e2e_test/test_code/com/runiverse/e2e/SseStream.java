@@ -9,7 +9,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -88,6 +90,30 @@ public final class SseStream implements AutoCloseable {
         }
     }
 
+    /** 여러 이벤트 중 먼저 온 것의 data를 꺼낸다 — "자기 이벤트는 오지 않는다"를 뒤이은 이벤트로 확인할 때 쓴다. */
+    public Map<String, Object> awaitAny(String... events) {
+        List<String> names = List.of(events);
+        long deadline = System.nanoTime() + DEFAULT_TIMEOUT.toNanos();
+        while (true) {
+            long remaining = deadline - System.nanoTime();
+            if (remaining <= 0) {
+                throw new IllegalStateException("%s 중 하나를 %s 안에 받지 못했습니다".formatted(names, DEFAULT_TIMEOUT));
+            }
+            Map<String, Object> message = poll(remaining);
+            if (message == null) {
+                continue;
+            }
+            if (STREAM_ENDED.equals(message.get("event"))) {
+                received.add(message);
+                throw new IllegalStateException(
+                        "%s 를 기다리는 중 스트림이 끝났습니다 — %s".formatted(names, message.get("data")));
+            }
+            if (names.contains(message.get("event"))) {
+                return parse((String) message.get("data"));
+            }
+        }
+    }
+
     /** 서버가 스트림을 닫을 때까지 기다린다. 그 사이 온 이벤트는 흘려보낸다. */
     public void awaitClosed() {
         long deadline = System.nanoTime() + DEFAULT_TIMEOUT.toNanos();
@@ -102,6 +128,34 @@ public final class SseStream implements AutoCloseable {
             }
         }
     }
+
+    /**
+     * 정해진 시간 동안 온 이벤트를 모두 모은다 — "오면 안 되는 이벤트"를 확인할 때 쓴다.
+     * 항목은 {event, data}이고, 서버가 스트림을 닫았으면 마지막에 event가 {@link #ENDED}인 항목이 붙는다.
+     */
+    public List<Map<String, Object>> drainFor(Duration window) {
+        List<Map<String, Object>> events = new ArrayList<>();
+        long deadline = System.nanoTime() + window.toNanos();
+        while (true) {
+            long remaining = deadline - System.nanoTime();
+            if (remaining <= 0) {
+                return events;
+            }
+            Map<String, Object> message = poll(remaining);
+            if (message == null) {
+                continue;
+            }
+            if (STREAM_ENDED.equals(message.get("event"))) {
+                events.add(Map.of("event", ENDED));
+                received.add(message);   // 다음 대기도 끝난 걸 알게 되돌린다
+                return events;
+            }
+            events.add(Map.of("event", message.get("event"), "data", parse((String) message.get("data"))));
+        }
+    }
+
+    /** {@link #drainFor} 결과에서 서버가 스트림을 닫았음을 나타내는 이벤트 이름. */
+    public static final String ENDED = "__ENDED__";
 
     @Override
     public void close() {

@@ -248,7 +248,7 @@
 | created_at | timestamp | NOT NULL | 고친 시각. **write-once라 `created_at`만 둔다** |
 
 > **수정한 사람 컬럼이 없다** — 보낸 본인만 고칠 수 있어 언제나 메시지의 `user_id`다.
-> **수정 이력은 테이블, 이벤트 기록은 로그다** — 수정·삭제 성공마다 `[채팅]` INFO 로그에 `runningRoomId`·`chatId`만 남기고 내용은 남기지 않는다(logging-convention 남기지 않는 것). 원문은 이 테이블이 갖는다.
+> **수정 이력은 테이블, 이벤트 기록은 로그다** — 수정·삭제 성공마다 `[매칭]` INFO 로그에 `runningRoomId`·`chatId`만 남기고 내용은 남기지 않는다(logging-convention 남기지 않는 것). 원문은 이 테이블이 갖는다.
 
 ### running_records
 

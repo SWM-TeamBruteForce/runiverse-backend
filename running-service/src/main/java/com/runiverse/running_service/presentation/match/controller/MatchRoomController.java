@@ -9,11 +9,15 @@ import com.runiverse.running_service.application.match.command.invitedecline.Dec
 import com.runiverse.running_service.application.match.command.inviteopen.OpenInviteRoomCommand;
 import com.runiverse.running_service.application.match.command.inviteopen.OpenInviteRoomResult;
 import com.runiverse.running_service.application.match.command.invitesend.SendInvitationCommand;
+import com.runiverse.running_service.application.match.command.roomchatdelete.DeleteRoomChatCommand;
+import com.runiverse.running_service.application.match.command.roomchatedit.EditRoomChatCommand;
 import com.runiverse.running_service.application.match.command.roomchatsend.SendRoomChatCommand;
 import com.runiverse.running_service.application.match.port.in.AcceptInvitationUsecase;
 import com.runiverse.running_service.application.match.port.in.ApplyMatchUsecase;
 import com.runiverse.running_service.application.match.port.in.CancelMatchUsecase;
 import com.runiverse.running_service.application.match.port.in.DeclineInvitationUsecase;
+import com.runiverse.running_service.application.match.port.in.DeleteRoomChatUsecase;
+import com.runiverse.running_service.application.match.port.in.EditRoomChatUsecase;
 import com.runiverse.running_service.application.match.port.in.GetMatchSlotsUsecase;
 import com.runiverse.running_service.application.match.port.in.GetRoomChatsUsecase;
 import com.runiverse.running_service.application.match.port.in.OpenInviteRoomUsecase;
@@ -25,6 +29,7 @@ import com.runiverse.running_service.application.match.query.roomchatlist.GetRoo
 import com.runiverse.running_service.application.match.query.slot.GetMatchSlotsQuery;
 import com.runiverse.running_service.application.match.query.slot.GetMatchSlotsResult;
 import com.runiverse.running_service.presentation.match.request.ApplyMatchRequest;
+import com.runiverse.running_service.presentation.match.request.EditRoomChatRequest;
 import com.runiverse.running_service.presentation.match.request.MatchSlotsRequest;
 import com.runiverse.running_service.presentation.match.request.OpenInviteRoomRequest;
 import com.runiverse.running_service.presentation.match.request.SendInvitationRequest;
@@ -42,8 +47,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -73,6 +80,8 @@ public class MatchRoomController {
     private final DeclineInvitationUsecase declineInvitationUsecase;
     private final SendRoomChatUsecase sendRoomChatUsecase;
     private final GetRoomChatsUsecase getRoomChatsUsecase;
+    private final EditRoomChatUsecase editRoomChatUsecase;
+    private final DeleteRoomChatUsecase deleteRoomChatUsecase;
 
     // 누가 보든 같은 목록이라 사용자를 넘기지 않는다 — 인증은 SecurityConfig가 요구한다
     @GetMapping("slots")
@@ -175,5 +184,31 @@ public class MatchRoomController {
                 cursor == null || cursor.isBlank() ? null : cursor,
                 Math.min(limit, MAX_CHAT_LIMIT)));
         return ResponseEntity.ok(RoomChatsResponse.from(result));
+    }
+
+    // 채팅 이벤트(ROOM_CHAT_EDITED)는 고친 사람에게 가지 않는다 — 고친 사람의 화면은 이 응답이 바꾼다
+    @PatchMapping("{runningRoomId}/chats/{chatId}")
+    public ResponseEntity<RoomChatResponse> editRoomChat(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable @Min(value = 1, message = "입력값이 올바르지 않습니다.") Long runningRoomId,
+            @PathVariable @Min(value = 1, message = "입력값이 올바르지 않습니다.") Long chatId,
+            @Valid @RequestBody EditRoomChatRequest request
+    ) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        RoomChat chat = editRoomChatUsecase.handle(
+                new EditRoomChatCommand(userId, runningRoomId, chatId, request.content()));
+        return ResponseEntity.ok(RoomChatResponse.from(chat));
+    }
+
+    // 되돌리는 API는 없다 — 지운 사람은 204를 받고 그 말풍선을 "삭제된 메시지"로 바꾼다
+    @DeleteMapping("{runningRoomId}/chats/{chatId}")
+    public ResponseEntity<Void> deleteRoomChat(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable @Min(value = 1, message = "입력값이 올바르지 않습니다.") Long runningRoomId,
+            @PathVariable @Min(value = 1, message = "입력값이 올바르지 않습니다.") Long chatId
+    ) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        deleteRoomChatUsecase.handle(new DeleteRoomChatCommand(userId, runningRoomId, chatId));
+        return ResponseEntity.noContent().build();
     }
 }
