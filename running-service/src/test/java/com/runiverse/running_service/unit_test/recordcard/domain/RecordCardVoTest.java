@@ -6,6 +6,8 @@ import com.runiverse.running_service.domain.recordcard.exception.InvalidRecordCa
 import com.runiverse.running_service.domain.recordcard.exception.InvalidRecordCardImageIdException;
 import com.runiverse.running_service.domain.recordcard.exception.MusicKeyRequiredException;
 import com.runiverse.running_service.domain.recordcard.exception.MusicKeyTooLongException;
+import com.runiverse.running_service.domain.recordcard.exception.RecordCardImageCaptionEmptyException;
+import com.runiverse.running_service.domain.recordcard.exception.RecordCardImageCaptionTooLongException;
 import com.runiverse.running_service.domain.recordcard.exception.RecordCardImageKeyRequiredException;
 import com.runiverse.running_service.domain.recordcard.exception.RecordCardImageKeyTooLongException;
 import com.runiverse.running_service.domain.recordcard.exception.RecordCardMemoRequiredException;
@@ -14,6 +16,7 @@ import com.runiverse.running_service.domain.recordcard.vo.DisplayOrder;
 import com.runiverse.running_service.domain.recordcard.vo.MusicKey;
 import com.runiverse.running_service.domain.recordcard.vo.MusicStatus;
 import com.runiverse.running_service.domain.recordcard.vo.RecordCardId;
+import com.runiverse.running_service.domain.recordcard.vo.RecordCardImageCaption;
 import com.runiverse.running_service.domain.recordcard.vo.RecordCardImageId;
 import com.runiverse.running_service.domain.recordcard.vo.RecordCardImageKey;
 import com.runiverse.running_service.domain.recordcard.vo.RecordCardMemo;
@@ -94,26 +97,16 @@ class RecordCardVoTest {
         @ValueSource(strings = {"   ", "\n\t"})
         @DisplayName("비어 있으면 값으로 만들 수 없다")
         void rejectBlank(String value) {
-            // when & then -> 메모 없음은 값이 아니라 부재로 표현한다
+            // when & then -> 음악 생성이 회고 글을 읽으므로 비어 있을 수 없다
             assertThatThrownBy(() -> new RecordCardMemo(value))
                     .isInstanceOf(RecordCardMemoRequiredException.class);
         }
 
-        @ParameterizedTest
-        @NullAndEmptySource
-        @ValueSource(strings = {"   ", "\n\t"})
-        @DisplayName("요청의 빈 메모는 메모 없음이 된다")
-        void blankRequestBecomesEmpty(String value) {
-            // when & then
-            assertThat(RecordCardMemo.fromNullable(value)).isEmpty();
-        }
-
         @Test
-        @DisplayName("요청의 메모는 앞뒤 공백을 지우지 않고 그대로 담는다")
-        void keepRequestAsIs() {
+        @DisplayName("앞뒤 공백을 지우지 않고 그대로 담는다")
+        void keepAsIs() {
             // when & then
-            assertThat(RecordCardMemo.fromNullable("  한강  "))
-                    .contains(new RecordCardMemo("  한강  "));
+            assertThat(new RecordCardMemo("  한강  ").value()).isEqualTo("  한강  ");
         }
     }
 
@@ -151,6 +144,43 @@ class RecordCardVoTest {
             // when & then
             assertThat(new DisplayOrder(-1).isDeleted()).isTrue();
             assertThat(DisplayOrder.FIRST.isDeleted()).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("사진 설명")
+    class Caption {
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {"   "})
+        @DisplayName("비웠으면 설명 없음으로 본다")
+        void treatBlankAsAbsent(String value) {
+            // when & then
+            assertThat(RecordCardImageCaption.ofNullable(value)).isEmpty();
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {"   "})
+        @DisplayName("빈 설명을 값으로 만들면 거부한다")
+        void rejectBlankValue(String value) {
+            // when & then
+            assertThatThrownBy(() -> new RecordCardImageCaption(value))
+                    .isInstanceOf(RecordCardImageCaptionEmptyException.class);
+        }
+
+        @Test
+        @DisplayName("100자까지 받고 넘으면 거부한다")
+        void limitLength() {
+            // given
+            String max = "노".repeat(100);
+            String over = "노".repeat(101);
+
+            // when & then
+            assertThat(RecordCardImageCaption.ofNullable(max)).contains(new RecordCardImageCaption(max));
+            assertThatThrownBy(() -> RecordCardImageCaption.ofNullable(over))
+                    .isInstanceOf(RecordCardImageCaptionTooLongException.class);
         }
     }
 

@@ -50,6 +50,12 @@
 | 18 | POST | `/api/v1/match-rooms/{runningRoomId}/invitations` | 친구 초대 (한 명씩, 성공 204) — 사용 화면: 초대 방 |
 | 19 | POST | `/api/v1/match-rooms/{runningRoomId}/invitations/accept` | 초대 수락 → 방 입장 — 사용 화면: 알림함 |
 | 20 | POST | `/api/v1/match-rooms/{runningRoomId}/invitations/decline` | 초대 거절 — 사용 화면: 알림함 |
+| 30 | GET | `/api/v1/match-rooms/{runningRoomId}/chats` | 대기방 채팅 목록 (최신순, 커서) — 스트림 연결 뒤 호출. 사용 화면: 매칭 방·초대 방 |
+| 31 | POST | `/api/v1/match-rooms/{runningRoomId}/chats` | 채팅 보내기 (1~200자) — 사용 화면: 매칭 방·초대 방 |
+| 32 | PATCH | `/api/v1/match-rooms/{runningRoomId}/chats/{chatId}` | 채팅 수정 (보낸 본인) |
+| 33 | DELETE | `/api/v1/match-rooms/{runningRoomId}/chats/{chatId}` | 채팅 삭제 (보낸 본인, 소프트 삭제·복구 불가) |
+
+- 대기방 채팅: 지난 메시지는 위 목록 REST, 새 메시지·수정·삭제는 매칭 SSE의 `CHAT_*`(보낸 사람 제외). 러닝이 시작되면 막힌다 — 상세 5-E
 
 ### 5. 매칭·러닝 실시간 통신
 
@@ -88,15 +94,17 @@
 | 24 | GET | `/api/v1/match-rooms/stream` | 방 상태 이벤트 스트림 (SSE) — 매칭 방·초대 방 공용 |
 | 25 | POST | `/api/v1/running-rooms/solo` | 솔로 러닝 개시 (매칭 방은 서버가 생성) |
 
-**매칭 SSE** — 이벤트 5종. 연결 직후 현재 상태 스냅샷을 받는다. 방 상태 이벤트는 방 종류로 갈린다 — 매칭 방은 `MATCH_*`, 초대 방은 `INVITE_ROOM_*`만 받는다.
+**매칭 SSE** — 이벤트 9종(방 상태 5종 · 시작 통지 1종 · 채팅 3종). 연결 직후 현재 상태 스냅샷을 받는다. 방 상태 이벤트는 방 종류로 갈린다 — 매칭 방은 `MATCH_*`, 초대 방은 `INVITE_ROOM_*`만 받는다. 연결 직후 스냅샷은 `*_ENTRANCE`, 그 밖의 갱신은 `*_UPDATED`다.
 
 | 이벤트 | 비고 |
 |--------|------|
 | `MATCH_CONFIRMED` | 매칭 성사 통지 (`RoomInfo`) — 매칭 방만 |
-| `MATCH_ROOM_UPDATED` | 방 상태 갱신 (`RoomInfo`) — 인원 변동·연결 직후 스냅샷. 매칭 방만 |
+| `MATCH_ROOM_ENTRANCE` | 매칭 방 연결 직후 스냅샷 (`RoomInfo`) — 매칭 방만 |
+| `MATCH_ROOM_UPDATED` | 방 상태 갱신 (`RoomInfo`) — 인원 변동. 매칭 방만 |
 | `INVITE_ROOM_ENTRANCE` | 초대 방 연결 직후 스냅샷 (`RoomInfo` + `startsInMs`) — 초대 방만 |
 | `INVITE_ROOM_UPDATED` | 초대 방 상태 갱신 (`RoomInfo`) — 인원·초대 현황 변동. 초대 방만 |
 | `RUNNING_READY` | 곧 시작 통지 — `start_at` 직전(리드타임은 운영값)에 서버가 한 번 보낸다. 클라의 `RUNNING_START` 발사 타이머 기준 (5-C) |
+| `CHAT_SENT` · `CHAT_EDITED` · `CHAT_DELETED` | 대기방 채팅 보내기·수정·삭제 (`Chat`) — 보낸 사람을 뺀 방 참가자에게. 매칭·초대 방 공통 (5-E) |
 
 **러닝 WebSocket** — `/api/v1/ws/running`, 메시지 9종. 매칭 러닝과 솔로 러닝이 같은 채널을 쓴다. 이 외에 **ack 2종**(`RUNNING_STARTED`·`RUNNING_FINISHED`)과 **헬스 체크 2종**(`HEALTH_CHECK`·`HEALTH_CHECKED`)이 있다.
 
@@ -136,11 +144,11 @@
 
 | # | Method | Path | 설명 |
 |---|--------|------|------|
-| 40 | POST | `/api/v1/record-cards/images/presigned-url` | 카드 사진 업로드 URL 발급 (여러 장) |
-| 41 | POST | `/api/v1/record-cards` | 기록 카드 생성 — 기록 하나에 메모·사진(0~10장)·공개 범위. 음악 생성을 요청한다 |
-| 42 | PATCH | `/api/v1/record-cards/{recordCardId}` | 기록 카드 수정 (메모·공개 범위·사진) — 새로 넣은 사진만 음악을 만든다 |
+| 40 | POST | `/api/v1/record-cards` | 기록 카드 작성 요청 — 검사 후 사진 업로드 URL 발급(10MB 초과는 조각 URL), 작성 내용은 Redis 초안에 저장 |
+| 41 | POST | `/api/v1/record-cards/drafts/{recordCardDraftId}/complete` | 업로드 확정 — 사진을 S3에서 확인한 뒤 카드 저장(작성)·반영(수정), 음악 생성 요청 |
+| 42 | PATCH | `/api/v1/record-cards/{recordCardId}` | 기록 카드 수정 (회고 글·활동유형·공개 범위·사진) — 새 사진이 있으면 업로드 URL을 받고 41로 확정 |
 | 43 | DELETE | `/api/v1/record-cards/{recordCardId}` | 기록 카드 삭제 (소프트 삭제) |
-| — | Kafka | `record-card.music.requested` / `record-card.music.generated` | 음악 생성 요청·완료 이벤트 — AI 서비스와의 내부 계약(9-5) |
+| — | Kafka | `{env}.record-card.music.requested` / `{env}.record-card.music.generated` | 음악 생성 요청(카드 저장 후 발행)·완료(AI 서버 발행 → 구독해 상태 반영) — AI 서버와의 내부 계약(9-5) |
 
 ### 10. 프로필 페이지 (본인/타인)
 
@@ -188,7 +196,7 @@
 | 73 | PATCH | `/api/v1/users/me/settings` | 설정 변경 |
 | 74 | DELETE | `/api/v1/users/me` | 회원탈퇴 (스냅샷→하드delete, 테이블별 정책) |
 
-**합계: REST 72개 + SSE 스트림 2개(매칭 이벤트 5종 · 앱 이벤트 3종) + WebSocket 채널 1개(메시지 9종 + ack 2종 + 헬스 체크 2종)**
+**합계: REST 76개 + SSE 스트림 2개(매칭 이벤트 9종 · 앱 이벤트 3종) + WebSocket 채널 1개(메시지 9종 + ack 2종 + 헬스 체크 2종)**
 
 > 번호는 표의 순서를 그대로 따른다 — 결번을 두지 않는다. 중간에 API가 생기면 이후 번호를 밀고, 번호로 상호 참조하는 노션 명세도 함께 갱신한다.
 
@@ -1184,7 +1192,7 @@ data:{"notificationId":912,"isRead":false,"createdAt":"2026-10-28T12:03:00","act
 - **매칭 방에서는 초대할 수 없다** — 4-2는 초대 방이 아니면 404다.
 - **모집 마감(`closeAt`)은 `start_at - 초대 마감 오프셋`(운영 설정 `invite.close-offset`, 현재 1분)이다** — 매칭의 마감 오프셋(10분)과 따로 둔다. 초대·수락은 그 전까지만 된다. 시작 통지(`RUNNING_READY`, 시작 10초 전)는 매칭 방과 같다.
 - **제재가 없다** — 언제 나가든(5-A), 조기 종료하든(5-D) `_NO_PENALTY`이고 쿨다운을 걸지 않는다.
-- **방 상태 이벤트가 따로 있다** — 연결 직후 스냅샷은 `INVITE_ROOM_ENTRANCE`, 그 뒤 갱신은 `INVITE_ROOM_UPDATED`다(5-B). 매칭 방의 `MATCH_CONFIRMED`·`MATCH_ROOM_UPDATED`는 보내지 않는다 — 초대 방의 마감은 "더 이상 초대받지 않는다"일 뿐 매칭 성사가 아니라 확정 연출을 두지 않는다. `RUNNING_READY`(5-C)는 매칭 방과 같다.
+- **방 상태 이벤트가 따로 있다** — 연결 직후 스냅샷은 `INVITE_ROOM_ENTRANCE`, 그 뒤 갱신은 `INVITE_ROOM_UPDATED`다(5-B). 매칭 방의 `MATCH_CONFIRMED`·`MATCH_ROOM_ENTRANCE`·`MATCH_ROOM_UPDATED`는 보내지 않는다 — 초대 방의 마감은 "더 이상 초대받지 않는다"일 뿐 매칭 성사가 아니라 확정 연출을 두지 않는다. `RUNNING_READY`(5-C)는 매칭 방과 같다.
 
 ### 4-1. `POST /api/v1/match-rooms/invite` — 초대 방 개설
 
@@ -1371,7 +1379,7 @@ data:{"notificationId":912,"isRead":false,"createdAt":"2026-10-28T12:03:00","act
 - **연결 시점**: 매칭 신청·초대 방 개설(4-1)·초대 수락(4-3) 성공 직후. 활성 신청이 없으면 연결하지 않는다 — 서버가 보낼 것이 없다.
   - **어기면 서버가 `404 Not Found`로 거절한다(본문 없음).** 열어주면 붙을 방이 없어 아무 채널도 구독하지 못하고, 그 뒤에 신청해도 이벤트가 영영 오지 않는 연결이 된다 — 에러도 없이 조용히 망가지므로 연결 자체를 막는다.
   - **이 응답에만 본문이 없다.** 요청 `Accept`가 `text/event-stream`이라 다른 에러처럼 JSON 본문을 실을 수 없다. 클라는 상태 코드로 판단하고, 신청 응답을 받기 전에는 스트림을 열지 않는다.
-  - 앱 재시작·포그라운드 복귀 시엔 스트림을 다시 열고, **연결 직후 내려오는 `RoomInfo` 스냅샷으로 상태를 복원한다.** 스냅샷 이벤트는 매칭 방이 `MATCH_ROOM_UPDATED`, 초대 방이 `INVITE_ROOM_ENTRANCE`다.
+  - 앱 재시작·포그라운드 복귀 시엔 스트림을 다시 열고, **연결 직후 내려오는 `RoomInfo` 스냅샷으로 상태를 복원한다.** 스냅샷 이벤트는 매칭 방이 `MATCH_ROOM_ENTRANCE`, 초대 방이 `INVITE_ROOM_ENTRANCE`다.
 - **종료 시점**: `RUNNING_STARTED` ack 뒤, 또는 매칭 취소(`POST /match-rooms/leave`)의 204를 받은 뒤 클라이언트가 닫는다.
 - **서버도 스트림을 닫는다** — 열린 지 운영값(현재 30분)이 지나면, 같은 사용자의 새 연결이 들어오면, 탈퇴하면 닫는다(새 연결·탈퇴는 그 요청을 처리한 서버 인스턴스에 붙은 스트림만 닫는다 — 다른 인스턴스의 옛 스트림은 30분 만료나 전송 실패로 정리된다). 활성 신청이 남아 있으면 클라는 다시 연결하고 연결 직후 스냅샷으로 상태를 복원한다.
 - **연결을 화면 생명주기에 묶지 않는다.** 홈을 벗어나도 스트림은 살아 있어야 한다(근거는 `feature-spec.md` 매칭·러닝 설계 절)
@@ -1385,12 +1393,14 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | 이벤트 | 시점 |
 |---|---|
 | `MATCH_CONFIRMED` | 매칭 확정 — `data` = `RoomInfo`. 매칭 방만 |
-| `MATCH_ROOM_UPDATED` | 인원 변동·연결 직후 스냅샷 — `data` = `RoomInfo`. 러닝 시작은 이 이벤트로 알리지 않는다. 매칭 방만 |
+| `MATCH_ROOM_ENTRANCE` | 연결 직후 스냅샷 — `data` = `RoomInfo`. 매칭 방만 |
+| `MATCH_ROOM_UPDATED` | 인원 변동 — `data` = `RoomInfo`. 러닝 시작은 이 이벤트로 알리지 않는다. 매칭 방만 |
 | `INVITE_ROOM_ENTRANCE` | 연결 직후 스냅샷 — `data` = `RoomInfo` + `startsInMs`. 초대 방만 |
 | `INVITE_ROOM_UPDATED` | 인원 변동·초대 현황 변동·모집 마감(초대 만료) — `data` = `RoomInfo`. 초대 방만 |
 | `RUNNING_READY` | 곧 시작 통지 — `start_at` 직전에 한 번 (5-C) |
+| `CHAT_SENT` · `CHAT_EDITED` · `CHAT_DELETED` | 대기방 채팅 — `data` = `Chat`. 보낸 사람 제외. 매칭·초대 방 공통 (5-E) |
 
-- 연결 직후 서버가 현재 상태를 보낸다. 각 이벤트는 변경분이 아니라 해당 객체의 전체 상태를 담으므로 `Last-Event-ID` 재개는 사용하지 않는다.
+- 연결 직후 서버가 현재 상태를 보낸다. 방 상태 이벤트는 변경분이 아니라 해당 객체의 전체 상태를 담으므로 `Last-Event-ID` 재개는 사용하지 않는다. **채팅 이벤트만 변경분이다** — 놓친 채팅은 다시 연결한 뒤 채팅 목록(5-E-1)으로 맞춘다.
 - **keep-alive**: 주기적으로 주석 라인(`:ping`)을 보내 프록시 유휴 타임아웃을 막는다. 주기는 운영값.
 - 스트림은 수신 전용이라 요청 실패라는 개념이 없다 — 오류는 신청·취소 REST 응답으로 전달된다.
 
@@ -1601,7 +1611,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 #### 공통 객체 `RoomInfo` — 매칭방 전체 정보
 
-방 상태 SSE 이벤트가 아래 **같은 구조를 싣는다** — 매칭 방의 `MATCH_CONFIRMED`·`MATCH_ROOM_UPDATED`, 초대 방(4번)의 `INVITE_ROOM_ENTRANCE`·`INVITE_ROOM_UPDATED`. **`INVITE_ROOM_ENTRANCE`만 `startsInMs`를 하나 더 싣는다**(아래 해당 절).
+방 상태 SSE 이벤트가 아래 **같은 구조를 싣는다** — 매칭 방의 `MATCH_CONFIRMED`·`MATCH_ROOM_ENTRANCE`·`MATCH_ROOM_UPDATED`, 초대 방(4번)의 `INVITE_ROOM_ENTRANCE`·`INVITE_ROOM_UPDATED`. **`INVITE_ROOM_ENTRANCE`만 `startsInMs`를 하나 더 싣는다**(아래 해당 절).
 
 ```json
 {
@@ -1660,10 +1670,20 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - `data` = `RoomInfo`. 수신 시 클라는 대기 화면 → 매칭방 화면으로 전환
 - **발화 시점은 모집 마감(`start_at - 오프셋`)이다** — 방이 `MATCHING`→`MATCHED`로 넘어가는 순간 한 번. **방 생성 시점이 아니다** — 방은 신청 즉시 생기지만 그건 모집 시작이고, 그 구간의 인원 변동은 `MATCH_ROOM_UPDATED`가 담당한다. 자리가 다 차도 앞당겨 쏘지 않는다(`feature-spec.md` 확정 판정)
 
+#### `MATCH_ROOM_ENTRANCE` (SSE) — 매칭 방 입장 스냅샷
+
+- **매칭 방 입장을 맡는 이벤트다** — 매칭 신청으로 방에 배정된 뒤 스트림을 열면 한 번 오고, 재연결할 때마다 다시 온다. 클라는 이걸 받으면 매칭 방 화면에 들어간 것으로 본다. 초대 방의 `INVITE_ROOM_ENTRANCE`에 해당한다
+  - 예전에는 입장 전용 이벤트가 없어 연결 직후 `MATCH_ROOM_UPDATED`가 그 자리를 겸했다. **이 변경은 구버전 앱과 호환되지 않는다** — 구버전은 연결 직후 스냅샷을 받지 못한다. 옛 형식 경로는 남기지 않고, 배포 때 최소 버전(IOS·ANDROID)을 채팅이 들어간 앱 버전으로 올려 막는다
+  - 모집 마감 확정(`MATCH_CONFIRMED`)과 다르다 — 그건 방에 이미 있는 사람에게 "매칭이 성사됐다"를 알리는 전이 이벤트다
+- `data` = `RoomInfo` 전체
+- **연결한 본인에게만 간다** — 방 참가자 전원에게 퍼지는 갱신이 아니다
+- 수신 시 `status`별 처리는 아래 `MATCH_ROOM_UPDATED` 표와 같다 — 재연결이면 `MATCHED`·`STARTED`로 올 수 있다
+- **`MATCH_ROOM_UPDATED`와 나뉘는 이유는 "입장"과 "갱신"의 차이다** — 초대 방(`INVITE_ROOM_ENTRANCE`·`INVITE_ROOM_UPDATED`)과 짝을 맞춰, 방 종류와 상관없이 연결 직후 스냅샷은 `*_ENTRANCE`, 그 밖은 `*_UPDATED`로 이름만 보고 가른다
+
 #### `MATCH_ROOM_UPDATED` (SSE) — 매칭방 정보 갱신
 
-- `data` = `RoomInfo` 전체 재전송. **인원 변동과 연결 직후 스냅샷이 이 이벤트로 나간다** — 모집 중 참가·이탈뿐 아니라 확정 후 이탈, 시작 후 미접속자(`JOINED`)의 취소·탈퇴로 인원이 줄 때도 나간다
-- **`STARTED` 전환은 이 이벤트로 알리지 않는다** — 시작 통지는 `RUNNING_READY`가 맡고(5-C), 방의 `STARTED` 전환은 `start_at` 정각의 시작 스케줄러가 일으킨다. 다만 그 뒤에 붙은 스냅샷에는 `status: "STARTED"`가 실려 온다
+- `data` = `RoomInfo` 전체 재전송. **인원 변동이 이 이벤트로 나간다**(연결 직후 스냅샷은 `MATCH_ROOM_ENTRANCE`) — 모집 중 참가·이탈뿐 아니라 확정 후 이탈, 시작 후 미접속자(`JOINED`)의 취소·탈퇴로 인원이 줄 때도 나간다
+- **`STARTED` 전환은 이 이벤트로 알리지 않는다** — 시작 통지는 `RUNNING_READY`가 맡고(5-C), 방의 `STARTED` 전환은 `start_at` 정각의 시작 스케줄러가 일으킨다. 다만 그 뒤에 붙은 입장 스냅샷(`MATCH_ROOM_ENTRANCE`)에는 `status: "STARTED"`가 실려 온다
 - 클라는 **받으면 무조건 `RoomInfo`로 화면을 다시 그린다.** 무슨 일이 있었는지는 `status`·`players`·`invitations`가 말해주므로 이벤트를 더 쪼개지 않는다
 
 | `status` | 클라가 할 일 |
@@ -1673,12 +1693,12 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | `STARTED` | 이미 시작된 방이다(재연결 스냅샷 등) — 러닝 화면으로 이어가고 WS `RUNNING_START`를 보낸다 |
 | `CANCELLED` | 홈으로 — 현재 서버는 보내지 않는다(아래) |
 
-- **`MATCH_CONFIRMED`와 나뉘는 이유는 "전이"와 "상태"의 차이다.** `status=MATCHED`는 재연결 스냅샷으로도 오므로, 그것만 보면 확정 연출을 볼 때마다 반복하게 된다. 확정된 그 순간은 `MATCH_CONFIRMED`가, 그 밖의 모든 갱신은 이 이벤트가 맡는다
+- **`MATCH_CONFIRMED`와 나뉘는 이유는 "전이"와 "상태"의 차이다.** `status=MATCHED`는 재연결 스냅샷으로도 오므로, 그것만 보면 확정 연출을 볼 때마다 반복하게 된다. 확정된 그 순간은 `MATCH_CONFIRMED`가, 연결 직후 스냅샷은 `MATCH_ROOM_ENTRANCE`가, 그 밖의 모든 갱신은 이 이벤트가 맡는다
 - 방 취소는 마지막 참가자가 나갈 때만 일어나 받을 사람이 없으므로 이벤트를 보내지 않는다. `CANCELLED`는 방어적으로만 처리한다
 
 #### `INVITE_ROOM_ENTRANCE` (SSE) — 초대 방 입장 스냅샷
 
-- **초대 방에서 스트림을 연 직후 한 번** 보낸다 — 방을 만든 직후(4-1), 초대를 수락한 직후(4-3), 재연결할 때. 매칭 방의 연결 직후 `MATCH_ROOM_UPDATED`에 해당한다
+- **초대 방에서 스트림을 연 직후 한 번** 보낸다 — 방을 만든 직후(4-1), 초대를 수락한 직후(4-3), 재연결할 때. 매칭 방의 `MATCH_ROOM_ENTRANCE`에 해당한다
 - `data` = `RoomInfo` 전체(참가자 `players`·초대 현황 `invitations` 포함) + `startsInMs`
 
 ```json
@@ -2086,6 +2106,125 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - `RUNNING`이 된 참가자가 모두 종료 상태가 되고 기록 확정이 끝나면 방을 닫는다 — 유효 기록이 하나라도 있으면 `FINISHED`, 없으면 `CANCELLED`다. 강제 종료 시각(`start_at + 유예`)에는 한 번도 붙지 않아 `JOINED`로 남은 참가자를 확정 후 이탈로 먼저 닫고, 뛰던 참가자를 같은 규칙으로 종료 처리한다. 뛴 참가자가 모두 끝나 방이 먼저 닫혔는데 `JOINED`인 참가자가 남았으면 예약 시각을 기다리지 않고 방을 닫은 직후 같은 기준으로 닫는다
 - **부수효과 — 기록을 확정할 때 시작 좌표가 외부로 나간다.** 서버가 날씨를 조회하려고 `api.open-meteo.com`(`OpenMeteo GmbH`, 스위스)에 위도·경도와 시각을 보낸다. 개인위치정보의 국외 이전이라 개인정보처리방침 고지 대상이고 Google Play 데이터 보안에는 `공유됨`으로, App Store 개인정보 라벨에는 `정확한 위치`로 신고한다. 상세는 `feature-spec.md`의 날씨 절에 있다
 
+### 5-E. 대기방 채팅 (매칭 방·초대 방)
+
+매칭 방·초대 방 참가자끼리 주고받는 메시지다. 솔로 방에는 없다. **지난 메시지는 REST 목록(5-E-1)으로, 그 뒤 새로 생긴 일은 매칭 스트림의 채팅 이벤트로 받는다.** 입장 이벤트(`MATCH_ROOM_ENTRANCE`·`INVITE_ROOM_ENTRANCE`)에는 메시지를 싣지 않는다.
+
+- **채팅할 수 있는 동안 = 방 안에 있는 동안** — 이 방에 배정돼 있고(`running_room_sessions.is_connected`), 내 신청이 `JOINED`이고, 방이 `MATCHING`·`MATCHED`일 때다. 모집 중·확정 후 대기 모두 되고, **러닝이 시작되면(방 `STARTED`) 목록·보내기·수정·삭제가 모두 막힌다** — 시작 시각이 지났는데 아직 `RUNNING_START`를 보내지 않아 신청이 `JOINED`인 사람도 막힌다
+- **늦게 들어온 사람도 같은 목록을 본다** — 첫 페이지(최근 50개)부터 받고, 위로 올리면 더 이전 메시지를 이어 받아 방의 첫 메시지까지 볼 수 있다
+- **방에 들어가거나 다시 연결하면 스트림을 먼저 열고, 연결된 뒤에 목록을 부른다**
+  1. 스트림을 연다(`GET /match-rooms/stream`) — 연결이 열리면 그 뒤의 채팅 이벤트는 놓치지 않는다. 서버가 방 채널 구독을 건 뒤에야 응답 헤더를 내보내기 때문이다(구독 전에 응답을 열지 않는다)
+  2. 목록(5-E-1)을 `limit=50`으로 부른다
+  3. 1과 2 사이에 온 채팅 이벤트는 목록에도 들어 있을 수 있다 — **`chatId`가 같으면 하나로 합친다**(나중에 받은 쪽으로 덮는다). 순서를 거꾸로 하면(목록 먼저) 그 사이에 생긴 메시지를 잃는다
+  - 입장 이벤트(`MATCH_ROOM_ENTRANCE`·`INVITE_ROOM_ENTRANCE`)와는 무관하다 — 기다리지 않아도 된다
+- **채팅 이벤트는 보낸 사람에게 가지 않는다** — 본인 화면은 보내기·수정·삭제의 REST 응답으로 바꾼다
+- **자동 재전송하지 않는다** — 보내기 응답을 못 받으면 "다시 보내기"만 보여준다. 서버에는 이미 저장됐을 수 있고 재전송 중복을 가리는 키가 없어서, 자동으로 다시 보내면 같은 메시지가 두 번 남는다(`erd.md` `running_room_chats`). 저장됐는지는 다음 입장 때 목록이 알려준다
+- **수정·삭제는 보낸 본인만, 횟수 제한 없이 한다. 지운 메시지는 되살리거나 고칠 수 없다**
+
+**공통 객체 `Chat`** (5-E 응답·채팅 이벤트 `data`):
+
+```json
+{
+  "chatId": 3021,
+  "runningRoomId": 125,
+  "sender": {
+    "userId": "01a0f2d4-6180-7000-8000-446655440013",
+    "nickname": "철수",
+    "profileImageUrl": "https://...",
+    "isDeleted": false
+  },
+  "content": "곧 출발해요",
+  "isDeleted": false,
+  "editedAt": null,
+  "createdAt": "2026-07-25T18:52:10"
+}
+```
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `chatId` | Integer | O | 메시지 ID. 생성 순서대로 커진다 — 클라는 이 값으로 정렬하고 중복을 합친다 |
+| `runningRoomId` | Integer | O | 메시지가 오간 방 |
+| `sender` | Object | O | 보낸 사람. 탈퇴했으면 §0 탈퇴 유저 형식 |
+| `content` | String | X | 내용. **지운 메시지면 `null`** — 화면에는 "삭제된 메시지"로 그린다 |
+| `isDeleted` | Boolean | O | 보낸 사람이 지운 메시지인가. `sender.isDeleted`(보낸 사람 탈퇴)와 다르다 |
+| `editedAt` | String | X | 마지막 수정 시각. 고친 적 없으면 `null` — 값이 있으면 "수정됨"을 붙인다 |
+| `createdAt` | String | O | 보낸 시각 |
+
+#### 채팅 이벤트 (SSE) — `CHAT_SENT` · `CHAT_EDITED` · `CHAT_DELETED`
+
+- 매칭 스트림(`/match-rooms/stream`)으로 **방 참가자 중 보낸 사람을 뺀 전원에게** 보낸다. 매칭 방·초대 방이 같은 이름을 쓴다
+- `data` = `Chat` 전체 — 세 이벤트 모두 같다. 클라는 `chatId`로 찾아 **있으면 덮고 없으면 넣는다**
+  - `CHAT_SENT`: 새 메시지
+  - `CHAT_EDITED`: 고친 뒤의 메시지(`content` 새 값, `editedAt` 채워짐)
+  - `CHAT_DELETED`: 지운 뒤의 메시지(`content = null`, `isDeleted = true`)
+- **방 상태 이벤트와 달리 변경분이다** — 놓친 이벤트는 다시 오지 않는다. 끊겼다 다시 연결하면 위 입장 순서대로 목록을 다시 받아 맞춘다
+- 저장이 커밋된 뒤에 Redis로 발행해 각 서버 인스턴스가 자기 연결에 보낸다(매칭 이벤트와 같은 경로)
+
+#### 5-E-1. `GET /api/v1/match-rooms/{runningRoomId}/chats` — 채팅 목록
+
+- **화면**: 매칭 방·초대 방 대기 화면 — 입장 이벤트를 받은 직후, 위로 스크롤할 때
+- **Query**: `cursor`/`limit` — **최신순**(§0 페이지네이션). 클라는 첫 페이지를 `limit=50`으로 부르고, 화면에는 뒤집어 아래가 최신이 되게 그린다
+- **Response `200 OK`**: `{ "items": [Chat, ...], "nextCursor": "..." }` — `nextCursor`가 `null`이면 방의 첫 메시지까지 다 받았다
+- **지운 메시지도 자리를 지킨다** — 목록에서 빼지 않고 `content = null`, `isDeleted = true`로 내려간다
+- **`cursor`가 깨졌으면 `400 INVALID_REQUEST`다**
+- **에러 (404 Not Found)**: 방이 없거나, 솔로 방이거나, 호출자가 이 방에 배정돼 있지 않다(나갔거나 처음부터 아님)
+- **에러 (409 Conflict)**: `CHAT_CLOSED` — 러닝이 시작됐거나 방이 닫혔다(아래 표)
+- **인증**: 필요
+
+#### 5-E-2. `POST /api/v1/match-rooms/{runningRoomId}/chats` — 메시지 보내기
+
+- **화면**: 매칭 방·초대 방 대기 화면 — 전송 버튼
+- **Request**
+
+```json
+{
+  "content": "곧 출발해요"
+}
+```
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `content` | String | O | 1~200자. 공백만 있으면 안 된다 |
+
+- **요청 검증 (`400 INVALID_REQUEST`)** — Request DTO 검증이다
+  - 누락·빈 문자열·공백만: "메시지 내용은 필수입니다."
+  - 200자 초과: "메시지는 200자 이하여야 합니다."
+- **부수 효과**: 커밋 후 방의 다른 참가자에게 `CHAT_SENT`
+- **Response `201 Created`**: `Chat`
+- **에러 (404 Not Found)**·**에러 (409 Conflict)**: 5-E-1과 같다
+- **인증**: 필요
+
+#### 5-E-3. `PATCH /api/v1/match-rooms/{runningRoomId}/chats/{chatId}` — 메시지 수정
+
+- **화면**: 매칭 방·초대 방 대기 화면 — 내 메시지 길게 눌러 수정
+- **Request**: 5-E-2와 같은 `{ "content": "..." }`, 같은 요청 검증
+- **동작**: 메시지 행을 잠그고 고치기 직전 내용을 수정 이력(`running_room_chat_histories`)에 남긴 뒤 `content`·`editedAt`을 바꾼다 — 한 트랜잭션이다. 이력은 운영(신고 대응) 전용이라 API로 내보내지 않는다
+  - **같은 내용으로 고쳐도 수정으로 친다** — 이력이 남고 `editedAt`이 바뀐다. 클라가 바뀐 게 없으면 부르지 않는다
+- **부수 효과**: 커밋 후 방의 다른 참가자에게 `CHAT_EDITED`
+- **Response `200 OK`**: 고친 뒤의 `Chat`
+- **에러 (404 Not Found)**: 5-E-1의 경우 + 메시지가 이 방에 없거나, 이미 지웠거나, 내 메시지가 아니다 — **내 메시지가 아니어도 404다**(9-3 기록 카드 수정과 같다)
+- **에러 (409 Conflict)**: 5-E-1과 같다
+- **인증**: 필요 (보낸 사람)
+
+#### 5-E-4. `DELETE /api/v1/match-rooms/{runningRoomId}/chats/{chatId}` — 메시지 삭제
+
+- **화면**: 매칭 방·초대 방 대기 화면 — 내 메시지 길게 눌러 삭제
+- **동작**: `deleted_at`을 찍는다(소프트 삭제). 내용은 행에 남지만 API로는 다시 내려가지 않는다. **되돌리는 API는 없다**
+- **부수 효과**: 커밋 후 방의 다른 참가자에게 `CHAT_DELETED`
+- **Response `204 No Content`** — 본인 화면은 그 말풍선을 "삭제된 메시지"로 바꾼다
+- **에러 (404 Not Found)**: 5-E-3과 같다(이미 지운 메시지 포함)
+- **에러 (409 Conflict)**: 5-E-1과 같다
+- **인증**: 필요 (보낸 사람)
+
+**5-E 공통 409**
+
+| 코드 | 메시지 | 경우 |
+|---|---|---|
+| `CHAT_CLOSED` | 지금은 채팅할 수 없습니다. | 방이 `STARTED`·`FINISHED`·`CANCELLED`다 — 배정은 남아 있지만 러닝이 시작됐다. 클라는 채팅 입력을 닫는다 |
+
+- **판정 순서**: 방 존재·솔로 아님 → 배정(404) → 방 상태(409) → 메시지 존재·내 것·안 지움(404, 5-E-3·5-E-4). 시작된 방에서 남의 메시지를 고치려 하면 409가 먼저다
+- **신청이 `JOINED`가 아닌데 배정이 남은 경우**(방이 `MATCHING`·`MATCHED`인 동안에는 생기지 않는다 — 시작 전 이탈은 배정을 내린다)는 방 상태 판정에 함께 걸려 409다
+
 ## 6. 러닝 중 / 러닝 후 대시보드 (REST)
 
 > **러닝 사진**: 앱에서 촬영해 디바이스 갤러리에만 저장 — 서버 업로드/조회 API 없음. results 등 응답에 사진 필드 없음.
@@ -2362,15 +2501,13 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
       "totalDistanceMeters": 5020,
       "totalDurationSeconds": 1800,
       "averagePaceSecondsPerKm": 359,
-      "totalElevationGainMeters": 42, // 유효 표본이 부족하면 null
-      "recordCardId": 88              // 이 기록의 기록 카드. 없으면 null
+      "totalElevationGainMeters": 42  // 유효 표본이 부족하면 null
     }
   ]
 }
 ```
 
 - 기간에 기록이 없으면 `runningRecords`는 빈 배열이다
-- **`recordCardId`는 살아 있는 카드만 가리킨다** — 지운 카드(`deleted_at` 있음)는 null이다. null이면 기록 화면에 "카드 만들기"를, 값이 있으면 8-1로 가는 진입점을 띄운다. 기록당 카드는 한 장이라 단일 값이다. 필드를 더한 것이라 이 필드를 모르는 앱은 그대로 동작한다
 - **숨긴 방(`running_rooms.deleted_at` 있음)의 기록은 빠진다** — 6-1·6-2가 그 방을 404로 보는 것과 맞춘다. 숨김은 [MVP 제외]라 지금은 해당하는 방이 없다
 - **페이지를 나누지 않는다** — 한 번에 받는 범위가 31일로 묶여 있어 커서를 두지 않는다
 - **`type`은 방 종류다** — `SOLO`는 솔로 러닝, `MATCH`는 매칭 러닝, `INVITE`는 초대 러닝이다
@@ -2414,7 +2551,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 ## 8. 기록 카드 보기
 
-기록 카드는 러닝 기록 하나에 메모·사진·음악을 붙인 카드다. 화면은 옆으로 넘기는 캐러셀이다 — **첫 장은 기록 지도와 기본곡**, 다음 장부터 **사진 한 장마다 그 사진의 음악**이 나온다. 음악은 AI 서비스가 만들어 S3에 올리고, 서버는 key와 생성 상태만 갖는다(9-5).
+기록 카드는 러닝 기록 하나에 회고 글·활동유형·사진·음악을 붙인 카드다. 화면은 옆으로 넘기는 캐러셀이다 — **첫 장은 기록 지도와 기본곡**, 다음 장부터 **사진 한 장마다 그 사진의 음악**이 나온다. 음악은 AI 서버가 만들어 S3에 올리고, 서버는 key와 생성 상태만 갖는다(9-5).
 
 **기록 카드 공통 객체** (8-1·9-2·9-3 응답):
 
@@ -2428,6 +2565,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   },
   "isMine": true,
   "visibility": "PUBLIC",
+  "activityType": "DAILY",
   "memo": "한강 야간 러닝, 바람이 좋았다",
   "record": {
     "runningRecordId": 501,
@@ -2449,6 +2587,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
     {
       "recordCardImageId": 301,
       "imageUrl": "https://...",
+      "caption": "다리 밑에서 본 노을",
       "isThumbnail": true,
       "music": {
         "status": "PENDING",
@@ -2467,7 +2606,8 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | `author` | Object | O | 작성자 — `userId`·`nickname`·`profileImageUrl`(사진이 없으면 null) |
 | `isMine` | Boolean | O | 내 카드 여부 — 수정·삭제 버튼을 가른다 |
 | `visibility` | String | O | `FRIENDS`(친구만) · `PUBLIC`(전체) · `PRIVATE`(나만) |
-| `memo` | String | X | 메모. 없으면 null |
+| `activityType` | String | O | `DAILY`(일상) · `TRAVEL`(여행) · `RACE`(대회) |
+| `memo` | String | O | 회고 글 |
 | `record` | Object | O | 카드가 붙은 러닝 기록 — 첫 장(지도)에 그린다 |
 | `record.runningRecordId` | Integer | O | 러닝 기록 ID |
 | `record.runningRoomId` | Integer | O | 방 ID — 6-1·6-2로 기록 상세를 열 때 쓴다 |
@@ -2479,8 +2619,9 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | `record.routes` | Number[][][] | O | 경로 — **6-1 `routes`와 같은 형식**(조각 배열, 조각마다 `[[위도, 경도], …]`) |
 | `baseMusic` | Object | O | 기본곡 — 첫 장에서 재생 |
 | `images` | Array | O | 사진 장 — **배열 순서가 캐러셀 순서다**(지도 장 다음부터). 사진이 없으면 빈 배열 |
-| `images[].recordCardImageId` | Integer | O | 사진 ID — 수정(9-3)에서 남길 사진을 가리킬 때 쓴다 |
+| `images[].recordCardImageId` | Integer | O | 사진 ID — 수정(9-3)에서 이미 올린 사진을 가리킬 때 쓴다 |
 | `images[].imageUrl` | String | O | 사진 URL |
+| `images[].caption` | String | X | 사진 설명(한 줄, 1~100자). 작성자가 붙이지 않았으면 null |
 | `images[].isThumbnail` | Boolean | O | 썸네일 사진 여부 — 사진이 있으면 정확히 한 장이 `true`다. 편집 화면에서 현재 썸네일을 표시할 때 쓴다 |
 | `images[].music` | Object | O | 이 사진의 음악 |
 | `*.status` | String | O | 음악 생성 상태 — `PENDING`(생성 중) · `READY`(재생 가능) · `FAILED`(생성 실패) |
@@ -2495,7 +2636,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 ### 8-1. `GET /api/v1/record-cards/{recordCardId}` — 기록 카드 상세
 
-- **화면**: 프로필 카드 목록(10-3)에서 탭, 기록 화면(7-1 `recordCardId`)에서 진입, 생성(9-2) 직후
+- **화면**: 프로필 카드 목록(10-3)에서 탭, 생성(9-2) 직후
 - **Request**: 본문 없음
 - **Response `200 OK`**: 기록 카드 공통 객체
 - **누가 볼 수 있나**
@@ -2518,67 +2659,35 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 ## 9. 기록 카드 작성·편집
 
-**흐름**: 기록 화면(7-1)에서 지난 러닝을 고른다 → 사진을 고르면 9-1로 업로드 URL을 받아 S3에 올린다 → 메모를 쓴다 → 생성을 누르면 9-2. 서버는 카드를 저장하고 기본곡 1개와 사진마다 음악 1개의 생성을 AI에 요청한다(9-5).
+**흐름 — 사진은 Redis를 거쳐 확정한다**
 
-### 9-1. `POST /api/v1/record-cards/images/presigned-url` — 카드 사진 업로드 URL 발급 (여러 장)
-
-- **Request**
-
-```json
-{
-  "files": [
-    {
-      "mimeType": "image/jpeg",
-      "fileSizeBytes": 204800
-    }
-  ]
-}
+```
+9-1 작성 요청   앱 → 서버: 기록·회고 글·활동유형·공개 범위·사진 정보(형식·크기)
+                서버: 검사 → 사진 key·업로드 URL 발급(10MB 넘는 사진은 조각 URL) → 작성 내용을 Redis에 초안으로 저장 → recordCardDraftId
+앱 → S3        업로드 URL로 사진 업로드 (병렬, 실패한 장·조각만 다시)
+9-2 확정        앱 → 서버: recordCardDraftId
+                서버: 사진이 S3에 있는지 확인(조각은 합친다) → DB에 카드·사진 저장 → 커밋 뒤 음악 생성 요청을 Kafka에 발행(9-5)
 ```
 
-| 필드 | 타입 | 필수 | 설명 |
-|---|---|---|---|
-| `files` | Array | O | 1개 이상 10개 이하 |
-| `files[].mimeType` | String | O | `image/jpeg`·`image/png`·`image/webp`만 허용(대소문자 무시) — 11-1과 같다 |
-| `files[].fileSizeBytes` | Integer | O | 1 이상 10,485,760(10MB) 이하 — 서명에 포함되므로 실제 업로드 크기와 같아야 한다 |
+- **DB에는 사진까지 확인된 카드만 들어간다** — 확정 전 내용은 Redis의 **초안**(draft)에만 있다. 확정하지 않고 떠나면 임시 정보는 유효 시간이 지나 사라지고, DB에는 아무것도 남지 않는다(feature-spec 기록 카드 임시 저장)
+- **사진이 0장이어도 같은 두 단계다** — 응답 모양을 하나로 맞추려는 것이다. 0장이면 9-1의 `uploads`가 비어 있고 바로 9-2를 부른다
+- **사진 크기에 따라 올리는 방식이 갈린다** — 10MB 이하는 URL 하나로 한 번에(`SINGLE`), 10MB를 넘으면(최대 100MB) S3 Multipart Upload로 조각을 나눠 올린다(`MULTIPART`). 방식은 서버가 9-1에서 받은 크기로 정한다
+- **수정(9-3)에서 새 사진을 넣을 때도 같은 확정(9-2)을 거친다** — 새 사진이 없으면 9-3이 바로 반영한다
 
-- **Response `200 OK`** — `files`와 같은 순서로 매핑
+### 9-1. `POST /api/v1/record-cards` — 기록 카드 작성 요청 (업로드 URL 발급)
 
-```json
-{
-  "uploads": [
-    {
-      "imageKey": "record-cards/01a0f2d4-.../images/9f1c2b7e-....jpg",
-      "uploadUrl": "https://..."
-    }
-  ]
-}
-```
-
-- `imageKey` 포맷은 `record-cards/{userId}/images/{imageId}.{확장자}`다 — 소유자 검증에 쓰이므로 클라가 임의로 만들지 않는다. 확장자·업로드 헤더(`Content-Type` 소문자 정규값)·`uploadUrl` 유효 시간(운영값, 현재 10분)은 11-1과 같다
-- **발급만으로는 카드에 붙지 않는다** — 9-2·9-3에 `imageKey`를 실어야 붙는다. 쓰지 않은 객체는 S3에 남는다
-
-- **에러 (400 Bad Request)**: 11-1의 형식·크기 문구에 아래가 더해진다
-
-```json
-{
-  "code": "INVALID_REQUEST",
-  "message": "사진은 1장 이상 10장 이하로 요청해야 합니다."
-}
-```
-
-- **인증**: 필요
-
-### 9-2. `POST /api/v1/record-cards` — 기록 카드 생성
-
+- **화면**: 기록 카드 작성 — 생성 버튼
 - **Request**
 
 ```json
 {
   "runningRecordId": 501,
-  "visibility": "PUBLIC",
+  "activityType": "DAILY",
   "memo": "한강 야간 러닝, 바람이 좋았다",
-  "imageKeys": [
-    "record-cards/01a0f2d4-.../images/9f1c2b7e-....jpg"
+  "visibility": "PUBLIC",
+  "images": [
+    { "mimeType": "image/jpeg", "fileSizeBytes": 204800, "caption": "다리 밑에서 본 노을" },
+    { "mimeType": "image/png", "fileSizeBytes": 512000 }
   ],
   "thumbnailIndex": 0
 }
@@ -2587,19 +2696,63 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
 | `runningRecordId` | Integer | O | 카드를 붙일 내 러닝 기록 |
+| `activityType` | String | O | `DAILY` · `TRAVEL` · `RACE` |
+| `memo` | String | O | **회고 글**, 1~500자. 공백만 있으면 400 — AI가 기본곡을 만들 때 감정·여운을 읽는다 |
 | `visibility` | String | O | `FRIENDS` · `PUBLIC` · `PRIVATE`. 기본값을 서버에 두지 않는다 — 작성 화면 기본 선택은 클라가 `PUBLIC`으로 둔다 |
-| `memo` | String | X | 500자 이하. 생략하거나 빈 문자열이면 메모 없음(null) |
-| `imageKeys` | String[] | X | 0개 이상 10개 이하. 9-1이 발급하고 업로드를 마친 key. **배열 순서 = 캐러셀 순서**. 생략하면 빈 배열과 같다(사진 없이 지도+기본곡만) |
-| `thumbnailIndex` | Integer | X | 썸네일로 쓸 사진의 `imageKeys` 위치(0부터). **생략하면 0(첫 사진)**. 사진이 없으면 보내지 않는다 — 보내면 400 |
+| `images` | Array | X | 올릴 사진 0~10장. **배열 순서 = 캐러셀 순서**. 생략하면 빈 배열과 같다(사진 없이 지도+기본곡만) |
+| `images[].mimeType` | String | O | `image/jpeg`·`image/png`·`image/webp`만 허용(대소문자 무시) — 11-1과 같다 |
+| `images[].fileSizeBytes` | Integer | O | 1 이상 104,857,600(100MB) 이하. 실제 업로드 크기와 같아야 한다 — 한 번에 올리면 서명에 들어가고, 나눠 올리면 조각 수가 이 값으로 정해진다 |
+| `images[].caption` | String | X | 사진 설명(선택), 100자 이하. **생략·빈 문자열·공백만이면 설명 없음**(null로 저장 — 400이 아니다). AI가 사진만으로 장면을 알기 어려울 때 그 사진의 음악 재료로 쓴다(9-5 `images[].caption`) |
+| `thumbnailIndex` | Integer | X | 썸네일로 쓸 사진의 `images` 위치(0부터). **생략하면 0(첫 사진)**. 사진이 없으면 보내지 않는다 — 보내면 400 |
 
-- **Response `201 Created`**: 기록 카드 공통 객체 — 음악은 전부 `status = PENDING`, `musicUrl = null`이다
-- **동작**
-  - 카드와 사진 행을 한 트랜잭션에 저장한다. **이 기록에 지운 카드가 있으면 새 행을 넣지 않고 그 행을 되살린다** — `deleted_at`을 비우고 공개 범위·메모를 새 값으로 덮고 새 사진 행을 넣는다(옛 사진 행은 9-4에서 이미 지워졌다). 기본곡도 새 key로 다시 만든다. 순위(`display_order`)는 맨 뒤(최댓값 + 1)가 된다. `recordCardId`·`createdAt`은 예전 값 그대로다(`erd.md` `record_cards` 되살리기). 음악 key는 서버가 이때 정해(`record-cards/{userId}/music/{musicId}`) 기본곡은 `record_cards.base_music_key`, 사진 음악은 `record_card_images.music_key`에 넣는다
-  - **순위는 그 사람의 살아 있는 카드 중 최댓값 + 1이다**(첫 카드면 1). 썸네일은 `thumbnailIndex` 위치 사진의 key를 `record_cards.thumbnail_image_key`에 복사한다
-  - **커밋한 뒤 음악마다 생성 요청 이벤트를 하나씩 보낸다**(기본곡 1 + 사진 수, 9-5)
-- **검증 순서**: 요청 형식(400) → 기록이 있고 내 것인지(404) → 이미 카드가 있는지(409) → 사진 key(400)
+- **Response `200 OK`** — 카드는 아직 없다. `uploads`는 `images`와 같은 순서다
+
+```json
+{
+  "recordCardDraftId": "3f2a9c1e-7b4d-4e0a-9c55-1d2e3f4a5b6c",
+  "expiresAt": "2026-07-25T21:40:00",
+  "uploads": [
+    {
+      "imageKey": "record-cards/01a0f2d4-.../images/9f1c2b7e-....jpg",
+      "uploadType": "SINGLE",
+      "uploadUrl": "https://..."
+    },
+    {
+      "imageKey": "record-cards/01a0f2d4-.../images/2b7e9f1c-....png",
+      "uploadType": "MULTIPART",
+      "partSizeBytes": 10485760,
+      "parts": [
+        { "partNumber": 1, "uploadUrl": "https://..." },
+        { "partNumber": 2, "uploadUrl": "https://..." },
+        { "partNumber": 3, "uploadUrl": "https://..." }
+      ]
+    }
+  ]
+}
+```
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `recordCardDraftId` | String | O | 이번 작성 요청의 **초안 ID**(UUID). Redis에서 작성 내용을 찾는 열쇠다. 9-2에 넘긴다. 확정된 카드의 `recordCardId`(숫자)와 다르다 |
+| `expiresAt` | String | O | 이 시각까지 9-2로 확정해야 한다(운영값, 현재 발급 뒤 30분) |
+| `uploads` | Array | O | 사진마다 업로드할 곳. 사진이 없으면 빈 배열 |
+| `uploads[].imageKey` | String | O | 사진 S3 key — `record-cards/{userId}/images/{imageId}.{확장자}`. 서버가 정한다 |
+| `uploads[].uploadType` | String | O | `SINGLE`(10MB 이하, 한 번에) · `MULTIPART`(10MB 초과, 조각으로) |
+| `uploads[].uploadUrl` | String | X | `SINGLE`일 때만. presigned PUT URL — 업로드 헤더 `Content-Type`(소문자 정규값)·유효 시간(운영값, 현재 10분)은 11-1과 같다 |
+| `uploads[].partSizeBytes` | Integer | X | `MULTIPART`일 때만. 조각 크기(현재 10MB). 마지막 조각만 이보다 작다 |
+| `uploads[].parts` | Array | X | `MULTIPART`일 때만. 조각마다 `partNumber`(1부터)와 presigned PUT URL. 조각 수 = `fileSizeBytes ÷ partSizeBytes` 올림 |
+
+- **나눠 올리기(`MULTIPART`)**
+  - 서버가 사진마다 S3 Multipart Upload를 시작하고, **S3가 준 `UploadId`는 앱에 주지 않고 초안에만 둔다** — 앱은 조각 URL로 올리기만 한다
+  - 앱은 파일을 `partSizeBytes`씩 잘라 `partNumber`에 맞는 URL로 PUT한다. 병렬로 올려도 되고, 실패한 조각만 다시 올리면 된다
+  - 조각을 합치는 일(`CompleteMultipartUpload`)은 9-2에서 서버가 한다 — 앱이 조각별 ETag를 모아 보낼 필요가 없다(서버가 `ListParts`로 읽는다)
+  - 조각 URL의 유효 시간은 초안과 같다(현재 30분) — 큰 파일은 모바일에서 오래 걸릴 수 있어서다
+
+- **검사 순서**: 요청 형식(400) → 기록이 있고 내 것인지(404) → 이미 카드가 있는지(409). **사진이 올라왔는지는 9-2에서 본다**
   - 숨긴 방(`running_rooms.deleted_at` 있음)의 기록은 없는 기록으로 본다 — 7-1에서 빠지는 것과 맞춘다
-  - 사진 key는 11-2와 같이 본인 프리픽스(`record-cards/{userId}/images/`)인지, S3에 올라왔는지, 크기·`Content-Type`이 허용값인지 본다
+  - 사진을 올리기 전에 기록·회고 글·중복을 걸러, 쓸모없는 업로드를 하지 않게 한다
+- **작성 내용은 Redis에만 둔다** — DB에는 아무것도 쓰지 않는다.
+- **같은 기록으로 다시 요청하면 새 `recordCardDraftId`가 나온다** — 이전 요청은 유효 시간까지 남지만, 먼저 확정한 쪽만 카드가 된다(다른 쪽 확정은 409)
 
 - **에러 (400 Bad Request — 요청 검증)**
 
@@ -2611,12 +2764,22 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 {
   "code": "INVALID_REQUEST",
-  "message": "공개 범위는 필수입니다."
+  "message": "활동 유형은 필수입니다."
 }
 
 {
   "code": "INVALID_REQUEST",
-  "message": "메모는 500자 이하여야 합니다."
+  "message": "회고 글은 필수입니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "회고 글은 500자 이하여야 합니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "공개 범위는 필수입니다."
 }
 
 {
@@ -2626,7 +2789,17 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 {
   "code": "INVALID_REQUEST",
-  "message": "같은 사진을 두 번 넣을 수 없습니다."
+  "message": "사진 설명은 100자 이하여야 합니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "이미지는 JPEG, PNG, WEBP 형식만 업로드할 수 있습니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "이미지는 100MB 이하만 업로드할 수 있습니다."
 }
 
 {
@@ -2635,23 +2808,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 }
 ```
 
-- **에러 (400 Bad Request — 본인 key가 아니거나, 올라간 파일이 10MB를 넘거나 `Content-Type`이 허용값이 아님)**
-
-```json
-{
-  "code": "INVALID_RECORD_CARD_IMAGE",
-  "message": "기록 카드 사진이 올바르지 않습니다."
-}
-```
-
-- **에러 (400 Bad Request — key에 해당하는 객체가 S3에 없음)**
-
-```json
-{
-  "code": "RECORD_CARD_IMAGE_NOT_UPLOADED",
-  "message": "업로드되지 않은 이미지입니다."
-}
-```
+- 이미지 형식·크기의 나머지 문구(필수·1바이트 이상)는 11-1과 같다
 
 - **에러 (404 Not Found — 기록이 없거나 내 기록이 아님)**
 
@@ -2671,8 +2828,77 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 }
 ```
 
-- **기록과 카드는 1:1이다** — 다시 만들고 싶으면 9-3으로 고치거나 9-4로 지운 뒤 만든다. 처음 만드는 요청이 동시에 두 번 오면 `running_record_id` UNIQUE가 하나만 남기고 나머지는 409다. 지운 카드를 되살리는 요청이 겹치면 카드 행을 잠그고 처리해, 뒤의 요청은 살아 있는 카드를 보고 409다
 - **인증**: 필요
+
+### 9-2. `POST /api/v1/record-cards/drafts/{recordCardDraftId}/complete` — 업로드 확정
+
+- **화면**: 기록 카드 작성·편집 — 사진 업로드를 마친 직후(사진이 없으면 9-1 응답 직후)
+- **Request**: 본문 없음. `recordCardDraftId`는 9-1 또는 9-3이 준 값
+- **동작**
+  1. Redis에서 `recordCardDraftId`의 초안을 읽는다 — 없거나, 만료됐거나, 다른 사람의 것이면 404
+  2. 새 사진마다 S3를 확인한다
+     - `SINGLE`: 11-2와 같이 객체가 있는지(HEAD), 크기·`Content-Type`이 9-1(또는 9-3)에서 받은 값과 맞는지 본다
+     - `MULTIPART`: `ListParts`로 조각이 전부 올라왔는지(개수·크기) 보고, `CompleteMultipartUpload`로 합친 뒤 위와 같이 HEAD로 확인한다. 합친 사진은 초안에 "합침"으로 표시해 두어, 다른 사진 때문에 확정이 실패해 다시 부를 때 다시 합치지 않는다
+  3. 확정 시점에 다시 검사한다 — 9-1 뒤에 다른 요청이 먼저 카드를 만들었으면 409, 9-3 뒤에 카드가 바뀌었으면 409 `RECORD_CARD_CHANGED`, 카드가 지워졌으면 404
+  4. DB에 한 트랜잭션으로 반영한다
+     - **작성(9-1에서 온 것)**: 카드·사진 행을 저장한다. **이 기록에 지운 카드가 있으면 새 행을 넣지 않고 그 행을 되살린다** — `deleted_at`을 비우고 공개 범위·활동유형·회고 글을 새 값으로 덮고 새 사진 행을 넣는다(옛 사진 행은 9-4에서 이미 지워졌다). 순위(`display_order`)는 살아 있는 내 카드 중 최댓값 + 1이고, 되살려도 맨 뒤가 된다. 기본곡도 새로 만든다. `recordCardId`·`createdAt`은 되살릴 때 예전 값 그대로다(`erd.md` `record_cards` 되살리기)
+     - **수정(9-3에서 온 것)**: 9-3이 받은 변경을 한 번에 반영한다(아래 9-3 사진 처리)
+     - 음악 key는 서버가 이때 정해(`record-cards/{userId}/music/{musicId}`) 기본곡은 `record_cards.base_music_key`, 사진 음악은 `record_card_images.music_key`에 넣는다. 썸네일은 `thumbnailIndex` 위치 사진의 key를 `record_cards.thumbnail_image_key`에 복사한다
+  5. 커밋한 뒤 임시 정보를 "확정됨"으로 바꾸고, 음악 생성을 요청한다 — 작성이면 기본곡 + 사진 전부, 수정이면 새 사진만(9-5)
+- **Response**
+  - 작성: `201 Created` — 기록 카드 공통 객체. 음악은 전부 `status = PENDING`, `musicUrl = null`이다
+  - 수정: `200 OK` — 수정된 기록 카드 공통 객체
+- **사진 확인에 실패하면 아무것도 저장하지 않고 임시 정보도 그대로 둔다** — 앱은 빠진 사진을 다시 올리고 다시 확정하면 된다. 업로드 URL이 만료됐으면 9-1(또는 9-3)부터 다시 한다
+- **같은 `recordCardDraftId`로 다시 부르면 처음 확정한 결과를 그대로 돌려준다** — 응답을 받지 못한 재시도가 두 번째 카드를 만들거나 409를 받지 않게 한다. "확정됨" 표시는 임시 정보의 유효 시간까지 남는다
+- **동시에 두 번 오면 하나만 처리한다** — `recordCardDraftId` 단위로 잠그고, 뒤의 요청은 앞의 결과를 기다려 같은 응답을 받는다
+
+- **에러 (400 Bad Request — 사진 key에 해당하는 객체가 S3에 없음, 나눠 올린 조각이 빠짐)**
+
+```json
+{
+  "code": "RECORD_CARD_IMAGE_NOT_UPLOADED",
+  "message": "업로드되지 않은 이미지입니다."
+}
+```
+
+- **에러 (400 Bad Request — 올라간 파일의 크기·`Content-Type`이 요청과 다름)**
+
+```json
+{
+  "code": "INVALID_RECORD_CARD_IMAGE",
+  "message": "기록 카드 사진이 올바르지 않습니다."
+}
+```
+
+- **에러 (404 Not Found — `recordCardDraftId`가 없거나 만료됐거나 내 것이 아님, 수정 대상 카드가 지워짐)**
+
+```json
+{
+  "code": "NOT_FOUND",
+  "message": "요청한 리소스를 찾을 수 없습니다."
+}
+```
+
+- **에러 (409 Conflict — 작성: 그사이 이 기록에 다른 카드가 확정됨)**
+
+```json
+{
+  "code": "RECORD_CARD_ALREADY_EXISTS",
+  "message": "이미 기록 카드가 있는 러닝입니다."
+}
+```
+
+- **에러 (409 Conflict — 수정: 9-3 뒤에 카드가 다른 수정으로 바뀜)**
+
+```json
+{
+  "code": "RECORD_CARD_CHANGED",
+  "message": "기록 카드가 그사이 바뀌었습니다. 다시 불러와 수정해 주세요."
+}
+```
+
+- **카드가 바뀌었는지는 9-3 때의 `record_cards.updated_at`과 비교한다** — 이미 올린 사진의 ID·순서가 9-3을 보낸 화면 기준이라, 그 뒤에 바뀐 카드에 덮으면 사진이 섞인다
+- **인증**: 필요 (초안을 만든 사람)
 
 ### 9-3. `PATCH /api/v1/record-cards/{recordCardId}` — 기록 카드 수정
 
@@ -2681,11 +2907,12 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 ```json
 {
-  "memo": "",
+  "memo": "바람이 좋았던 한강 러닝",
+  "activityType": "TRAVEL",
   "visibility": "FRIENDS",
   "images": [
-    { "recordCardImageId": 301 },
-    { "imageKey": "record-cards/01a0f2d4-.../images/2b7e9f1c-....jpg" }
+    { "recordCardImageId": 301, "caption": "다리 밑에서 본 노을" },
+    { "mimeType": "image/jpeg", "fileSizeBytes": 204800, "caption": "결승선 앞" }
   ],
   "thumbnailIndex": 1
 }
@@ -2693,26 +2920,36 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| `memo` | String | X | 500자 이하. **빈 문자열이면 메모를 지운다** |
+| `memo` | String | X | 회고 글, 1~500자. **지울 수 없다** — 보내면 공백만 있는 값은 400 |
+| `activityType` | String | X | `DAILY` · `TRAVEL` · `RACE` |
 | `visibility` | String | X | `FRIENDS` · `PUBLIC` · `PRIVATE` |
-| `images` | Array | X | **수정 뒤의 사진 전체를 순서대로** 보낸다(0~10개). 항목마다 `recordCardImageId`(남길 기존 사진)나 `imageKey`(새 사진) 중 **정확히 하나** |
+| `images` | Array | X | **수정 뒤의 사진 전체를 순서대로** 보낸다(0~10개). 항목마다 `recordCardImageId`(카드에 계속 둘 이미 올린 사진) **또는** `mimeType`·`fileSizeBytes`(새로 올릴 사진, 9-1과 같은 규칙) 중 **한 가지**. **`caption`은 두 종류 모두에 넣을 수 있다**(선택, 100자 이하) |
+| `images[].caption` | String | X | **수정 뒤의 설명**이다 — 사진 목록이 수정 뒤 전체이듯 설명도 그렇다. **이미 올린 사진도 지금 설명을 그대로 다시 보낸다** — 생략·빈 문자열·공백만이면 설명을 지운다. 새 사진은 9-1과 같다 |
 | `thumbnailIndex` | Integer | X | 썸네일로 쓸 사진 위치(0부터) — `images`를 보냈으면 그 배열 기준, 생략했으면 지금 순서 기준 |
 
 - **필드를 생략하면 현재 값을 그대로 둔다** — `images`를 생략하면 사진은 그대로, 빈 배열이면 사진을 전부 뺀다
-- **사진 처리**
-  - 남긴 사진(`recordCardImageId`)은 음악과 생성 상태를 그대로 두고 순서만 다시 매긴다
-  - 새 사진(`imageKey`)은 음악 key를 새로 정해 `PENDING`으로 넣고, **커밋한 뒤 그 사진들의 음악만 생성을 요청한다**(9-5)
+- **새 사진이 없으면 바로 반영한다** — `Response 200 OK`: 수정된 기록 카드 공통 객체
+- **새 사진이 있으면 아직 반영하지 않는다** — 변경 전체를 Redis에 임시 저장하고 업로드 URL을 내준다. 앱이 사진을 올리고 9-2로 확정하면 그때 **회고 글·공개 범위 등 다른 변경까지 한 번에** 반영한다. 확정 전까지 카드는 그대로다
+  - `Response 202 Accepted`: 9-1 응답과 같은 모양(`recordCardDraftId`·`expiresAt`·`uploads`). `uploads`는 `images` 안의 새 사진만, 그 순서대로 담는다
+- **사진 처리**(바로 반영할 때와 9-2 확정 때 같다)
+  - 이미 올린 사진(`recordCardImageId`)은 음악과 생성 상태를 그대로 두고 순서와 설명을 다시 매긴다 — **설명을 바꿔도 음악은 다시 만들지 않는다**(기본곡과 같다). 음악은 옛 설명으로 만든 그대로다
+  - **`images`를 생략하면 설명도 그대로다** — 설명만 바꾸려 해도 사진 목록 전체를 보낸다
+  - 새 사진은 음악 key를 새로 정해 `PENDING`으로 넣고, **커밋한 뒤 그 사진들의 음악만 생성을 요청한다**(9-5)
   - 목록에서 빠진 사진은 행을 지운다 — 그 사진의 음악도 함께 버린다. 생성 중이었다면 나중에 오는 완료 이벤트는 무시된다
 - **썸네일 처리**: `thumbnailIndex`를 보내면 그 사진으로 바꾼다. 생략하면 지금 썸네일을 유지하되, 그 사진이 빠졌으면 수정 뒤 첫 사진으로, 사진이 하나도 없으면 null로 바꾼다
-- **기본곡은 다시 만들지 않는다** — 메모·공개 범위·사진을 바꿔도 기본곡은 그대로다
-- **Response `200 OK`**: 수정된 기록 카드 공통 객체
+- **기본곡은 다시 만들지 않는다** — 회고 글·활동유형·공개 범위·사진을 바꿔도 기본곡은 그대로다. 회고 글·활동유형을 바꿀 때 다시 만들지는 AI 쪽 정책이 정해지면 정한다
 
 - **에러 (400 Bad Request — 요청 검증)**
 
 ```json
 {
   "code": "INVALID_REQUEST",
-  "message": "메모는 500자 이하여야 합니다."
+  "message": "회고 글은 500자 이하여야 합니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "회고 글은 비어 있을 수 없습니다."
 }
 
 {
@@ -2722,7 +2959,12 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 {
   "code": "INVALID_REQUEST",
-  "message": "사진 항목에는 기존 사진 ID와 새 사진 키 중 하나만 넣어야 합니다."
+  "message": "사진 항목에는 기존 사진 ID와 새 사진 정보 중 하나만 넣어야 합니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
+  "message": "사진 설명은 100자 이하여야 합니다."
 }
 
 {
@@ -2736,21 +2978,14 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 }
 ```
 
-- **에러 (400 Bad Request — 새 사진 key가 올바르지 않거나, `recordCardImageId`가 이 카드의 사진이 아님)**
+- 새 사진의 형식·크기 문구는 9-1과 같다
+
+- **에러 (400 Bad Request — `recordCardImageId`가 이 카드의 사진이 아님)**
 
 ```json
 {
   "code": "INVALID_RECORD_CARD_IMAGE",
   "message": "기록 카드 사진이 올바르지 않습니다."
-}
-```
-
-- **에러 (400 Bad Request — 새 사진 key에 해당하는 객체가 S3에 없음)**
-
-```json
-{
-  "code": "RECORD_CARD_IMAGE_NOT_UPLOADED",
-  "message": "업로드되지 않은 이미지입니다."
 }
 ```
 
@@ -2764,12 +2999,12 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 ```
 
 - **내 카드가 아니어도 404다** — 8-1과 같이 남의 카드가 있는지 드러내지 않는다
-- **같은 카드에 대한 수정은 카드 행을 잠그고 처리한다** — 두 수정이 동시에 사진 순서를 다시 매기면 순서가 겹친다(`erd.md` `record_card_images`)
+- **같은 카드에 대한 반영은 카드 행을 잠그고 처리한다** — 두 수정이 동시에 사진 순서를 다시 매기면 순서가 겹친다(`erd.md` `record_card_images`). 9-2 확정도 같은 잠금을 쓴다
 - **인증**: 필요 (작성자)
 
 ### 9-4. `DELETE /api/v1/record-cards/{recordCardId}` — 기록 카드 삭제
 
-- **동작**: `record_cards.deleted_at` 소프트 삭제 — 8-1·10-3·7-1 `recordCardId`에서 빠진다. **순위(`display_order`)는 -1이 되고, 남은 카드의 순위는 당기지 않는다.** **사진 행은 지우고**(하드 삭제) 썸네일 key도 비운다. 카드 행과 S3 객체(사진·음악)는 그대로 둔다
+- **동작**: `record_cards.deleted_at` 소프트 삭제 — 8-1·10-3에서 빠진다. **순위(`display_order`)는 -1이 되고, 남은 카드의 순위는 당기지 않는다.** **사진 행은 지우고**(하드 삭제) 썸네일 key도 비운다. 카드 행과 S3 객체(사진·음악)는 그대로 둔다
 - **지운 뒤 같은 기록으로 다시 만들 수 있다** — 9-2가 지운 행을 되살린다. 행이 남아 있어 기록과 카드는 1:1을 유지한다
 - 생성 중이던 음악의 완료 이벤트는 무시된다(9-5)
 - **Response**: `204 No Content`
@@ -2787,53 +3022,151 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 ### 9-5. 음악 생성 이벤트 (Kafka, 내부)
 
-앱이 부르는 API가 아니다 — running-service와 AI 서비스 사이의 계약이다. 서버는 **요청을 보내고 완료를 받아 상태만 바꾼다.** 음악을 어떻게 만드는지는 AI 서비스가 맡는다.
+앱이 부르는 API가 아니다 — running-service와 AI 서버 사이의 계약이다. **running-service는 카드를 저장한 뒤 요청 이벤트를 Kafka에 발행하고, AI 서버가 음악을 다 만들면 완료 이벤트를 Kafka에 발행한다. running-service는 완료 토픽을 구독해 음악 생성 상태만 바꾼다.** 음악을 어떻게 만드는지(모델·추론 인프라)는 AI 서버가 맡는다 — running-service는 AI 서버를 직접 호출하지 않는다.
 
-> **아직 정하지 않은 것**: 토픽 이름·파티션 키·컨슈머 그룹·직렬화(아래는 초안), AI가 생성에 쓸 입력(아래 필드 외에 기록 수치·메모를 실을지), 음악 파일 형식. **Kafka는 저장소에 아직 없는 의존성이다** — 도입은 구현 PR에서 따로 정한다.
+| 토픽 | 방향 | 단위 | 파티션 키 |
+|---|---|---|---|
+| `{env}.record-card.music.requested` | running-service → AI | 카드 저장 한 번(작성·수정·되살리기)에 이벤트 하나 | `recordCardId` |
+| `{env}.record-card.music.generated` | AI → running-service | 요청 이벤트 하나에 완료 이벤트 하나 | `recordCardId` |
 
-**`record-card.music.requested`** (running-service → AI) — 음악 하나에 이벤트 하나
+- **직렬화는 JSON**이다. 시각은 다른 API와 같이 `LocalDateTime` 문자열이다.
+- **파티션 키를 `recordCardId`로 둔다** — 한 카드의 요청·완료가 같은 파티션에 들어가 순서가 섞이지 않는다.
+- **완료 토픽은 running-service 전체가 컨슈머 그룹 하나로 구독한다** — ALB 뒤에 인스턴스가 여럿이어도 완료 이벤트 하나는 한 인스턴스만 처리한다. 상태 변경은 DB에만 쓰고 인스턴스 메모리에 두지 않으므로 어느 인스턴스가 받아도 같다.
+
+#### 환경 분리 — 이름 앞에 `{env}`
+
+개발 서버와 테스트 서버는 **Kafka 클러스터 하나를 같이 쓴다.** 그래서 토픽·컨슈머 그룹·계정 이름 앞에 환경 이름을 붙여 서로의 이벤트를 아예 보지 못하게 한다.
+
+- **`{env}` 값은 `dev` · `test` · `prod`** 중 하나다. 운영은 클러스터가 달라도 같은 규칙으로 `prod`를 붙인다 — 환경마다 이름 짓는 법이 달라지지 않게 한다.
+- **이벤트 안에 환경 필드를 넣어 걸러 내지 않는다** — 그러면 남의 환경 이벤트를 받은 뒤에야 버리게 되고, 거르는 코드를 빠뜨린 쪽은 남의 이벤트를 그대로 처리한다. 토픽이 다르면 애초에 받지 않는다.
+- **모든 이름은 `{env}.`로 시작한다** — 토픽·그룹·계정 모두 같다. **구분자는 `.`과 `-`만 쓴다** — Kafka는 메트릭 이름에서 `.`과 `_`를 같게 보므로 `_`는 쓰지 않는다.
+
+| 대상 | 이름 | 비고 |
+|---|---|---|
+| 요청 토픽 | `{env}.record-card.music.requested` | |
+| 완료 토픽 | `{env}.record-card.music.generated` | |
+| running-service 컨슈머 그룹 | `{env}.running-service.record-card-music` | 완료 토픽을 구독한다. 인스턴스가 여럿이어도 그룹은 하나다 |
+| AI 서버 컨슈머 그룹 | `{env}.runiverse-ai.record-card-music` | 요청 토픽을 구독한다. AI 서버가 쓰고, 권한만 여기서 정한다 |
+| running-service 계정 | `{env}.running-service` | SASL 사용자 이름 |
+| AI 서버 계정 | `{env}.runiverse-ai` | SASL 사용자 이름 |
+
+- **컨슈머 그룹은 받는 쪽마다 하나다** — running-service는 완료 토픽을, AI 서버는 요청 토픽을 받으므로 그룹이 두 개다. running-service 인스턴스끼리는 같은 그룹이라 이벤트를 나눠 받는다.
+- **계정도 환경마다 따로 둔다** — 계정이 환경 사이에 같으면 권한으로 막을 수 없어, 설정을 잘못 넣은 개발 서버가 테스트 토픽을 읽어도 클러스터가 허락한다. 계정을 나누면 잘못된 설정은 접속 단계에서 권한 오류로 끝난다.
+
+#### 접속 보안 — TLS + SASL + ACL
+
+- **전송은 TLS, 인증은 SASL/SCRAM-SHA-512** — `security.protocol=SASL_SSL`, `sasl.mechanism=SCRAM-SHA-512`. SCRAM은 비밀번호를 그대로 보내지 않는다.
+- **토픽은 관리자가 미리 만든다** — 클러스터의 `auto.create.topics.enable=false`, 두 서비스 계정에는 `CREATE` 권한을 주지 않는다. 이름을 잘못 쓴 토픽이 저절로 생기지 않게 한다. 파티션 수·복제 수·보관 기간은 운영값이다.
+- **ACL은 이름 하나씩(LITERAL) 준다** — 접두어(PREFIXED)로 묶지 않는다. 토픽이 두 개뿐이라 하나씩 줘도 번거롭지 않고, 나중에 같은 접두어로 생긴 토픽에 권한이 따라가지 않는다.
+
+| 계정 | 리소스 | 허용 동작 |
+|---|---|---|
+| `{env}.running-service` | 토픽 `{env}.record-card.music.requested` | `WRITE`, `DESCRIBE` |
+| `{env}.running-service` | 토픽 `{env}.record-card.music.generated` | `READ`, `DESCRIBE` |
+| `{env}.running-service` | 그룹 `{env}.running-service.record-card-music` | `READ` |
+| `{env}.runiverse-ai` | 토픽 `{env}.record-card.music.requested` | `READ`, `DESCRIBE` |
+| `{env}.runiverse-ai` | 토픽 `{env}.record-card.music.generated` | `WRITE`, `DESCRIBE` |
+| `{env}.runiverse-ai` | 그룹 `{env}.runiverse-ai.record-card-music` | `READ` |
+
+- 브로커가 Kafka 3.0 미만이면 멱등 프로듀서에 클러스터 `IDEMPOTENT_WRITE`가 더 필요하다.
+
+#### running-service 환경 변수
+
+| 변수 | 예 | 설명 |
+|---|---|---|
+| `KAFKA_ENV` | `dev` | `{env}` 값. **토픽 두 개와 컨슈머 그룹 이름을 이 값 하나로 만든다** — 이름마다 변수를 두면 하나만 바꾸다 환경이 섞인다. `dev`·`test`·`prod`가 아니면 기동하지 않는다 |
+| `KAFKA_BOOTSTRAP_SERVERS` | `b-1.xxx:9096,b-2.xxx:9096` | 쉼표로 구분 |
+| `KAFKA_SECURITY_PROTOCOL` | `SASL_SSL` | 배포 환경은 항상 `SASL_SSL`. 로컬 Docker Kafka만 `PLAINTEXT` |
+| `KAFKA_SASL_MECHANISM` | `SCRAM-SHA-512` | |
+| `KAFKA_SASL_USERNAME` | `dev.running-service` | `{env}.running-service` |
+| `KAFKA_SASL_PASSWORD` | | 시크릿 — 로그·출력에 남기지 않는다 |
+| `KAFKA_SSL_CA_LOCATION` | `/app/config/kafka-ca.crt` | 브로커를 검증할 CA 인증서(PEM) 경로 — `ssl.truststore.type=PEM`으로 읽어 비밀번호가 없다. 상대 경로는 실행 디렉터리 기준이라 배포에서는 절대 경로를 쓴다 |
+
+- **호스트 검증을 켠다** — `ssl.endpoint.identification.algorithm=https`(Kafka 클라이언트 기본값, 명시해 둔다). 접속 주소가 인증서에 든 주소와 같은지 확인하므로, IP로 접속하면 인증서 SAN에 그 IP가 있어야 한다. 끄지 않는다.
+
+**`{env}.record-card.music.requested`** (running-service → AI)
 
 ```json
 {
-  "musicKey": "record-cards/01a0f2d4-.../music/5c3e1a9d-...",
-  "kind": "IMAGE",
+  "requestId": "01a0f2d4-6180-7000-8000-446655440099",
   "recordCardId": 88,
-  "runningRecordId": 501,
-  "imageKey": "record-cards/01a0f2d4-.../images/9f1c2b7e-....jpg",
+  "memo": "비 그치고 한강을 달렸다. 생각보다 숨이 덜 찼다.",
+  "activityType": "DAILY",
+  "run": {
+    "averagePaceSecondsPerKm": 330,
+    "totalDistanceMeters": 5000,
+    "averageCadenceSpm": 172,
+    "weatherCode": 61
+  },
+  "baseMusic": {
+    "musicKey": "record-cards/01a0f2d4-.../music/5c3e1a9d-..."
+  },
+  "images": [
+    {
+      "recordCardImageId": 301,
+      "imageKey": "record-cards/01a0f2d4-.../images/9f1c2b7e-....jpg",
+      "caption": "다리 밑에서 본 노을",
+      "musicKey": "record-cards/01a0f2d4-.../music/7d2e4f10-..."
+    }
+  ],
   "requestedAt": "2026-07-25T21:10:00"
 }
 ```
 
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| `musicKey` | String | O | **AI가 음악을 올릴 S3 key** — 서버가 정한다. 완료 이벤트도 이 값으로 돌아온다 |
-| `kind` | String | O | `BASE`(기본곡) · `IMAGE`(사진 음악) |
+| `requestId` | String | O | 요청 ID(UUID v7). 완료 이벤트가 그대로 돌려준다 — 로그·추적용이고, 상태를 찾는 데는 `musicKey`를 쓴다 |
 | `recordCardId` | Integer | O | 카드 ID |
-| `runningRecordId` | Integer | O | 카드가 붙은 기록 ID |
-| `imageKey` | String | X | `IMAGE`일 때 그 사진의 S3 key. `BASE`이면 null |
+| `memo` | String | O | 회고 글(1~500자). 기본곡의 감정·여운 재료 |
+| `activityType` | String | O | `DAILY` · `TRAVEL` · `RACE` — 카드 단위 |
+| `run` | Object | O | 카드가 붙은 러닝 기록의 수치. **발행할 때 `running_records`에서 읽어 싣는다** — AI 서버는 기록을 조회하지 않는다 |
+| `run.averagePaceSecondsPerKm` | Integer | O | 평균 페이스(초/km) |
+| `run.totalDistanceMeters` | Integer | O | 거리(미터) |
+| `run.averageCadenceSpm` | Integer | X | 평균 케이던스(spm). 기록에 없으면 null |
+| `run.weatherCode` | Integer | O | WMO 4677 코드(0~99). **조회 실패 폴백(`0`)과 실제 맑음을 구분할 수 없다** — 기록 쪽 한계다(erd `running_records.weather_code`) |
+| `baseMusic` | Object | X | 기본곡을 만들어야 하면 `{musicKey}`. **수정 요청에서는 null이다** — 기본곡은 다시 만들지 않는다 |
+| `images` | Array | O | 음악을 만들 사진. **이번 저장에서 새로 넣은 사진만** 싣는다. 없으면 빈 배열 |
+| `images[].recordCardImageId` | Integer | O | 사진 ID |
+| `images[].imageKey` | String | O | 사진 S3 key — AI 서버가 S3에서 직접 읽는다 |
+| `images[].caption` | String | X | 사진 설명. 없으면 null |
+| `images[].musicKey` | String | O | 이 사진 음악을 올릴 S3 key |
 | `requestedAt` | String | O | 요청 시각 |
 
-**`record-card.music.generated`** (AI → running-service) — 음악 하나에 이벤트 하나
+- **음악 S3 key는 running-service가 정한다** — 카드·사진 행을 만들 때 key를 함께 저장하고, AI 서버는 받은 `musicKey`에 그대로 올린다. 행에는 처음부터 key가 있고 S3 객체는 완료 뒤에만 있다.
+- **`baseMusic`이 null이고 `images`가 비어 있으면 발행하지 않는다** — 사진을 늘리지 않은 수정은 만들 음악이 없다.
+
+**`{env}.record-card.music.generated`** (AI → running-service)
 
 ```json
 {
-  "musicKey": "record-cards/01a0f2d4-.../music/5c3e1a9d-...",
-  "status": "READY",
+  "requestId": "01a0f2d4-6180-7000-8000-446655440099",
+  "recordCardId": 88,
+  "results": [
+    { "musicKey": "record-cards/01a0f2d4-.../music/5c3e1a9d-...", "status": "READY" },
+    { "musicKey": "record-cards/01a0f2d4-.../music/7d2e4f10-...", "status": "FAILED" }
+  ],
   "generatedAt": "2026-07-25T21:11:30"
 }
 ```
 
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| `musicKey` | String | O | 요청 이벤트의 `musicKey` 그대로 |
-| `status` | String | O | `READY`(그 key에 S3 객체를 올렸음) · `FAILED`(만들지 못함) |
+| `requestId` | String | O | 요청 이벤트의 `requestId` 그대로 |
+| `recordCardId` | Integer | O | 요청 이벤트의 `recordCardId` 그대로 |
+| `results` | Array | O | 요청에 실은 음악마다 하나. 일부만 성공해도 한 이벤트에 함께 담는다 |
+| `results[].musicKey` | String | O | 요청 이벤트의 `musicKey` 그대로 |
+| `results[].status` | String | O | `READY`(그 key에 S3 객체를 올렸음) · `FAILED`(만들지 못함) |
 | `generatedAt` | String | O | 처리 시각 |
 
-- **받는 쪽 처리**: `musicKey`로 `record_cards.base_music_key`·`record_card_images.music_key`를 찾아 상태를 바꾼다. 둘 다 UNIQUE라 한 행만 나온다
-  - **`PENDING`인 행만 바꾼다** — Kafka는 같은 이벤트를 두 번 줄 수 있다. 이미 `READY`·`FAILED`면 무시한다
-  - **행이 없거나(수정에서 뺀 사진) 카드가 지워졌으면 무시하고 로그만 남긴다** — 오류로 보고 재시도하지 않는다
-- **요청 이벤트는 커밋한 뒤 보낸다** — 커밋 전에 보내면 롤백된 카드의 음악이 만들어진다. 커밋 뒤 발행이 실패하면 그 음악은 `PENDING`에 머문다. 아웃박스로 보장할지, 재발행 배치를 둘지는 구현 때 정한다
-- **`FAILED`를 다시 만드는 경로는 아직 없다** — 사용자가 다시 요청하는 API나 자동 재시도가 필요해지면 이 절에 더한다
+- **받는 쪽 처리**: `results`의 `musicKey`마다 `record_cards.base_music_key`·`record_card_images.music_key`에서 행을 찾아 상태를 바꾼다. 둘 다 UNIQUE라 한 행만 나온다. 한 이벤트의 결과는 한 트랜잭션에서 바꾼다
+  - **`PENDING`인 행만 바꾼다** — Kafka는 같은 이벤트를 두 번 줄 수 있다(최소 한 번 전달). 이미 `READY`·`FAILED`면 그 결과만 건너뛴다
+  - **행이 없거나(수정에서 뺀 사진·되살리며 바뀐 key) 카드가 지워졌으면 그 결과만 건너뛰고 로그를 남긴다** — 오류로 보고 재시도하지 않는다
+  - **요청에 실었는데 `results`에 빠진 음악은 `PENDING`에 남는다** — 계약 위반이라 WARN 로그를 남긴다
+  - **DB 오류로 처리하지 못하면 오프셋을 커밋하지 않는다** — 다시 받아도 위 규칙으로 한 번만 바뀐다
+- **요청 이벤트는 카드 저장을 커밋한 뒤 발행한다** — 커밋 전에 보내면 롤백된 카드의 음악이 만들어진다. 커밋 뒤 발행이 실패하면 그 음악은 `PENDING`에 머문다. 아웃박스로 보장할지, 오래 `PENDING`인 음악을 다시 발행할지는 구현 때 정한다
+- **`FAILED`를 다시 만드는 경로는 아직 없다** — AI 서버는 스스로 재시도하지 않는다. 사용자가 다시 요청하는 API나 자동 재시도가 필요해지면 이 절에 더한다(실패한 음악만 `baseMusic`·`images`에 실어 같은 요청 토픽으로 보낸다)
+
+> **아직 정하지 않은 것**: 음악 파일 형식(AI 서버는 wav로 만든다 — key에 확장자를 붙일지), 처리하지 못한 완료 이벤트를 따로 모을지(DLT). **Kafka는 저장소에 아직 없는 의존성이다** — 도입은 구현 PR에서 따로 정한다.
 
 ## 10. 프로필 페이지
 

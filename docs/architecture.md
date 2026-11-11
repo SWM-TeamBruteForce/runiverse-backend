@@ -80,6 +80,7 @@ AuthController ──▶ SignUpUsecase ──▶ SignUpHandler ──▶ SaveUse
 - **애그리거트 루트**: 루트만 외부에 노출한다. `User`가 `OauthUser`·`UserOnboarding`을 내부에 들고, 포트는 루트 단위로 저장·조회한다.
 - **애그리거트 행위**: 애그리거트가 스스로 불변식을 지킨다. 상태는 `linkOauth`·`completeOnboarding`처럼 의도가 드러나는 메서드로만 바꾸고, 위반 시 도메인 예외를 던진다. 생성 방식이 여럿이면 정적 팩토리(`User.registerWithOauth`)로 구분한다.
 - **VO**: 식별자·이메일·닉네임처럼 의미 있는 값은 원시 타입 대신 `record`로 만들어 불변·값 동등성을 강제하고 생성자에서 검증한다. 고정된 값 집합은 `enum`(`Gender`·`Provider`)으로 둔다. Request DTO의 Bean Validation과 VO 검증은 목적(400 노출 / 불변식)이 다르므로 합치지 않고, VO를 정본으로 함께 고친다. Request DTO에 커스텀 제약(`ConstraintValidator`)을 만들지 않고, 내장 제약으로 안 되는 검증은 `@AssertTrue`로 쓴다.
+- **한 도메인 패키지에 애그리거트가 여럿일 수 있다**: 패키지는 개념이 어디에 속하는지로 정하고, 애그리거트 경계는 잠금·로딩 범위로 정한다 — 둘은 따로다. `running/room`의 `RunningRoomChat`은 방에서만 생기는 개념이라 방과 같은 패키지에 두지만, `RunningRoom`이 들고 있지 않은 **별도 애그리거트**다(방은 `RunningRoomId`로만 가리킨다). 방에 넣으면 채팅 한 건마다 방 행을 잠그고 방을 불러올 때 채팅 전체가 딸려 와, 대기방의 참가·이탈과 채팅이 서로 잠금을 기다린다. 같은 패키지의 `RoomSession`·`RoomInvitation`은 방이 들고 함께 잠그는 내부 엔티티다.
 - **애그리거트 간 참조**: 객체는 ID로 참조한다(*Reference by Identity*). DB FK 여부는 수명주기와 삭제 정책에 따라 [erd.md](erd.md)를 따르며, 독립적인 논리 참조는 앱에서 무결성을 관리한다. 애그리거트 내부는 객체 참조와 FK를 사용한다.
 - **예외 구분**: VO 검증·애그리거트 불변식 위반은 `domain/`, 외부 확인이 필요한 실패(중복·조회·인증·연동)는 `application/`에 둔다. 두 레이어에 동명 `BusinessException`·`ErrorCode`가 있으니 import 시 확인한다.
 
