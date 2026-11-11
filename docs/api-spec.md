@@ -1151,7 +1151,7 @@ data:{"notificationId":912,"isRead":false,"createdAt":"2026-10-28T12:03:00","act
 
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| `type` | String | O | 알림 종류 — erd §6 `user_notifications.type` |
+| `type` | String | O | 알림 종류 — erd §5 `user_notifications.type` |
 | `isRead` | Boolean | O | 읽음 여부 |
 | `actor` | Object | O | 알림을 일으킨 사람. 탈퇴했으면 §0 탈퇴 유저 형식 |
 | `actor.relationshipType` | String | X | **지금** 나와 이 사람의 관계(§0). 알림 종류와 무관하게 늘 싣는다. 탈퇴한 사람이면 `null` |
@@ -2316,7 +2316,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | `averageCadenceSpm` | Integer | X | 평균 케이던스(spm). 기록이 없거나 유효 표본이 부족하면 null |
 | `totalElevationGainMeters` | Integer | X | 누적 상승 고도(m). 기록이 없거나 유효 표본이 부족하면 null. 일시정지 중에 오른 높이는 들어가지 않는다 |
 
-- **`status`는 `COMPLETED`·`RUNNING` 두 값뿐이다** — 러닝을 끝낸 사람은 완주든 중도이탈이든 `COMPLETED`, 아직 뛰는 중이면 `RUNNING`이다. DB의 `running_players.status`(`RUNNING_LEFT_PENALTY` 등, `erd.md` §6)를 그대로 노출하지 않는다: **페널티 여부는 본인 매칭 쿨다운 판정에 쓰는 내부 값이라 남의 화면에 실을 이유가 없다.** 얼마나 뛰었는지는 `totalDistanceMeters`로 드러난다
+- **`status`는 `COMPLETED`·`RUNNING` 두 값뿐이다** — 러닝을 끝낸 사람은 완주든 중도이탈이든 `COMPLETED`, 아직 뛰는 중이면 `RUNNING`이다. DB의 `running_players.status`(`RUNNING_LEFT_PENALTY` 등, `erd.md` §5)를 그대로 노출하지 않는다: **페널티 여부는 본인 매칭 쿨다운 판정에 쓰는 내부 값이라 남의 화면에 실을 이유가 없다.** 얼마나 뛰었는지는 `totalDistanceMeters`로 드러난다
 - `players`에는 방에서 러닝 단계에 들어간 참가자 전원을 유지하고 **시작 전 이탈자는 제외한다**. 기록이 없는 참가자는 사용자 정보와 `status`만 채워 내려가므로 화면에 "기록 없음"으로 표시한다
 - 탈퇴한 참가자는 공통 탈퇴 유저 형식으로 표시하고 `isDeleted=true`로 반환한다
 
