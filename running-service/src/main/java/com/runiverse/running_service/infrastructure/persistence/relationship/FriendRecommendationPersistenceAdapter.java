@@ -25,7 +25,7 @@ public class FriendRecommendationPersistenceAdapter implements LoadFriendRecomme
             Arrays.stream(RunningPlayerStatus.values())
                     .filter(RunningPlayerStatus::hasStartedRunning)
                     .toList();
-    // 이미 친구이거나 어느 방향이든 요청이 오가는 중이면 친구 요청을 보낼 수 없다 — "맞는 것"을 나열한다(erd 조회 규칙)
+    // 이미 친구이거나 어느 방향이든 요청이 오가는 중이면 친구 요청을 보낼 수 없다 — "맞는 것"을 나열한다
     private static final List<RelationshipType> UNAVAILABLE_TYPES = List.of(
             RelationshipType.FRIEND,
             RelationshipType.FRIEND_REQUEST_SENT,
