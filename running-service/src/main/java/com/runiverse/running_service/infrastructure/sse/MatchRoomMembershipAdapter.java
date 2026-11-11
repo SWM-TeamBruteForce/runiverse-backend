@@ -23,7 +23,16 @@ public class MatchRoomMembershipAdapter implements MatchRoomMembershipPort {
                 .flatMap(previous -> registry.leave(userId))
                 .ifPresent(matchRoomSubscriber::unsubscribe);
         // 그 방의 첫 참가자를 받은 순간에만 구독한다
-        registry.join(userId, runningRoomId).ifPresent(matchRoomSubscriber::subscribe);
+        registry.join(userId, runningRoomId).ifPresent(roomId -> {
+            try {
+                matchRoomSubscriber.subscribe(roomId);
+            } catch (RuntimeException e) {
+                // 구독 없이 명부만 남으면 재연결이 첫 참가자가 아니게 돼 구독을 영영 건너뛴다.
+                // 정식 퇴장으로 되돌린다 — 반쯤 걸린 구독이 있어도 해제까지 정리되고, 없던 구독의 해제는 무해하다
+                leave(userId);
+                throw e;
+            }
+        });
     }
 
     @Override

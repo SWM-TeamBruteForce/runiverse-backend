@@ -334,6 +334,8 @@ public class GlobalExceptionHandler {
                  MATCH_COOLDOWN,
                  MATCH_SLOT_CLOSED,
                  MATCH_ALREADY_STARTED -> HttpStatus.CONFLICT;
+            // 스트림 연결 전용이라 컨트롤러가 본문 없이 직접 답한다 — 이 경로로 나갈 일이 없다
+            case MATCH_STREAM_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
         };
     }
 
