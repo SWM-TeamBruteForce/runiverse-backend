@@ -191,6 +191,7 @@ class MatchRoomMembershipAdapterTest {
                     .isInstanceOf(MatchStreamUnavailableException.class);
             assertThat(registry.usersIn(OLD_ROOM)).isEmpty();
             assertThat(registry.roomOf(chulsu)).isEmpty();
+            verify(matchRoomSubscriber).unsubscribe(OLD_ROOM);
         }
 
         @Test
