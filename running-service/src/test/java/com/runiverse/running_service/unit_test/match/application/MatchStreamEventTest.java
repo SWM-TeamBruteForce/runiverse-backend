@@ -1,9 +1,12 @@
 package com.runiverse.running_service.unit_test.match.application;
 
+import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.match.port.out.MatchEventType;
 import com.runiverse.running_service.application.match.port.out.MatchStreamEvent;
+import com.runiverse.running_service.application.match.port.out.RoomChat;
 import com.runiverse.running_service.application.match.port.out.RoomInfo;
 import com.runiverse.running_service.application.match.port.out.RunningReady;
+import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
 import org.junit.jupiter.api.DisplayName;
@@ -12,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -60,13 +64,13 @@ class MatchStreamEventTest {
     class SnapshotTest {
 
         @Test
-        @DisplayName("매칭 방 스냅샷은 갱신과 같은 MATCH_ROOM_UPDATED다")
+        @DisplayName("매칭 방 스냅샷은 갱신과 나뉜 MATCH_ROOM_ENTRANCE이고 남은 시간을 싣지 않는다")
         void matchRoomSnapshot() {
             // when
             MatchStreamEvent event = MatchStreamEvent.snapshot(roomOf(RunningRoomType.MATCH), START.minusHours(1));
 
-            // then -> 매칭 방 계약은 그대로다
-            assertThat(event.type()).isEqualTo(MatchEventType.MATCH_ROOM_UPDATED);
+            // then -> 입장은 *_ENTRANCE, 갱신은 *_UPDATED — 남은 시간은 초대 방만 싣는다
+            assertThat(event.type()).isEqualTo(MatchEventType.MATCH_ROOM_ENTRANCE);
             assertThat(event.startsInMs()).isNull();
         }
 
@@ -91,6 +95,47 @@ class MatchStreamEventTest {
 
             // then -> 음수를 내려보내지 않는다
             assertThat(event.startsInMs()).isZero();
+        }
+    }
+
+    @Nested
+    @DisplayName("방 채팅 테스트")
+    class RoomChatTest {
+
+        private static final UUID SENDER = UuidCreator.getTimeOrderedEpoch();
+
+        private static RoomChat chatOf(UUID sender) {
+            return new RoomChat(3021L, ROOM_ID,
+                    new RoomChat.Sender(sender, "철수", null, false),
+                    "곧 출발해요", false, null, START.minusMinutes(8));
+        }
+
+        @Test
+        @DisplayName("보낸 채팅은 ROOM_CHAT_SENT이고 채팅의 방으로 가며 보낸 사람을 받는 사람에서 뺀다")
+        void roomChatSentExcludesSender() {
+            // when
+            MatchStreamEvent event = MatchStreamEvent.roomChatSent(chatOf(SENDER));
+
+            // then -> 받지 않을 사람은 채팅의 보낸 사람에서 꺼낸다 — 따로 받지 않아 어긋날 수 없다
+            assertThat(event.type()).isEqualTo(MatchEventType.ROOM_CHAT_SENT);
+            assertThat(event.runningRoomId()).isEqualTo(ROOM_ID);
+            assertThat(event.excludedUserId()).isEqualTo(new UserId(SENDER));
+            assertThat(event.chat().chatId()).isEqualTo(3021L);
+            assertThat(event.room()).isNull();
+            assertThat(event.ready()).isNull();
+        }
+
+        @Test
+        @DisplayName("방 상태 이벤트는 받는 사람을 빼지 않는다")
+        void roomStateEventsExcludeNobody() {
+            // when
+            MatchStreamEvent updated = MatchStreamEvent.updated(roomOf(RunningRoomType.MATCH));
+            MatchStreamEvent entrance = MatchStreamEvent.snapshot(roomOf(RunningRoomType.INVITE), START.minusHours(1));
+
+            // then -> 방 상태는 전원이 받는다
+            assertThat(updated.excludedUserId()).isNull();
+            assertThat(updated.chat()).isNull();
+            assertThat(entrance.excludedUserId()).isNull();
         }
     }
 

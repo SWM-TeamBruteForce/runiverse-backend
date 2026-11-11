@@ -9,6 +9,7 @@ import com.runiverse.running_service.application.match.command.invitedecline.Dec
 import com.runiverse.running_service.application.match.command.inviteopen.OpenInviteRoomCommand;
 import com.runiverse.running_service.application.match.command.inviteopen.OpenInviteRoomResult;
 import com.runiverse.running_service.application.match.command.invitesend.SendInvitationCommand;
+import com.runiverse.running_service.application.match.command.roomchatsend.SendRoomChatCommand;
 import com.runiverse.running_service.application.match.port.in.AcceptInvitationUsecase;
 import com.runiverse.running_service.application.match.port.in.ApplyMatchUsecase;
 import com.runiverse.running_service.application.match.port.in.CancelMatchUsecase;
@@ -16,16 +17,20 @@ import com.runiverse.running_service.application.match.port.in.DeclineInvitation
 import com.runiverse.running_service.application.match.port.in.GetMatchSlotsUsecase;
 import com.runiverse.running_service.application.match.port.in.OpenInviteRoomUsecase;
 import com.runiverse.running_service.application.match.port.in.SendInvitationUsecase;
+import com.runiverse.running_service.application.match.port.in.SendRoomChatUsecase;
+import com.runiverse.running_service.application.match.port.out.RoomChat;
 import com.runiverse.running_service.application.match.query.slot.GetMatchSlotsQuery;
 import com.runiverse.running_service.application.match.query.slot.GetMatchSlotsResult;
 import com.runiverse.running_service.presentation.match.request.ApplyMatchRequest;
 import com.runiverse.running_service.presentation.match.request.MatchSlotsRequest;
 import com.runiverse.running_service.presentation.match.request.OpenInviteRoomRequest;
 import com.runiverse.running_service.presentation.match.request.SendInvitationRequest;
+import com.runiverse.running_service.presentation.match.request.SendRoomChatRequest;
 import com.runiverse.running_service.presentation.match.response.AcceptInvitationResponse;
 import com.runiverse.running_service.presentation.match.response.ApplyMatchResponse;
 import com.runiverse.running_service.presentation.match.response.MatchSlotsResponse;
 import com.runiverse.running_service.presentation.match.response.OpenInviteRoomResponse;
+import com.runiverse.running_service.presentation.match.response.RoomChatResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
@@ -43,9 +48,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-// 모집 단계(매칭 방·초대 방)의 REST — 신청·나가기·슬롯 조회와 초대 방 개설·초대·수락·거절.
+// 모집 단계(매칭 방·초대 방)의 REST — 신청·나가기·슬롯 조회, 초대 방 개설·초대·수락·거절, 대기방 채팅.
 // 스트림(MatchStreamController)과 경로 앞부분을 공유하지만 SSE 연결 수명을 다루는 일이라 나눈다.
-// 내 신청은 토큰 주체가 곧 대상이라 경로에 ID가 없고, 특정 방을 가리키는 초대만 방 ID를 쓴다
+// 내 신청은 토큰 주체가 곧 대상이라 경로에 ID가 없고, 특정 방을 가리키는 초대·채팅만 방 ID를 쓴다
 @RestController
 @RequestMapping("match-rooms")
 @RequiredArgsConstructor
@@ -58,6 +63,7 @@ public class MatchRoomController {
     private final SendInvitationUsecase sendInvitationUsecase;
     private final AcceptInvitationUsecase acceptInvitationUsecase;
     private final DeclineInvitationUsecase declineInvitationUsecase;
+    private final SendRoomChatUsecase sendRoomChatUsecase;
 
     // 누가 보든 같은 목록이라 사용자를 넘기지 않는다 — 인증은 SecurityConfig가 요구한다
     @GetMapping("slots")
@@ -129,5 +135,18 @@ public class MatchRoomController {
         UUID userId = UUID.fromString(jwt.getSubject());
         declineInvitationUsecase.handle(new DeclineInvitationCommand(userId, runningRoomId));
         return ResponseEntity.noContent().build();
+    }
+
+    // 채팅 이벤트(ROOM_CHAT_SENT)는 보낸 사람에게 가지 않는다 — 보낸 사람의 화면은 이 응답이 바꾼다
+    @PostMapping("{runningRoomId}/chats")
+    public ResponseEntity<RoomChatResponse> sendRoomChat(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable @Min(value = 1, message = "입력값이 올바르지 않습니다.") Long runningRoomId,
+            @Valid @RequestBody SendRoomChatRequest request
+    ) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        RoomChat chat = sendRoomChatUsecase.handle(
+                new SendRoomChatCommand(userId, runningRoomId, request.content()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(RoomChatResponse.from(chat));
     }
 }

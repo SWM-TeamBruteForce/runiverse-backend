@@ -50,7 +50,7 @@ class AppStreamE2eTest extends E2eTestSupport {
              SseStream matchStream = openMatchStream(user.accessToken())) {
             // then -> 레지스트리가 따로라 한쪽 연결이 다른 쪽을 밀어내지 않는다
             assertThat(appStream.status()).isEqualTo(200);
-            assertThat(((Number) matchStream.await("MATCH_ROOM_UPDATED").get("runningRoomId")).intValue())
+            assertThat(((Number) matchStream.await("MATCH_ROOM_ENTRANCE").get("runningRoomId")).intValue())
                     .isEqualTo(runningRoomId);
         } finally {
             assertThat(post("/match-rooms/leave", null, user.accessToken()).status()).isEqualTo(204);

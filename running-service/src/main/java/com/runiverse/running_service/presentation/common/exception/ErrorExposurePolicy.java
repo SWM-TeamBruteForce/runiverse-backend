@@ -3,6 +3,7 @@ package com.runiverse.running_service.presentation.common.exception;
 import com.runiverse.running_service.application.common.exception.AuthErrorCode;
 import com.runiverse.running_service.application.common.exception.InviteErrorCode;
 import com.runiverse.running_service.application.common.exception.MatchErrorCode;
+import com.runiverse.running_service.application.common.exception.RoomChatErrorCode;
 import com.runiverse.running_service.application.common.exception.RelationshipErrorCode;
 import com.runiverse.running_service.application.common.exception.ResourceErrorCode;
 import com.runiverse.running_service.application.common.exception.RunningErrorCode;
@@ -69,7 +70,9 @@ public final class ErrorExposurePolicy {
             InviteErrorCode.INVITEE_RUNNING.getCode(),
             InviteErrorCode.INVITE_COUNT_EXCEEDED.getCode(),
             InviteErrorCode.RUNNING_INVITATION_NOT_PENDING.getCode(),
-            InviteErrorCode.RUNNING_ROOM_FULL.getCode()
+            InviteErrorCode.RUNNING_ROOM_FULL.getCode(),
+            // 러닝이 시작돼 채팅이 닫혔다 — 가려지면 앱이 채팅 입력을 닫을지 가를 수 없다
+            RoomChatErrorCode.ROOM_CHAT_CLOSED.getCode()
     );
 
     private ErrorExposurePolicy() {

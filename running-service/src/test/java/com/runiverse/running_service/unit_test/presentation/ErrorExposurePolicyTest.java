@@ -2,6 +2,7 @@ package com.runiverse.running_service.unit_test.presentation;
 
 import com.runiverse.running_service.application.common.exception.AuthErrorCode;
 import com.runiverse.running_service.application.common.exception.InviteErrorCode;
+import com.runiverse.running_service.application.common.exception.RoomChatErrorCode;
 import com.runiverse.running_service.application.common.exception.RunningErrorCode;
 import com.runiverse.running_service.application.common.exception.UserErrorCode;
 import com.runiverse.running_service.presentation.common.exception.CommonErrorCode;
@@ -107,6 +108,15 @@ public class ErrorExposurePolicyTest {
     void invitationConflictsAreExposed(InviteErrorCode errorCode) {
         // 가려지면 500으로 바뀌어, 클라가 다시 고르게 할지·버튼을 다시 그릴지 가를 수 없다
         assertThat(ErrorExposurePolicy.isExposed(HttpStatus.CONFLICT, errorCode.getCode())).isTrue();
+    }
+
+    @Test
+    @DisplayName("러닝이 시작돼 닫힌 채팅은 409 그대로 노출한다")
+    void chatClosedIsExposed() {
+        // 가려지면 500으로 바뀌어, 클라가 채팅 입력을 닫을지 가를 수 없다
+        assertThat(ErrorExposurePolicy.isExposed(
+                HttpStatus.CONFLICT,
+                RoomChatErrorCode.ROOM_CHAT_CLOSED.getCode())).isTrue();
     }
 
     @Test

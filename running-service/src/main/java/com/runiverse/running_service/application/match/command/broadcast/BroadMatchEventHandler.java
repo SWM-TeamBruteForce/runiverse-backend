@@ -21,11 +21,14 @@ public class BroadMatchEventHandler implements BroadcastMatchEventUsecase {
 
     @Override
     public void handle(BroadcastMatchEventCommand command) {
-        // 방 ID는 이벤트 최상위에 있다 — 페이로드가 RoomInfo가 아닌 이벤트도 있어서다
-        loadMatchRoomMembersPort.usersIn(command.event().runningRoomId()).stream()
+        MatchStreamEvent event = command.event();
+        // 방 ID는 이벤트 최상위에 있다 — 페이로드가 RoomInfo가 아닌 이벤트도 있어서다.
+        // 받지 않을 사람(채팅을 보낸 본인)은 뺀다 — 본인 화면은 REST 응답이 이미 바꿨다
+        loadMatchRoomMembersPort.usersIn(event.runningRoomId()).stream()
+                .filter(userId -> !userId.equals(event.excludedUserId()))
                 .map(matchStreamPort::find)
                 .flatMap(Optional::stream)
-                .forEach(connection -> send(connection, command.event()));
+                .forEach(connection -> send(connection, event));
     }
 
     private void send(MatchStreamConnection connection, MatchStreamEvent event) {

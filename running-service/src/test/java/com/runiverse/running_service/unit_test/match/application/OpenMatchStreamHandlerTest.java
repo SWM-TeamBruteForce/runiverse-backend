@@ -79,7 +79,7 @@ class OpenMatchStreamHandlerTest {
         InOrder order = inOrder(matchRoomMembershipPort, newConnection);
         order.verify(matchRoomMembershipPort).join(new UserId(USER_ID), ROOM_ID);
         order.verify(newConnection)
-                .send(MatchStreamEvent.updated(ROOM_INFO));
+                .send(new MatchStreamEvent(MatchEventType.MATCH_ROOM_ENTRANCE, ROOM_ID, ROOM_INFO, null, null, null, null));
     }
 
     @Test
@@ -95,7 +95,7 @@ class OpenMatchStreamHandlerTest {
         // when
         openMatchStreamHandler.handle(new OpenMatchStreamCommand(USER_ID, newConnection));
 
-        // then -> 매칭 방의 MATCH_ROOM_UPDATED 대신 INVITE_ROOM_ENTRANCE다. 남은 시간은 보낸 시점 기준이다
+        // then -> 매칭 방의 MATCH_ROOM_ENTRANCE 대신 INVITE_ROOM_ENTRANCE다. 남은 시간은 보낸 시점 기준이다
         ArgumentCaptor<MatchStreamEvent> sent = ArgumentCaptor.forClass(MatchStreamEvent.class);
         verify(newConnection).send(sent.capture());
         assertThat(sent.getValue().type()).isEqualTo(MatchEventType.INVITE_ROOM_ENTRANCE);

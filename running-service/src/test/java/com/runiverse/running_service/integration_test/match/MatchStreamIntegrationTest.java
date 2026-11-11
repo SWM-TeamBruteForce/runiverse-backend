@@ -159,7 +159,7 @@ public class MatchStreamIntegrationTest extends IntegrationTestSupport {
         // then
         assertThat(connection.received()).hasSize(1);
         MatchStreamEvent snapshot = connection.received().get(0);
-        assertThat(snapshot.type()).isEqualTo(MatchEventType.MATCH_ROOM_UPDATED);
+        assertThat(snapshot.type()).isEqualTo(MatchEventType.MATCH_ROOM_ENTRANCE);
         RoomInfo room = snapshot.room();
         assertThat(room.runningRoomId()).isEqualTo(runningRoomId);
         assertThat(room.status()).isEqualTo(RunningRoomStatus.MATCHING);

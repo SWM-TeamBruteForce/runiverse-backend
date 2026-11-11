@@ -7,6 +7,7 @@ import com.runiverse.running_service.application.match.port.out.MatchStreamConne
 import com.runiverse.running_service.application.match.port.out.MatchStreamEvent;
 import com.runiverse.running_service.application.match.port.out.MatchStreamPort;
 import com.runiverse.running_service.application.match.port.out.LoadMatchRoomMembersPort;
+import com.runiverse.running_service.application.match.port.out.RoomChat;
 import com.runiverse.running_service.application.match.port.out.RoomInfo;
 import com.runiverse.running_service.application.match.port.out.RunningReady;
 import com.runiverse.running_service.domain.common.vo.UserId;
@@ -29,7 +30,9 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("매칭 이벤트 전파 단위 테스트")
@@ -90,6 +93,25 @@ class BroadMatchEventHandlerTest {
         // then
         verify(connectionA).send(event);
         verify(connectionB).send(event);
+    }
+
+    @Test
+    @DisplayName("방 채팅은 보낸 사람을 빼고 같은 방 나머지에게만 보낸다")
+    void roomChatSkipsSender() {
+        // given -> A가 보냈다. A의 화면은 REST 응답이 이미 바꿨다
+        MatchStreamEvent event = MatchStreamEvent.roomChatSent(new RoomChat(3021L, ROOM_ID,
+                new RoomChat.Sender(USER_A.value(), "철수", null, false),
+                "곧 출발해요", false, null, LocalDateTime.now()));
+        given(loadMatchRoomMembersPort.usersIn(ROOM_ID)).willReturn(Set.of(USER_A, USER_B));
+        given(matchStreamPort.find(USER_B)).willReturn(Optional.of(connectionB));
+
+        // when
+        broadMatchEventHandler.handle(new BroadcastMatchEventCommand(event));
+
+        // then -> 보낸 사람은 연결을 찾지도 않는다. 받으면 자기 메시지가 두 번 그려진다
+        verify(connectionB).send(event);
+        verify(matchStreamPort, never()).find(USER_A);
+        verifyNoInteractions(connectionA);
     }
 
     @Test
