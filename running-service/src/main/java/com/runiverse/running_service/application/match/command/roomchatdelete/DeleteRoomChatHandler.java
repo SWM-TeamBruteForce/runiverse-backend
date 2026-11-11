@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 
 // 판정 순서는 수정과 같다 — 방(404 → 409) → 메시지(404). 이미 지운 메시지도 404다.
-// 이력은 남기지 않는다 — 행에 마지막 내용이 남고 시각은 deleted_at이 말한다(erd running_room_chats)
+// 이력은 남기지 않는다 — 행에 마지막 내용이 남고 시각은 deleted_at이 말한다
 @Slf4j
 @Service
 @RequiredArgsConstructor
