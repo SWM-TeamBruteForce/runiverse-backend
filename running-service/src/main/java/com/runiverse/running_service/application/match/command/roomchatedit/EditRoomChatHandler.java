@@ -66,7 +66,7 @@ public class EditRoomChatHandler implements EditRoomChatUsecase {
         // 커밋 후 방의 다른 참가자에게 — 고친 사람은 이 응답으로 화면을 바꾼다
         eventPublisher.publishEvent(new MatchRoomChangedEvent(MatchStreamEvent.roomChatEdited(edited)));
         // 내용은 남기지 않는다 — 원문은 수정 이력 테이블이 갖는다(erd running_room_chat_histories)
-        log.info("[매칭] 채팅 수정 성공 - runningRoomId={}, chatId={}", command.runningRoomId(), command.chatId());
+        log.info("[매칭] 채팅 수정 성공 - roomId={}, chatId={}", command.runningRoomId(), command.chatId());
         return edited;
     }
 }

@@ -61,6 +61,6 @@ public class DeleteRoomChatHandler implements DeleteRoomChatUsecase {
                 locked.createdAt()));
         // 커밋 후 방의 다른 참가자에게 — 지운 사람은 204를 받고 자기 화면을 바꾼다
         eventPublisher.publishEvent(new MatchRoomChangedEvent(MatchStreamEvent.roomChatDeleted(deleted)));
-        log.info("[매칭] 채팅 삭제 성공 - runningRoomId={}, chatId={}", command.runningRoomId(), command.chatId());
+        log.info("[매칭] 채팅 삭제 성공 - roomId={}, chatId={}", command.runningRoomId(), command.chatId());
     }
 }

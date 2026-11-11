@@ -163,7 +163,7 @@ class DeleteRoomChatHandlerTest {
 
             // then
             assertThat(log.messages(Level.INFO)).containsExactly(
-                    "[매칭] 채팅 삭제 성공 - runningRoomId=" + ROOM_ID + ", chatId=" + CHAT_ID);
+                    "[매칭] 채팅 삭제 성공 - roomId=" + ROOM_ID + ", chatId=" + CHAT_ID);
         }
     }
 
