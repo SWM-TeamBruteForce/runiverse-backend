@@ -15,10 +15,13 @@ import com.runiverse.running_service.application.match.port.in.ApplyMatchUsecase
 import com.runiverse.running_service.application.match.port.in.CancelMatchUsecase;
 import com.runiverse.running_service.application.match.port.in.DeclineInvitationUsecase;
 import com.runiverse.running_service.application.match.port.in.GetMatchSlotsUsecase;
+import com.runiverse.running_service.application.match.port.in.GetRoomChatsUsecase;
 import com.runiverse.running_service.application.match.port.in.OpenInviteRoomUsecase;
 import com.runiverse.running_service.application.match.port.in.SendInvitationUsecase;
 import com.runiverse.running_service.application.match.port.in.SendRoomChatUsecase;
 import com.runiverse.running_service.application.match.port.out.RoomChat;
+import com.runiverse.running_service.application.match.query.roomchatlist.GetRoomChatsQuery;
+import com.runiverse.running_service.application.match.query.roomchatlist.GetRoomChatsResult;
 import com.runiverse.running_service.application.match.query.slot.GetMatchSlotsQuery;
 import com.runiverse.running_service.application.match.query.slot.GetMatchSlotsResult;
 import com.runiverse.running_service.presentation.match.request.ApplyMatchRequest;
@@ -31,6 +34,7 @@ import com.runiverse.running_service.presentation.match.response.ApplyMatchRespo
 import com.runiverse.running_service.presentation.match.response.MatchSlotsResponse;
 import com.runiverse.running_service.presentation.match.response.OpenInviteRoomResponse;
 import com.runiverse.running_service.presentation.match.response.RoomChatResponse;
+import com.runiverse.running_service.presentation.match.response.RoomChatsResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +48,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -56,6 +61,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class MatchRoomController {
 
+    // api-convention 페이지네이션 상한 — 넘게 달라고 해도 이 값으로 줄인다
+    private static final int MAX_CHAT_LIMIT = 50;
+
     private final GetMatchSlotsUsecase getMatchSlotsUsecase;
     private final ApplyMatchUsecase applyMatchUsecase;
     private final CancelMatchUsecase cancelMatchUsecase;
@@ -64,6 +72,7 @@ public class MatchRoomController {
     private final AcceptInvitationUsecase acceptInvitationUsecase;
     private final DeclineInvitationUsecase declineInvitationUsecase;
     private final SendRoomChatUsecase sendRoomChatUsecase;
+    private final GetRoomChatsUsecase getRoomChatsUsecase;
 
     // 누가 보든 같은 목록이라 사용자를 넘기지 않는다 — 인증은 SecurityConfig가 요구한다
     @GetMapping("slots")
@@ -148,5 +157,23 @@ public class MatchRoomController {
         RoomChat chat = sendRoomChatUsecase.handle(
                 new SendRoomChatCommand(userId, runningRoomId, request.content()));
         return ResponseEntity.status(HttpStatus.CREATED).body(RoomChatResponse.from(chat));
+    }
+
+    // 스트림을 연 뒤에 부른다 — 그 사이 온 ROOM_CHAT_* 이벤트와는 클라가 chatId로 합친다
+    @GetMapping("{runningRoomId}/chats")
+    public ResponseEntity<RoomChatsResponse> getRoomChats(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable @Min(value = 1, message = "입력값이 올바르지 않습니다.") Long runningRoomId,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "20") @Min(value = 1, message = "입력값이 올바르지 않습니다.") int limit
+    ) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        GetRoomChatsResult result = getRoomChatsUsecase.handle(new GetRoomChatsQuery(
+                userId,
+                runningRoomId,
+                // 첫 페이지에 cursor=를 빈 값으로 실어 보내도 처음부터 읽는다
+                cursor == null || cursor.isBlank() ? null : cursor,
+                Math.min(limit, MAX_CHAT_LIMIT)));
+        return ResponseEntity.ok(RoomChatsResponse.from(result));
     }
 }

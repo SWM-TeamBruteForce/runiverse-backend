@@ -2163,8 +2163,8 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 #### 5-E-1. `GET /api/v1/match-rooms/{runningRoomId}/chats` — 채팅 목록
 
-- **화면**: 매칭 방·초대 방 대기 화면 — 입장 이벤트를 받은 직후, 위로 스크롤할 때
-- **Query**: `cursor`/`limit` — **최신순**(§0 페이지네이션). 클라는 첫 페이지를 `limit=50`으로 부르고, 화면에는 뒤집어 아래가 최신이 되게 그린다
+- **화면**: 매칭 방·초대 방 대기 화면 — 매칭 스트림이 연결된 직후(입장 이벤트를 기다리지 않는다, 5-E 입장 순서), 위로 스크롤할 때
+- **Query**: `cursor`/`limit` — **최신순**(`api-convention.md` 페이지네이션 — 기본 20, 최대 50, 넘으면 50으로 줄인다). 클라는 첫 페이지를 `limit=50`으로 부르고, 화면에는 뒤집어 아래가 최신이 되게 그린다
 - **Response `200 OK`**: `{ "items": [Chat, ...], "nextCursor": "..." }` — `nextCursor`가 `null`이면 방의 첫 메시지까지 다 받았다
 - **지운 메시지도 자리를 지킨다** — 목록에서 빼지 않고 `content = null`, `isDeleted = true`로 내려간다
 - **`cursor`가 깨졌으면 `400 INVALID_REQUEST`다**

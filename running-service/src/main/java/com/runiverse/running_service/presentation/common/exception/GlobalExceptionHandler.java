@@ -5,10 +5,10 @@ import com.runiverse.running_service.application.common.exception.BusinessExcept
 import com.runiverse.running_service.application.common.exception.ErrorCode;
 import com.runiverse.running_service.application.common.exception.InviteErrorCode;
 import com.runiverse.running_service.application.common.exception.MatchErrorCode;
-import com.runiverse.running_service.application.common.exception.RoomChatErrorCode;
 import com.runiverse.running_service.application.common.exception.NotificationErrorCode;
 import com.runiverse.running_service.application.common.exception.RelationshipErrorCode;
 import com.runiverse.running_service.application.common.exception.ResourceErrorCode;
+import com.runiverse.running_service.application.common.exception.RoomChatErrorCode;
 import com.runiverse.running_service.application.common.exception.RunningErrorCode;
 import com.runiverse.running_service.application.common.exception.UserErrorCode;
 import com.runiverse.running_service.application.match.exception.MatchCooldownException;
@@ -371,6 +371,7 @@ public class GlobalExceptionHandler {
         return switch (code) {
             // 러닝이 시작됐다 — 요청이 틀린 게 아니라 방 상태와 부딪힌 것이다
             case ROOM_CHAT_CLOSED -> HttpStatus.CONFLICT;
+            case INVALID_ROOM_CHAT_CURSOR -> HttpStatus.BAD_REQUEST;
         };
     }
 

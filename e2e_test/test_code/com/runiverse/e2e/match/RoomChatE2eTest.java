@@ -16,7 +16,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-// 대기방 채팅 보내기(5-E-2)와 ROOM_CHAT_SENT — 실제 DB(IDENTITY·created_at)·Redis 왕복·보안 필터를 함께 탄다
+// 대기방 채팅 보내기(5-E-2)·목록(5-E-1)과 ROOM_CHAT_SENT — 실제 DB(IDENTITY·created_at·JPQL)·Redis 왕복·보안 필터를 함께 탄다
 @DisplayName("배포 이미지 대상 대기방 채팅 E2E 테스트")
 class RoomChatE2eTest extends E2eTestSupport {
 
@@ -169,6 +169,100 @@ class RoomChatE2eTest extends E2eTestSupport {
             assertThat(response.text("message")).isEqualTo("지금은 채팅할 수 없습니다.");
         } finally {
             // 다른 테스트가 같은 슬롯에 붙지 않도록 모집 중으로 되돌린 뒤 나간다
+            executeSql("UPDATE running_rooms SET status = 'MATCHING' WHERE running_room_id = " + runningRoomId);
+            leave(member);
+        }
+    }
+
+    @Test
+    @DisplayName("채팅 목록은 최신순 커서로 넘기고, 늦게 들어온 사람도 방의 첫 메시지까지 본다")
+    void listPagesNewestFirstForLateJoiner() {
+        // given - host 혼자 있는 방에 세 건이 쌓인 뒤 guest가 들어온다
+        TestUser host = signUpAndOnboard();
+        TestUser guest = signUpAndOnboard();
+        int runningRoomId = apply(host).number("runningRoomId");
+        Response first = post(chatsPath(runningRoomId), Map.of("content", "하나"), host.accessToken());
+        Response second = post(chatsPath(runningRoomId), Map.of("content", "둘"), host.accessToken());
+        Response third = post(chatsPath(runningRoomId), Map.of("content", "셋"), host.accessToken());
+        assertThat(apply(guest).number("runningRoomId")).isEqualTo(runningRoomId);
+
+        try {
+            // when - 두 개씩 끊어 읽는다
+            Response page1 = get(chatsPath(runningRoomId) + "?limit=2", guest.accessToken());
+            String cursor = page1.text("nextCursor");
+            Response page2 = get(chatsPath(runningRoomId) + "?limit=2&cursor=" + cursor, guest.accessToken());
+
+            // then - 첫 페이지는 가장 최근 두 건이고 보내기 응답과 같은 모양이다(실제 JPQL·조립을 탄다)
+            assertThat(page1.status()).isEqualTo(200);
+            assertThat(page1.objects("items")).containsExactly(third.body(), second.body());
+            assertThat(cursor).isNotBlank();
+            // then - 다음 페이지는 남은 한 건이고 방의 첫 메시지라 커서가 끝난다
+            assertThat(page2.status()).isEqualTo(200);
+            assertThat(page2.objects("items")).containsExactly(first.body());
+            assertThat(page2.body()).containsEntry("nextCursor", null);
+            // then - limit 없이 부르면 한 번에 다 온다(기본 20)
+            assertThat(get(chatsPath(runningRoomId), guest.accessToken()).objects("items"))
+                    .extracting(item -> item.get("content")).containsExactly("셋", "둘", "하나");
+        } finally {
+            leave(host);
+            leave(guest);
+        }
+    }
+
+    @Test
+    @DisplayName("지운 메시지는 목록에서 자리를 지키되 내용 없이 isDeleted로만 드러나고, 원문은 DB에 남는다")
+    void deletedChatKeepsPlaceWithoutContent() {
+        // given - 삭제 API는 다음 단계라 DB에서 직접 지운 시각을 찍는다
+        TestUser member = signUpAndOnboard();
+        int runningRoomId = apply(member).number("runningRoomId");
+        int keptId = post(chatsPath(runningRoomId), Map.of("content", "남는 말"), member.accessToken()).number("chatId");
+        int deletedId = post(chatsPath(runningRoomId), Map.of("content", "지울 말"), member.accessToken()).number("chatId");
+        executeSql("UPDATE running_room_chats SET deleted_at = now() WHERE running_room_chat_id = " + deletedId);
+
+        try {
+            // when
+            List<Map<String, Object>> items = get(chatsPath(runningRoomId), member.accessToken()).objects("items");
+
+            // then - 순서와 자리는 그대로다
+            assertThat(items).extracting(item -> ((Number) item.get("chatId")).intValue())
+                    .containsExactly(deletedId, keptId);
+            assertThat(items.get(0))
+                    .containsEntry("content", null)
+                    .containsEntry("isDeleted", true);
+            assertThat(items.get(1))
+                    .containsEntry("content", "남는 말")
+                    .containsEntry("isDeleted", false);
+            // then - 원문은 신고 대응용으로 행에 남는다
+            assertThat(querySql("SELECT content FROM running_room_chats WHERE running_room_chat_id = " + deletedId))
+                    .containsExactly("지울 말");
+        } finally {
+            leave(member);
+        }
+    }
+
+    @Test
+    @DisplayName("채팅 목록도 방 밖이면 404, 깨진 커서는 400, 러닝이 시작됐으면 409, 토큰이 없으면 401이다")
+    void listRejectsLikeSend() {
+        // given
+        TestUser member = signUpAndOnboard();
+        TestUser outsider = signUpAndOnboard();
+        int runningRoomId = apply(member).number("runningRoomId");
+
+        try {
+            // when & then - 방 판정은 보내기와 같다
+            Response notInRoom = get(chatsPath(runningRoomId), outsider.accessToken());
+            assertThat(notInRoom.status()).isEqualTo(404);
+            assertThat(notInRoom.text("code")).isEqualTo("NOT_FOUND");
+            Response brokenCursor = get(chatsPath(runningRoomId) + "?cursor=!!!", member.accessToken());
+            assertThat(brokenCursor.status()).isEqualTo(400);
+            assertThat(brokenCursor.text("code")).isEqualTo("INVALID_REQUEST");
+            assertThat(get(chatsPath(runningRoomId), null).status()).isEqualTo(401);
+
+            executeSql("UPDATE running_rooms SET status = 'STARTED' WHERE running_room_id = " + runningRoomId);
+            Response closed = get(chatsPath(runningRoomId), member.accessToken());
+            assertThat(closed.status()).isEqualTo(409);
+            assertThat(closed.text("code")).isEqualTo("ROOM_CHAT_CLOSED");
+        } finally {
             executeSql("UPDATE running_rooms SET status = 'MATCHING' WHERE running_room_id = " + runningRoomId);
             leave(member);
         }

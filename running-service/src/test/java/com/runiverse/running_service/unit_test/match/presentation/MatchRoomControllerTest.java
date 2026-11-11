@@ -27,8 +27,12 @@ import com.runiverse.running_service.application.match.port.in.DeclineInvitation
 import com.runiverse.running_service.application.match.port.in.GetMatchSlotsUsecase;
 import com.runiverse.running_service.application.match.port.in.OpenInviteRoomUsecase;
 import com.runiverse.running_service.application.match.port.in.SendInvitationUsecase;
+import com.runiverse.running_service.application.match.port.in.GetRoomChatsUsecase;
 import com.runiverse.running_service.application.match.port.in.SendRoomChatUsecase;
 import com.runiverse.running_service.application.match.port.out.RoomChat;
+import com.runiverse.running_service.application.match.exception.InvalidRoomChatCursorException;
+import com.runiverse.running_service.application.match.query.roomchatlist.GetRoomChatsQuery;
+import com.runiverse.running_service.application.match.query.roomchatlist.GetRoomChatsResult;
 import com.runiverse.running_service.application.match.query.slot.GetMatchSlotsQuery;
 import com.runiverse.running_service.application.match.query.slot.GetMatchSlotsResult;
 import com.runiverse.running_service.infrastructure.config.JacksonConfig;
@@ -110,6 +114,9 @@ class MatchRoomControllerTest {
     @Mock
     private SendRoomChatUsecase sendRoomChatUsecase;
 
+    @Mock
+    private GetRoomChatsUsecase getRoomChatsUsecase;
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -117,7 +124,7 @@ class MatchRoomControllerTest {
         mockMvc = standaloneSetup(new MatchRoomController(
                 getMatchSlotsUsecase, applyMatchUsecase, cancelMatchUsecase,
                 openInviteRoomUsecase, sendInvitationUsecase,
-                acceptInvitationUsecase, declineInvitationUsecase, sendRoomChatUsecase))
+                acceptInvitationUsecase, declineInvitationUsecase, sendRoomChatUsecase, getRoomChatsUsecase))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setMessageConverters(new JacksonJsonHttpMessageConverter(JSON_MAPPER))
@@ -730,6 +737,124 @@ class MatchRoomControllerTest {
         assertThat(body(result))
                 .containsEntry("code", "ROOM_CHAT_CLOSED")
                 .containsEntry("message", "지금은 채팅할 수 없습니다.");
+    }
+
+    private static RoomChat listedChat(long chatId, String content, boolean deleted) {
+        return new RoomChat(chatId, 125L, new RoomChat.Sender(USER_ID, "철수", null, false),
+                content, deleted, null, LocalDateTime.of(2026, 11, 11, 18, 52, 10));
+    }
+
+    @Test
+    @DisplayName("채팅 목록: 토큰 주체·경로 방 ID·커서·limit을 넘기고 200으로 items·nextCursor를 돌려준다")
+    void 채팅_목록은_200으로_페이지를_돌려준다() throws Exception {
+        // given -> 최신순 두 건, 한 건은 지운 메시지
+        given(getRoomChatsUsecase.handle(any())).willReturn(new GetRoomChatsResult(
+                List.of(listedChat(3022L, "네 좋아요", false), listedChat(3021L, null, true)), "next-cursor"));
+
+        // when
+        MvcResult result = mockMvc.perform(get("/match-rooms/125/chats")
+                        .param("cursor", "abc")
+                        .param("limit", "50"))
+                .andReturn();
+
+        // then
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        verify(getRoomChatsUsecase).handle(new GetRoomChatsQuery(USER_ID, 125L, "abc", 50));
+        Map<String, Object> body = body(result);
+        assertThat(body).containsOnlyKeys("items", "nextCursor");
+        assertThat(body).containsEntry("nextCursor", "next-cursor");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> items = (List<Map<String, Object>>) body.get("items");
+        assertThat(items).extracting(item -> item.get("chatId")).containsExactly(3022, 3021);
+        assertThat(items.get(0)).containsOnlyKeys(
+                "chatId", "runningRoomId", "sender", "content", "isDeleted", "editedAt", "createdAt");
+        // 지운 메시지도 자리를 지키고 내용 키는 null로 남는다
+        assertThat(items.get(1)).containsEntry("content", null).containsEntry("isDeleted", true);
+    }
+
+    @Test
+    @DisplayName("채팅 목록: 커서·limit을 생략하면 첫 페이지 20개이고 마지막 페이지면 nextCursor가 null이다")
+    void 채팅_목록은_기본값으로_첫_페이지를_읽는다() throws Exception {
+        // given
+        given(getRoomChatsUsecase.handle(any())).willReturn(new GetRoomChatsResult(List.of(), null));
+
+        // when
+        MvcResult result = mockMvc.perform(get("/match-rooms/125/chats")).andReturn();
+
+        // then -> nextCursor 키는 빠지지 않고 null이다
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        verify(getRoomChatsUsecase).handle(new GetRoomChatsQuery(USER_ID, 125L, null, 20));
+        assertThat(body(result)).containsEntry("nextCursor", null).containsEntry("items", List.of());
+    }
+
+    @Test
+    @DisplayName("채팅 목록: 빈 cursor는 첫 페이지로 보고, 50을 넘는 limit은 50으로 줄인다")
+    void 채팅_목록은_빈_커서와_큰_limit을_정리한다() throws Exception {
+        // given
+        given(getRoomChatsUsecase.handle(any())).willReturn(new GetRoomChatsResult(List.of(), null));
+
+        // when
+        mockMvc.perform(get("/match-rooms/125/chats").param("cursor", "  ").param("limit", "500")).andReturn();
+
+        // then
+        verify(getRoomChatsUsecase).handle(new GetRoomChatsQuery(USER_ID, 125L, null, 50));
+    }
+
+    @Test
+    @DisplayName("채팅 목록: limit이 1 미만이거나 숫자가 아니면 400이고 유스케이스를 부르지 않는다")
+    void 채팅_목록은_잘못된_limit에_400이다() throws Exception {
+        for (String limit : List.of("0", "-1", "abc")) {
+            // when
+            MvcResult result = mockMvc.perform(get("/match-rooms/125/chats").param("limit", limit)).andReturn();
+
+            // then
+            assertThat(result.getResponse().getStatus()).as(limit).isEqualTo(400);
+            assertThat(body(result)).as(limit).containsEntry("code", "INVALID_REQUEST");
+        }
+        then(getRoomChatsUsecase).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("채팅 목록: 1 미만의 방 ID는 400이고 유스케이스를 부르지 않는다")
+    void 채팅_목록은_1_미만의_방_ID에_400이다() throws Exception {
+        // when
+        MvcResult result = mockMvc.perform(get("/match-rooms/0/chats")).andReturn();
+
+        // then
+        assertInvalidRequest(result);
+        then(getRoomChatsUsecase).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("채팅 목록: 깨진 커서는 400 INVALID_REQUEST다")
+    void 채팅_목록은_깨진_커서에_400이다() throws Exception {
+        // given
+        willThrow(new InvalidRoomChatCursorException()).given(getRoomChatsUsecase).handle(any());
+
+        // when
+        MvcResult result = mockMvc.perform(get("/match-rooms/125/chats").param("cursor", "!!!")).andReturn();
+
+        // then
+        assertInvalidRequest(result);
+    }
+
+    @Test
+    @DisplayName("채팅 목록: 방에 없으면 404 NOT_FOUND, 러닝이 시작됐으면 409 ROOM_CHAT_CLOSED다")
+    void 채팅_목록은_방_밖이면_404_시작_후면_409다() throws Exception {
+        // given
+        given(getRoomChatsUsecase.handle(any()))
+                .willThrow(new RoomChatRoomNotFoundException())
+                .willThrow(new RoomChatClosedException());
+
+        // when
+        MvcResult notInRoom = mockMvc.perform(get("/match-rooms/125/chats")).andReturn();
+        MvcResult closed = mockMvc.perform(get("/match-rooms/125/chats")).andReturn();
+
+        // then
+        assertThat(notInRoom.getResponse().getStatus()).isEqualTo(404);
+        assertThat(body(notInRoom)).containsEntry("code", "NOT_FOUND");
+        assertThat(closed.getResponse().getStatus()).isEqualTo(409);
+        assertThat(body(closed)).containsEntry("code", "ROOM_CHAT_CLOSED");
     }
 
     private static void assertInvalidRequest(MvcResult result) throws Exception {
