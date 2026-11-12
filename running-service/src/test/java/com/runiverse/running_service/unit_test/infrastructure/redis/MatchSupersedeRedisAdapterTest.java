@@ -79,8 +79,7 @@ class MatchSupersedeRedisAdapterTest {
 
         // then
         assertThat(log.messages(Level.ERROR)).containsExactly(
-                "[매칭] 이전 스트림 종료 알림 발행 실패: Redis 오류 - userId=" + USER_ID
-                        + ", connectionId=" + WINNER_CONNECTION);
+                "[매칭] 이전 스트림 종료 알림 발행 실패: Redis 오류 - winnerConnectionId=" + WINNER_CONNECTION);
         assertThat(log.events(Level.ERROR).getFirst().getThrowableProxy().getClassName())
                 .isEqualTo(RedisConnectionFailureException.class.getName());
     }

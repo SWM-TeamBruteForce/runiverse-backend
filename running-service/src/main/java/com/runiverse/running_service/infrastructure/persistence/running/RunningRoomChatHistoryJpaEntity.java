@@ -39,7 +39,7 @@ public class RunningRoomChatHistoryJpaEntity extends BaseCreatedAtEntity {
     @OnDelete(action = OnDeleteAction.CASCADE)
     private RunningRoomChatJpaEntity chat;
 
-    // 이번 수정 직전의 내용 — 메시지의 길이 CHECK를 거친 값이라 따로 CHECK를 두지 않는다(erd)
+    // 이번 수정 직전의 내용 — 메시지의 길이 CHECK를 거친 값이라 따로 CHECK를 두지 않는다
     @Column(name = "content", nullable = false, updatable = false, columnDefinition = "text")
     private String content;
 

@@ -43,7 +43,13 @@ public class OpenMatchStreamHandler implements OpenMatchStreamUsecase {
         matchStreamPort.register(userId, connection)
                 .ifPresent(MatchStreamConnection::closeSuperseded);
         // 구독을 먼저 건다 — 스냅샷을 보내는 사이에 온 갱신을 놓치지 않는다
-        matchRoomMembershipPort.join(userId, room.runningRoomId());
+        try {
+            matchRoomMembershipPort.join(userId, room.runningRoomId());
+        } catch (RuntimeException e) {
+            // 연결을 돌려주지 못하면 종료 콜백도 오지 않는다 — 등록한 연결은 여기서 뺀다
+            matchStreamPort.remove(userId, connection);
+            throw e;
+        }
         // 다른 인스턴스가 들고 있을지 모를 옛 연결까지 닫게 알린다.
         // 등록 뒤에 보낸다 — 이 인스턴스도 이 알림을 되받는데, 그때 연결표에 새 연결이 있어야 닫지 않는다
         publishMatchStreamSupersedePort.publish(userId, connection.id());

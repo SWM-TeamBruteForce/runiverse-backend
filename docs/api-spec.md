@@ -138,7 +138,7 @@
 |---|--------|------|------|
 | 29 | GET | `/api/v1/record-cards/{recordCardId}` | 기록 카드 상세 — 지도+기본곡, 사진별 음악 캐러셀. 사용 화면: 프로필 카드 탭, 기록 화면 |
 
-> 피드 타임라인·좋아요·댓글(예전 30~39)은 설계에서 뺐다. 번호는 다시 매기지 않는다.
+> 피드 타임라인·좋아요·댓글(예전 30~39)과 컬러 컬렉션(예전 52, 10-8)은 설계에서 뺐다. 번호는 다시 매기지 않는다.
 
 ### 9. 기록 카드 작성·편집
 
@@ -162,7 +162,6 @@
 | 49 | DELETE | `/api/v1/users/{userId}/friend-request` | 요청 취소(보낸 쪽) · 거절(받은 쪽) |
 | 50 | DELETE | `/api/v1/users/{userId}/friend` | 친구 삭제 |
 | 51 | GET | `/api/v1/users/{userId}/friends` | 친구 목록 (+이름 검색) — 본인이면 확정·보낸 요청·받은 요청, 타인이면 확정만 |
-| 52 | GET | `/api/v1/users/{userId}/colors` | 컬러 컬렉션 (마스터 전체 + 획득 여부) **[MVP 제외]** |
 | 53 | GET | `/api/v1/users/search` | 사용자 검색 — 친구 추가 진입점 (`?q=검색어`) |
 | 54 | GET | `/api/v1/users/{userId}/achievements` | 업적 (활성 업적별 단계·기준값) |
 | 55 | GET | `/api/v1/users/me/friend-recommendations` | 추천 친구 (함께 뛴 사람 + 페이스 비슷한 사람) — 사용 화면: 친구 목록 페이지 |
@@ -1151,7 +1150,7 @@ data:{"notificationId":912,"isRead":false,"createdAt":"2026-10-28T12:03:00","act
 
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| `type` | String | O | 알림 종류 — erd §6 `user_notifications.type` |
+| `type` | String | O | 알림 종류 — erd §5 `user_notifications.type` |
 | `isRead` | Boolean | O | 읽음 여부 |
 | `actor` | Object | O | 알림을 일으킨 사람. 탈퇴했으면 §0 탈퇴 유저 형식 |
 | `actor.relationshipType` | String | X | **지금** 나와 이 사람의 관계(§0). 알림 종류와 무관하게 늘 싣는다. 탈퇴한 사람이면 `null` |
@@ -1378,10 +1377,11 @@ data:{"notificationId":912,"isRead":false,"createdAt":"2026-10-28T12:03:00","act
   - 예전 경로 `/running-matches/stream`은 1.2.0 심사 기간에 1.1.x 앱용으로 열었고, 지금은 로드 밸런서에서 막혀 있다(5번 머리말 「1.1.x 호환 경로」)
 - **연결 시점**: 매칭 신청·초대 방 개설(4-1)·초대 수락(4-3) 성공 직후. 활성 신청이 없으면 연결하지 않는다 — 서버가 보낼 것이 없다.
   - **어기면 서버가 `404 Not Found`로 거절한다(본문 없음).** 열어주면 붙을 방이 없어 아무 채널도 구독하지 못하고, 그 뒤에 신청해도 이벤트가 영영 오지 않는 연결이 된다 — 에러도 없이 조용히 망가지므로 연결 자체를 막는다.
-  - **이 응답에만 본문이 없다.** 요청 `Accept`가 `text/event-stream`이라 다른 에러처럼 JSON 본문을 실을 수 없다. 클라는 상태 코드로 판단하고, 신청 응답을 받기 전에는 스트림을 열지 않는다.
+  - **404와 503은 본문이 없다.** 요청 `Accept`가 `text/event-stream`이라 다른 에러처럼 JSON 본문을 실을 수 없다. 클라는 상태 코드로 판단하고, 신청 응답을 받기 전에는 스트림을 열지 않는다.
+  - **서버가 방 채널 구독에 실패하면 `503 Service Unavailable`로 거절한다(본문 없음).** 열어주면 그 방 이벤트가 오지 않는 연결이 된다. 클라는 잠시 뒤 다시 연결한다.
   - 앱 재시작·포그라운드 복귀 시엔 스트림을 다시 열고, **연결 직후 내려오는 `RoomInfo` 스냅샷으로 상태를 복원한다.** 스냅샷 이벤트는 매칭 방이 `MATCH_ROOM_ENTRANCE`, 초대 방이 `INVITE_ROOM_ENTRANCE`다.
 - **종료 시점**: `RUNNING_STARTED` ack 뒤, 또는 매칭 취소(`POST /match-rooms/leave`)의 204를 받은 뒤 클라이언트가 닫는다.
-- **서버도 스트림을 닫는다** — 열린 지 운영값(현재 30분)이 지나면, 같은 사용자의 새 연결이 들어오면, 탈퇴하면 닫는다(새 연결·탈퇴는 그 요청을 처리한 서버 인스턴스에 붙은 스트림만 닫는다 — 다른 인스턴스의 옛 스트림은 30분 만료나 전송 실패로 정리된다). 활성 신청이 남아 있으면 클라는 다시 연결하고 연결 직후 스냅샷으로 상태를 복원한다.
+- **서버도 스트림을 닫는다** — 열린 지 운영값(현재 30분)이 지나면, 같은 사용자의 새 연결이 들어오면, 탈퇴하면 닫는다(탈퇴는 그 요청을 처리한 서버 인스턴스에 붙은 스트림만 닫는다 — 다른 인스턴스의 옛 스트림은 30분 만료나 전송 실패로 정리된다). 활성 신청이 남아 있으면 클라는 다시 연결하고 연결 직후 스냅샷으로 상태를 복원한다.
 - **연결을 화면 생명주기에 묶지 않는다.** 홈을 벗어나도 스트림은 살아 있어야 한다(근거는 `feature-spec.md` 매칭·러닝 설계 절)
 - **이벤트 형식** — 타입은 SSE `event` 필드로, 본문은 `data`에 JSON으로 싣는다
 
@@ -2115,7 +2115,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **방에 들어가거나 다시 연결하면 스트림을 먼저 열고, 연결된 뒤에 목록을 부른다**
   1. 스트림을 연다(`GET /match-rooms/stream`) — 연결이 열리면 그 뒤의 채팅 이벤트는 놓치지 않는다. 서버가 방 채널 구독을 건 뒤에야 응답 헤더를 내보내기 때문이다(구독 전에 응답을 열지 않는다)
   2. 목록(5-E-1)을 `limit=50`으로 부른다
-  3. 1과 2 사이에 온 채팅 이벤트는 목록에도 들어 있을 수 있다 — **`chatId`가 같으면 하나로 합친다**(나중에 받은 쪽으로 덮는다). 순서를 거꾸로 하면(목록 먼저) 그 사이에 생긴 메시지를 잃는다
+  3. 1과 2 사이에 온 채팅 이벤트는 목록에도 들어 있을 수 있다 — **`chatId`가 같으면 하나로 합친다**: 지운 쪽(`isDeleted=true`)은 되살리지 않고, 둘 다 살아 있으면 `editedAt`이 늦은 쪽을 남기고, 같으면 나중에 받은 쪽을 남긴다(`null`이 가장 이르다). 순서를 거꾸로 하면(목록 먼저) 그 사이에 생긴 메시지를 잃는다
   - 입장 이벤트(`MATCH_ROOM_ENTRANCE`·`INVITE_ROOM_ENTRANCE`)와는 무관하다 — 기다리지 않아도 된다
 - **채팅 이벤트는 보낸 사람에게 가지 않는다** — 본인 화면은 보내기·수정·삭제의 REST 응답으로 바꾼다
 - **자동 재전송하지 않는다** — 보내기 응답을 못 받으면 "다시 보내기"만 보여준다. 서버에는 이미 저장됐을 수 있고 재전송 중복을 가리는 키가 없어서, 자동으로 다시 보내면 같은 메시지가 두 번 남는다(`erd.md` `running_room_chats`). 저장됐는지는 다음 입장 때 목록이 알려준다
@@ -2154,7 +2154,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - 매칭 스트림(`/match-rooms/stream`)으로 **방 참가자 중 보낸 사람을 뺀 전원에게** 보낸다. 매칭 방·초대 방이 같은 이름을 쓴다
   - 접두어가 `ROOM_`인 이유: 방 상태 이벤트는 `MATCH_*`(매칭 방만)·`INVITE_ROOM_*`(초대 방만)로 방 종류를 가르는데, 채팅은 두 방에 똑같이 가서 어느 쪽 접두어도 붙이지 않는다
-- `data` = `Chat` 전체 — 세 이벤트 모두 같다. 클라는 `chatId`로 찾아 **있으면 덮고 없으면 넣는다**
+- `data` = `Chat` 전체 — 세 이벤트 모두 같다. 클라는 `chatId`로 찾아 **있으면 위 규칙으로 합치고 없으면 넣는다**
   - `ROOM_CHAT_SENT`: 새 메시지
   - `ROOM_CHAT_EDITED`: 고친 뒤의 메시지(`content` 새 값, `editedAt` 채워짐)
   - `ROOM_CHAT_DELETED`: 지운 뒤의 메시지(`content = null`, `isDeleted = true`)
@@ -2316,7 +2316,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | `averageCadenceSpm` | Integer | X | 평균 케이던스(spm). 기록이 없거나 유효 표본이 부족하면 null |
 | `totalElevationGainMeters` | Integer | X | 누적 상승 고도(m). 기록이 없거나 유효 표본이 부족하면 null. 일시정지 중에 오른 높이는 들어가지 않는다 |
 
-- **`status`는 `COMPLETED`·`RUNNING` 두 값뿐이다** — 러닝을 끝낸 사람은 완주든 중도이탈이든 `COMPLETED`, 아직 뛰는 중이면 `RUNNING`이다. DB의 `running_players.status`(`RUNNING_LEFT_PENALTY` 등, `erd.md` §6)를 그대로 노출하지 않는다: **페널티 여부는 본인 매칭 쿨다운 판정에 쓰는 내부 값이라 남의 화면에 실을 이유가 없다.** 얼마나 뛰었는지는 `totalDistanceMeters`로 드러난다
+- **`status`는 `COMPLETED`·`RUNNING` 두 값뿐이다** — 러닝을 끝낸 사람은 완주든 중도이탈이든 `COMPLETED`, 아직 뛰는 중이면 `RUNNING`이다. DB의 `running_players.status`(`RUNNING_LEFT_PENALTY` 등, `erd.md` §5)를 그대로 노출하지 않는다: **페널티 여부는 본인 매칭 쿨다운 판정에 쓰는 내부 값이라 남의 화면에 실을 이유가 없다.** 얼마나 뛰었는지는 `totalDistanceMeters`로 드러난다
 - `players`에는 방에서 러닝 단계에 들어간 참가자 전원을 유지하고 **시작 전 이탈자는 제외한다**. 기록이 없는 참가자는 사용자 정보와 `status`만 채워 내려가므로 화면에 "기록 없음"으로 표시한다
 - 탈퇴한 참가자는 공통 탈퇴 유저 형식으로 표시하고 `isDeleted=true`로 반환한다
 
@@ -3345,7 +3345,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 |---|---|
 | 본인(`userId`가 토큰 주체) | 확정(`FRIEND`) · 보낸 요청(`FRIEND_REQUEST_SENT`) · 받은 요청(`FRIEND_REQUEST_RECEIVED`) |
 | 타인 | 확정(`FRIEND`)만 — 누구에게 요청했고 누가 요청했는지는 본인만 안다 |
-| 차단 관계 | 차단 구현 때 정한다 — 목록을 열지 않는 방향이다(10-8의 `403 PROFILE_NOT_VISIBLE` 자리) |
+| 차단 관계 | 차단 구현 때 정한다 — 목록을 열지 않는 방향이다 |
 
 - `profile_visibility`로 가리지 않는다
 - **Query**: `q`(이름 필터), `cursor`/`limit`
@@ -3358,56 +3358,6 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - `user_relationships`에서 `user_id`가 대상인 행이다(`NONE`·`BLOCKED`는 담지 않는다) — 본인이면 `type`이 `FRIEND`·`FRIEND_REQUEST_SENT`·`FRIEND_REQUEST_RECEIVED`, 타인이면 `FRIEND`만. 행의 `type`이 곧 본인 목록의 `relationshipType`이다
 - **10-2 `friendCount`는 확정만 센다** — 본인 목록의 항목 수와 다를 수 있다
 - **에러 (404 Not Found)**: 대상이 없다(탈퇴 포함)
-- **인증**: 필요
-
-### 10-8. `GET /api/v1/users/{userId}/colors` — 컬러 컬렉션 [MVP 제외]
-
-- 자동 획득과 `user_colors` 신규 적재도 MVP에서 제외한다.
-- **화면**: 프로필 — 획득한 색을 `보유 수 / 전체 수`와 함께 보여준다
-- **Response `200 OK`** — 마스터 전체를 내리고 각 색에 획득 여부를 표시한다
-- 아래 조건·개수 값은 응답 형식 예시이며 실제 조건표는 확정하지 않았다
-
-```json
-{
-  "unlockedCount": 17,
-  "totalCount": 42,
-  "colors": [
-    {
-      "colorId": 2,
-      "category": "ENDURANCE",
-      "shadeNumber": 2,
-      "name": "딥 블루",
-      "hexCode": "#3c62e2",
-      "unlockDescription": "10km 이상 완주",
-      "unlocked": true,
-      "unlockedAt": "2026-08-01T09:12:00"
-    },
-    {
-      "colorId": 3,
-      "category": "ENDURANCE",
-      "shadeNumber": 3,
-      "name": "심해 블루",
-      "hexCode": "#1a3a8f",
-      "unlockDescription": "누적 100km",
-      "unlocked": false,
-      "unlockedAt": null
-    }
-  ]
-}
-```
-
-- **못 얻은 색도 함께 내린다.** 컬렉션 화면은 "무엇을 더 모을 수 있는지"를 보여주는 것이 목적이라, 미획득 색과 그 조건(`unlockDescription`)이 있어야 화면이 성립한다
-- `totalCount`는 마스터 행 수다 — **총 개수를 명세에 박지 않으므로** 클라도 이 값을 그대로 쓴다
-- **지인 마스킹**: `profile_visibility=FRIENDS`인 사용자를 친구가 아닌 사람이 조회하면 `403 PROFILE_NOT_VISIBLE`
-
-```json
-{
-  "code": "PROFILE_NOT_VISIBLE",
-  "message": "비공개 프로필입니다."
-}
-```
-
-- **에러 (404 Not Found)**: 대상이 없다
 - **인증**: 필요
 
 ### 10-9. `GET /api/v1/users/search` — 사용자 검색
@@ -4184,7 +4134,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   - 탈퇴는 활성 상태 때문에 막지 않는다. `MATCHING`이면 5-A의 대기 취소, `MATCHED`이면 방 나가기를 적용하고 인원을 갱신해 남은 참가자에게 이벤트를 보낸다. `STARTED`이면 본인이 `RUNNING`일 때 마지막 수신 데이터로 5-D의 종료 처리를, `JOINED`(미접속)일 때 강제 종료와 같은 기준의 이탈 처리를 먼저 적용한다. 미접속이면 시작 후 취소처럼 인원을 줄여 남은 참가자에게 이벤트를 보내고, 0이 되면 방을 `CANCELLED`로 닫는다.
   - `delete_users` 스냅샷 후 `users`를 하드 삭제한다. `delete_users.created_at`은 스냅샷 시각이다.
   - **유지**: `running_records`(+segments·splits)/`record_cards`(+images — 작성자가 탈퇴하면 8-1·10-3에서 404라 보이지 않는다). `running_players`와 `running_room_sessions`는 상태와 무관하게 전부 유지한다 — 시작 전 신청도 지우지 않고 일반 취소처럼 닫는다(쿨다운은 걸지 않는다). 시작한 방은 기록 없는 참가자도 결과에 남고, 신청 이력은 통계에 쓴다. 사용자는 공통 탈퇴 유저 형식으로 표시한다.
-  - **삭제**: `user_onboardings`(값은 `delete_users`로 스냅샷 후)/`user_devices`/`oauth_users`(`login_type` 판정 후 — 먼저 지우면 `LOCAL`로 보인다)/`user_relationships`(양쪽)/`user_colors`.
+  - **삭제**: `user_onboardings`(값은 `delete_users`로 스냅샷 후)/`user_devices`/`oauth_users`(`login_type` 판정 후 — 먼저 지우면 `LOCAL`로 보인다)/`user_relationships`(양쪽).
   - **DB 밖**: 리프레시 토큰 삭제 + 액세스 토큰 블랙리스트 등록, S3 프로필·배경 사진과 기록 카드 사진·음악(`record-cards/{userId}/`) 90일 뒤 삭제, GPS 원본 유지, 카카오 unlink(`provider_id` 선확보).
   - `delete_users`의 `email`·`nickname`은 90일 뒤 `NULL`로 갱신한다(행은 유지).
 - **Response**: `204 No Content` (토큰 즉시 무효화)

@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 
 // 판정 순서는 수정과 같다 — 방(404 → 409) → 메시지(404). 이미 지운 메시지도 404다.
-// 이력은 남기지 않는다 — 행에 마지막 내용이 남고 시각은 deleted_at이 말한다(erd running_room_chats)
+// 이력은 남기지 않는다 — 행에 마지막 내용이 남고 시각은 deleted_at이 말한다
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -61,6 +61,6 @@ public class DeleteRoomChatHandler implements DeleteRoomChatUsecase {
                 locked.createdAt()));
         // 커밋 후 방의 다른 참가자에게 — 지운 사람은 204를 받고 자기 화면을 바꾼다
         eventPublisher.publishEvent(new MatchRoomChangedEvent(MatchStreamEvent.roomChatDeleted(deleted)));
-        log.info("[매칭] 채팅 삭제 성공 - runningRoomId={}, chatId={}", command.runningRoomId(), command.chatId());
+        log.info("[매칭] 채팅 삭제 성공 - roomId={}, chatId={}", command.runningRoomId(), command.chatId());
     }
 }
