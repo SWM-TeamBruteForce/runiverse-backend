@@ -28,7 +28,7 @@ public class MatchRoomMembershipAdapter implements MatchRoomMembershipPort {
                 matchRoomSubscriber.subscribe(roomId);
             } catch (RuntimeException e) {
                 // 구독 없이 명부만 남으면 재연결이 첫 참가자가 아니게 돼 구독을 영영 건너뛴다.
-                // 정식 퇴장으로 되돌린다 — 반쯤 걸린 구독이 있어도 해제까지 정리되고, 없던 구독의 해제는 무해하다
+                // 그래서 명부에서 다시 빼고, 방이 비면 구독도 해제한다 — 반쯤 걸린 구독이 있어도 정리되고, 없던 구독의 해제는 무해하다
                 leave(userId);
                 throw e;
             }
