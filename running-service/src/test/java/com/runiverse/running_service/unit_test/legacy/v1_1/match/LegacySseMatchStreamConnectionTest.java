@@ -2,6 +2,7 @@ package com.runiverse.running_service.unit_test.legacy.v1_1.match;
 
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.match.port.out.MatchStreamEvent;
+import com.runiverse.running_service.application.match.port.out.RoomChat;
 import com.runiverse.running_service.application.match.port.out.RoomInfo;
 import com.runiverse.running_service.application.match.port.out.RunningReady;
 import com.runiverse.running_service.domain.running.room.vo.RoomInvitationStatus;
@@ -33,6 +34,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 // 1.1.x 와이어 계약 — 이벤트 이름과 data가 1.1.1 서버와 같은지 본다
@@ -114,6 +116,37 @@ class LegacySseMatchStreamConnectionTest {
         Set<SseEmitter.DataWithMediaType> sent = sent();
         assertThat(eventName(sent)).isEqualTo("RUNNING_READY");
         assertThat(body(sent)).isEqualTo(new RunningReadyResponse(ROOM_ID, START, 30_000L));
+    }
+
+    @Test
+    @DisplayName("방 채팅은 1.1.x가 모르는 이벤트라 보내지 않는다")
+    void roomChatIsNotSent() throws Exception {
+        // given
+        RoomChat chat = new RoomChat(3021L, ROOM_ID, new RoomChat.Sender(PLAYER, "철수", null, false),
+                "곧 출발해요", false, null, START.minusMinutes(8));
+
+        // when
+        connection.send(MatchStreamEvent.roomChatSent(chat));
+
+        // then -> 아무것도 쓰지 않고 연결도 닫지 않는다
+        verify(emitter, never()).send(any(SseEmitter.SseEventBuilder.class));
+        verify(emitter, never()).complete();
+    }
+
+    @Test
+    @DisplayName("채팅 수정·삭제도 1.1.x가 모르는 이벤트라 보내지 않는다")
+    void roomChatEditedAndDeletedAreNotSent() throws Exception {
+        // given
+        RoomChat chat = new RoomChat(3021L, ROOM_ID, new RoomChat.Sender(PLAYER, "철수", null, false),
+                null, true, null, START.minusMinutes(8));
+
+        // when
+        connection.send(MatchStreamEvent.roomChatEdited(chat));
+        connection.send(MatchStreamEvent.roomChatDeleted(chat));
+
+        // then
+        verify(emitter, never()).send(any(SseEmitter.SseEventBuilder.class));
+        verify(emitter, never()).complete();
     }
 
     @Test

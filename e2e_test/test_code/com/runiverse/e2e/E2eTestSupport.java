@@ -101,12 +101,17 @@ public abstract class E2eTestSupport {
 
     private Response exchange(String method, String path, Map<String, ?> request,
                               String accessToken, Map<String, String> headers) {
+        return exchange(BASE_URL, method, path, request, accessToken, headers);
+    }
+
+    private Response exchange(String baseUrl, String method, String path, Map<String, ?> request,
+                              String accessToken, Map<String, String> headers) {
         // 본문 없는 메서드에 빈 문자열을 실으면 Content-Type만 남아 서버가 파싱을 시도한다
         HttpRequest.BodyPublisher body = request == null
                 ? HttpRequest.BodyPublishers.noBody()
                 : HttpRequest.BodyPublishers.ofString(toJson(request), StandardCharsets.UTF_8);
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(BASE_URL + path))
+                .uri(URI.create(baseUrl + path))
                 .timeout(Duration.ofSeconds(10))
                 .method(method, body);
         if (request != null) {
@@ -154,6 +159,34 @@ public abstract class E2eTestSupport {
     /** 기본 앱 버전 헤더 대신 이 헤더만 싣는다 — 구버전 앱의 요청을 흉내 낼 때 쓴다. */
     protected Response delete(String path, String accessToken, Map<String, String> headers) {
         return exchange("DELETE", path, null, accessToken, headers);
+    }
+
+    // ---------- 다중 인스턴스 — 로드 밸런서 대신 테스트가 붙을 앱 인스턴스를 고른다 ----------
+    // 기본 스택은 앱 한 대다. 두 번째 인스턴스(E2E_SECOND_BASE_URL)를 띄운 경우에만 쓴다(MultiInstanceE2eTest)
+
+    protected static String primaryBaseUrl() {
+        return BASE_URL;
+    }
+
+    protected static String secondBaseUrl() {
+        return System.getenv("E2E_SECOND_BASE_URL");
+    }
+
+    protected Response getOn(String baseUrl, String path, String accessToken) {
+        return exchange(baseUrl, "GET", path, null, accessToken, SUPPORTED_APP_VERSION);
+    }
+
+    protected Response postOn(String baseUrl, String path, Map<String, ?> request, String accessToken) {
+        return exchange(baseUrl, "POST", path, request, accessToken, SUPPORTED_APP_VERSION);
+    }
+
+    protected SseStream openMatchStreamOn(String baseUrl, String accessToken) {
+        return SseStream.open(HTTP_CLIENT, baseUrl + "/match-rooms/stream", accessToken, SUPPORTED_APP_VERSION);
+    }
+
+    protected RunningWebSocket connectRunningWebSocketOn(String baseUrl, String accessToken) {
+        return RunningWebSocket.connect(HTTP_CLIENT, baseUrl.replaceFirst("^http", "ws") + "/ws/running",
+                accessToken, SUPPORTED_APP_VERSION);
     }
 
     /** 러닝 WebSocket에 붙는다. 토큰이 null이면 핸드셰이크가 401로 막히는지 확인하는 용도다. */

@@ -68,9 +68,9 @@ python3 .claude/skills/spec-check/scripts/check_conventions.py . application/use
 | 성공 상태 코드 | `ResponseEntity.status(...)`·`@ResponseStatus`·기본 200 |
 | 에러 코드·상태·노출 | `*ErrorCode` + `toStatus()` + `EXPOSED_CODES` 또는 전용 핸들러 (§1의 추적 경로) |
 | 멱등성·업무 동작 | Handler·도메인·포트 호출 + 중복 호출 결과·상태 변경·트랜잭션 |
-| 시각·ID·단위·enum | DTO·매핑·도메인 타입과 `docs/api-spec.md` §0·`docs/api-convention.md`·`docs/erd.md` §6 |
+| 시각·ID·단위·enum | DTO·매핑·도메인 타입과 `docs/api-spec.md` §0·`docs/api-convention.md`·`docs/erd.md` §5 |
 
-JPA 엔티티는 `docs/erd.md` §0과 해당 표의 컬럼명·타입·nullable·PK·UNIQUE·FK·삭제 정책·감사 컬럼·enum 값(§6)과 대조한다. CHECK는 스크립트가 대조한다.
+JPA 엔티티는 `docs/erd.md` §0과 해당 표의 컬럼명·타입·nullable·PK·UNIQUE·FK·삭제 정책·감사 컬럼·enum 값(§5)과 대조한다. CHECK는 스크립트가 대조한다.
 
 빌드·테스트는 진단의 완료 조건이 아니다. 사용자가 런타임 검증을 요청했거나 별도 수정 단계에서 파일을 바꾼 경우에만 `CLAUDE.md`의 가장 작은 관련 테스트를 실행한다. 실패는 우회하지 말고 명령·핵심 오류와 함께 그대로 보고한다.
 

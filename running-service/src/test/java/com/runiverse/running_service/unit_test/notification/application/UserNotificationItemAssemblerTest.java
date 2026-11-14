@@ -177,7 +177,7 @@ class UserNotificationItemAssemblerTest {
         // then -> 알림 하나 때문에 알림함 전체가 막히지 않는다
         assertThat(items).extracting(GetUserNotificationsResult.Item::notificationId).containsExactly(912L);
         assertThat(log.messages(Level.WARN)).containsExactly(
-                "[알림] 목록 항목 건너뜀: 초대 행 없음 - notificationId=913, runningRoomId=" + ROOM_ID);
+                "[알림] 목록 항목 건너뜀: 초대 행 없음 - notificationId=913, roomId=" + ROOM_ID);
     }
 
     @Test

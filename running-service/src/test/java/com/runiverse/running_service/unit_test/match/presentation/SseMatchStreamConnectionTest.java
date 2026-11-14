@@ -2,11 +2,13 @@ package com.runiverse.running_service.unit_test.match.presentation;
 
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.match.port.out.MatchStreamEvent;
+import com.runiverse.running_service.application.match.port.out.RoomChat;
 import com.runiverse.running_service.application.match.port.out.RoomInfo;
 import com.runiverse.running_service.domain.running.room.vo.RoomInvitationStatus;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
 import com.runiverse.running_service.presentation.match.response.InviteRoomEntranceResponse;
+import com.runiverse.running_service.presentation.match.response.RoomChatResponse;
 import com.runiverse.running_service.presentation.match.response.RoomInfoResponse;
 import com.runiverse.running_service.presentation.match.sse.SseMatchStreamConnection;
 import org.junit.jupiter.api.BeforeEach;
@@ -85,6 +87,99 @@ class SseMatchStreamConnectionTest {
         assertThat(json.get("invitations").get(0).get("status").asString()).isEqualTo("PENDING");
         assertThat(json.get("invitations").get(0).get("isDeleted").asBoolean()).isFalse();
         assertThat(json.has("room")).isFalse();   // 감싸지 않는다
+    }
+
+    @Test
+    @DisplayName("매칭 방 입장은 MATCH_ROOM_ENTRANCE 이름으로 방 정보만 싣고 남은 시간 키가 없다")
+    void matchEntranceCarriesRoomInfoOnly() throws Exception {
+        // when
+        connection.send(MatchStreamEvent.snapshot(roomOf(RunningRoomType.MATCH, List.of()), START.minusMinutes(20)));
+
+        // then -> 이름으로 입장과 갱신을 가른다. 남은 시간은 초대 방 입장만 싣는다
+        ArgumentCaptor<SseEmitter.SseEventBuilder> sent = ArgumentCaptor.forClass(SseEmitter.SseEventBuilder.class);
+        verify(emitter).send(sent.capture());
+        assertThat(sent.getValue().build())
+                .anyMatch(part -> part.getData() instanceof String text
+                        && text.contains("event:MATCH_ROOM_ENTRANCE\n"));
+        Object body = sentBody();
+        assertThat(body).isInstanceOf(RoomInfoResponse.class);
+        assertThat(JSON.valueToTree(body).has("startsInMs")).isFalse();
+    }
+
+    @Test
+    @DisplayName("보낸 채팅은 ROOM_CHAT_SENT 이름으로 명세의 Chat 모양을 싣는다")
+    void roomChatSentCarriesChat() throws Exception {
+        // given -> 고친 적 없는 새 메시지
+        RoomChat chat = new RoomChat(3021L, ROOM_ID,
+                new RoomChat.Sender(INVITEE, "철수", "https://cdn/profile.png", false),
+                "곧 출발해요", false, null, START.minusMinutes(8));
+
+        // when
+        connection.send(MatchStreamEvent.roomChatSent(chat));
+
+        // then -> 이름은 방 종류와 상관없이 같다. 방 정보로 감싸지 않는다
+        ArgumentCaptor<SseEmitter.SseEventBuilder> sent = ArgumentCaptor.forClass(SseEmitter.SseEventBuilder.class);
+        verify(emitter).send(sent.capture());
+        assertThat(sent.getValue().build())
+                .anyMatch(part -> part.getData() instanceof String text
+                        && text.contains("event:ROOM_CHAT_SENT\n"));
+        Object body = sentBody();
+        assertThat(body).isInstanceOf(RoomChatResponse.class);
+        JsonNode json = JSON.valueToTree(body);
+        assertThat(json.get("chatId").asLong()).isEqualTo(3021L);
+        assertThat(json.get("runningRoomId").asLong()).isEqualTo(ROOM_ID);
+        assertThat(json.get("sender").get("userId").asString()).isEqualTo(INVITEE.toString());
+        assertThat(json.get("sender").get("nickname").asString()).isEqualTo("철수");
+        assertThat(json.get("sender").get("isDeleted").asBoolean()).isFalse();
+        assertThat(json.get("content").asString()).isEqualTo("곧 출발해요");
+        assertThat(json.get("isDeleted").asBoolean()).isFalse();
+        assertThat(json.get("editedAt").isNull()).isTrue();   // 키는 있고 값이 null이다
+        assertThat(json.has("createdAt")).isTrue();
+        assertThat(json.has("room")).isFalse();
+    }
+
+    @Test
+    @DisplayName("고친 채팅은 ROOM_CHAT_EDITED 이름으로 새 내용과 수정 시각을 싣는다")
+    void roomChatEditedCarriesChat() throws Exception {
+        // given
+        RoomChat chat = new RoomChat(3021L, ROOM_ID,
+                new RoomChat.Sender(INVITEE, "철수", null, false),
+                "조금 늦어요", false, START.minusMinutes(2), START.minusMinutes(8));
+
+        // when
+        connection.send(MatchStreamEvent.roomChatEdited(chat));
+
+        // then
+        ArgumentCaptor<SseEmitter.SseEventBuilder> sent = ArgumentCaptor.forClass(SseEmitter.SseEventBuilder.class);
+        verify(emitter).send(sent.capture());
+        assertThat(sent.getValue().build())
+                .anyMatch(part -> part.getData() instanceof String text
+                        && text.contains("event:ROOM_CHAT_EDITED\n"));
+        JsonNode json = JSON.valueToTree(sentBody());
+        assertThat(json.get("content").asString()).isEqualTo("조금 늦어요");
+        assertThat(json.get("editedAt").isNull()).isFalse();
+    }
+
+    @Test
+    @DisplayName("지운 채팅은 ROOM_CHAT_DELETED 이름으로 내용 null·isDeleted true를 싣는다")
+    void roomChatDeletedCarriesChat() throws Exception {
+        // given -> 조립기가 지운 메시지의 내용을 이미 비웠다
+        RoomChat chat = new RoomChat(3021L, ROOM_ID,
+                new RoomChat.Sender(INVITEE, "철수", null, false),
+                null, true, null, START.minusMinutes(8));
+
+        // when
+        connection.send(MatchStreamEvent.roomChatDeleted(chat));
+
+        // then
+        ArgumentCaptor<SseEmitter.SseEventBuilder> sent = ArgumentCaptor.forClass(SseEmitter.SseEventBuilder.class);
+        verify(emitter).send(sent.capture());
+        assertThat(sent.getValue().build())
+                .anyMatch(part -> part.getData() instanceof String text
+                        && text.contains("event:ROOM_CHAT_DELETED\n"));
+        JsonNode json = JSON.valueToTree(sentBody());
+        assertThat(json.get("content").isNull()).isTrue();   // 키는 있고 값이 null이다
+        assertThat(json.get("isDeleted").asBoolean()).isTrue();
     }
 
     @Test

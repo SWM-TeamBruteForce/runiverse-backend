@@ -27,6 +27,8 @@ public final class RunningWebSocket implements AutoCloseable {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(10);
     private static final String ERROR_EVENT = "ERROR";
+    /** 서버가 연결을 닫으면 대기열에 이 이름으로 한 건 들어간다 — data는 닫힘 코드다. */
+    public static final String CLOSED_EVENT = "__CLOSED__";
 
     private final WebSocket socket;
     private final BlockingQueue<Map<String, Object>> received;
@@ -128,9 +130,50 @@ public final class RunningWebSocket implements AutoCloseable {
         }
     }
 
+    /** 서버가 이 연결을 닫을 때까지 기다린다 — 그 사이 온 메시지는 흘려보낸다. 닫힘 코드를 돌려준다. */
+    public int awaitClosed(Duration timeout) {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (true) {
+            long remaining = deadline - System.nanoTime();
+            if (remaining <= 0) {
+                throw new IllegalStateException("서버가 %s 안에 연결을 닫지 않았습니다".formatted(timeout));
+            }
+            Map<String, Object> message = poll(remaining);
+            if (message != null && CLOSED_EVENT.equals(message.get("event"))) {
+                received.add(message);   // 다음 대기도 닫힌 걸 알게 되돌린다
+                return (Integer) message.get("data");
+            }
+        }
+    }
+
+    /** 정해진 시간 동안 온 메시지를 모두 모은다 — "오면 안 되는 메시지"를 확인할 때 쓴다. */
+    public java.util.List<Map<String, Object>> drainFor(Duration window) {
+        java.util.List<Map<String, Object>> messages = new java.util.ArrayList<>();
+        long deadline = System.nanoTime() + window.toNanos();
+        while (true) {
+            long remaining = deadline - System.nanoTime();
+            if (remaining <= 0) {
+                return messages;
+            }
+            Map<String, Object> message = poll(remaining);
+            if (message != null) {
+                messages.add(message);
+                if (CLOSED_EVENT.equals(message.get("event"))) {
+                    received.add(message);
+                    return messages;
+                }
+            }
+        }
+    }
+
     @Override
     public void close() {
-        socket.sendClose(WebSocket.NORMAL_CLOSURE, "테스트 종료").join();
+        // 서버가 먼저 닫았으면 출력도 닫혀 있을 수 있다 — 테스트 정리에서 그 실패를 다시 알릴 이유가 없다
+        try {
+            socket.sendClose(WebSocket.NORMAL_CLOSURE, "테스트 종료").join();
+        } catch (java.util.concurrent.CompletionException e) {
+            socket.abort();
+        }
     }
 
     private static String toJson(Object value) {
@@ -161,6 +204,12 @@ public final class RunningWebSocket implements AutoCloseable {
             // 여기서 직접 요청하지 않으면 서버 메시지를 딱 하나만 받고 그 뒤로는 조용해진다.
             // 반환하는 null은 "이 메시지 처리 끝"이지 다음 메시지 요청이 아니다
             webSocket.request(1);
+            return null;
+        }
+
+        @Override
+        public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+            received.add(new HashMap<>(Map.of("event", CLOSED_EVENT, "data", statusCode)));
             return null;
         }
 

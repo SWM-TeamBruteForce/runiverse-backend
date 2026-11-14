@@ -8,6 +8,7 @@ import com.runiverse.running_service.application.common.exception.MatchErrorCode
 import com.runiverse.running_service.application.common.exception.NotificationErrorCode;
 import com.runiverse.running_service.application.common.exception.RelationshipErrorCode;
 import com.runiverse.running_service.application.common.exception.ResourceErrorCode;
+import com.runiverse.running_service.application.common.exception.RoomChatErrorCode;
 import com.runiverse.running_service.application.common.exception.RunningErrorCode;
 import com.runiverse.running_service.application.common.exception.UserErrorCode;
 import com.runiverse.running_service.application.match.exception.MatchCooldownException;
@@ -264,6 +265,7 @@ public class GlobalExceptionHandler {
             case ResourceErrorCode code -> toStatus(code);
             case InviteErrorCode code -> toStatus(code);
             case NotificationErrorCode code -> toStatus(code);
+            case RoomChatErrorCode code -> toStatus(code);
         };
     }
 
@@ -332,6 +334,8 @@ public class GlobalExceptionHandler {
                  MATCH_COOLDOWN,
                  MATCH_SLOT_CLOSED,
                  MATCH_ALREADY_STARTED -> HttpStatus.CONFLICT;
+            // 스트림 연결 전용이라 컨트롤러가 본문 없이 직접 답한다 — 이 경로로 나갈 일이 없다
+            case MATCH_STREAM_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
         };
     }
 
@@ -362,6 +366,14 @@ public class GlobalExceptionHandler {
     private HttpStatus toStatus(NotificationErrorCode code) {
         return switch (code) {
             case INVALID_NOTIFICATION_CURSOR -> HttpStatus.BAD_REQUEST;
+        };
+    }
+
+    private HttpStatus toStatus(RoomChatErrorCode code) {
+        return switch (code) {
+            // 러닝이 시작됐다 — 요청이 틀린 게 아니라 방 상태와 부딪힌 것이다
+            case ROOM_CHAT_CLOSED -> HttpStatus.CONFLICT;
+            case INVALID_ROOM_CHAT_CURSOR -> HttpStatus.BAD_REQUEST;
         };
     }
 

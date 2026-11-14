@@ -19,6 +19,11 @@ public class FakeMatchRoomMembership implements MatchRoomMembershipPort {
 
     @Override
     public void join(UserId userId, Long runningRoomId) {
+        // 운영 어댑터와 같다 — 방을 갈아타면 이전 방부터 뺀다
+        registry.roomOf(userId)
+                .filter(previous -> !previous.equals(runningRoomId))
+                .flatMap(previous -> registry.leave(userId))
+                .ifPresent(subscribedRooms::remove);
         registry.join(userId, runningRoomId).ifPresent(subscribedRooms::add);
     }
 

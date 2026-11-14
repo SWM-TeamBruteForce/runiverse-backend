@@ -53,15 +53,21 @@ public class LegacySseMatchStreamConnection implements MatchStreamConnection {
 
     @Override
     public void send(MatchStreamEvent event) {
-        send(switch (event.type()) {
+        SseEmitter.SseEventBuilder frame = switch (event.type()) {
             case MATCH_CONFIRMED -> roomEvent(MATCH_STARTED, event);
             // 1.1.x 앱은 초대 방에 들어갈 수 없어 실제로는 오지 않는다 — switch가 모든 이벤트를 다루게 하려고 둔다.
             // 오더라도 버리면 방 정보가 하나도 오지 않으니 아는 갱신 이벤트로 바꿔 보낸다
-            case MATCH_ROOM_UPDATED, INVITE_ROOM_ENTRANCE, INVITE_ROOM_UPDATED -> roomEvent(MATCH_ROOM_UPDATED, event);
+            case MATCH_ROOM_ENTRANCE, MATCH_ROOM_UPDATED, INVITE_ROOM_ENTRANCE, INVITE_ROOM_UPDATED ->
+                    roomEvent(MATCH_ROOM_UPDATED, event);
             case RUNNING_READY -> SseEmitter.event()
                     .name(RUNNING_READY)
                     .data(RunningReadyResponse.from(event.ready()), MediaType.APPLICATION_JSON);
-        });
+            // 1.1.x에는 채팅이 없다 — 모르는 이벤트를 보내지 않는다
+            case ROOM_CHAT_SENT, ROOM_CHAT_EDITED, ROOM_CHAT_DELETED -> null;
+        };
+        if (frame != null) {
+            send(frame);
+        }
     }
 
     private static SseEmitter.SseEventBuilder roomEvent(String name, MatchStreamEvent event) {

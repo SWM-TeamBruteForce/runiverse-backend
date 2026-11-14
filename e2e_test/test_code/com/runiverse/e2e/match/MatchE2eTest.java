@@ -50,7 +50,7 @@ class MatchE2eTest extends E2eTestSupport {
         try (SseStream stream = openMatchStream(host.accessToken())) {
             // when - 2. 연결 직후 스냅샷이 방 정보를 나른다
             assertThat(stream.status()).isEqualTo(200);
-            Map<String, Object> snapshot = stream.await("MATCH_ROOM_UPDATED");
+            Map<String, Object> snapshot = stream.await("MATCH_ROOM_ENTRANCE");
 
             // then
             assertThat(((Number) snapshot.get("runningRoomId")).intValue()).isEqualTo(runningRoomId);
@@ -254,7 +254,7 @@ class MatchE2eTest extends E2eTestSupport {
                 .isEqualTo(runningRoomId);
 
         try (SseStream stream = openMatchStream(host.accessToken())) {
-            assertThat(userIdsOf(stream.await("MATCH_ROOM_UPDATED")))
+            assertThat(userIdsOf(stream.await("MATCH_ROOM_ENTRANCE")))
                     .containsExactlyInAnyOrder(host.userId(), leaver.userId());
 
             // when - 탈퇴는 활성 신청 때문에 막히지 않고, 대기 취소를 먼저 적용한다

@@ -7,6 +7,7 @@ import com.runiverse.running_service.application.match.port.out.MatchRoomMembers
 import com.runiverse.running_service.application.match.port.out.MatchStreamConnection;
 import com.runiverse.running_service.application.match.port.out.MatchStreamEvent;
 import com.runiverse.running_service.application.match.port.out.MatchStreamPort;
+import com.runiverse.running_service.application.match.port.out.PublishMatchStreamSupersedePort;
 import com.runiverse.running_service.application.match.port.out.RoomInfo;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ public class OpenMatchStreamHandler implements OpenMatchStreamUsecase {
     private final MatchStreamPort matchStreamPort;
     private final MatchRoomMembershipPort matchRoomMembershipPort;
     private final RoomInfoAssembler roomInfoAssembler;
+    private final PublishMatchStreamSupersedePort publishMatchStreamSupersedePort;
 
     @Override
     public void handle(OpenMatchStreamCommand command) {
@@ -41,7 +43,16 @@ public class OpenMatchStreamHandler implements OpenMatchStreamUsecase {
         matchStreamPort.register(userId, connection)
                 .ifPresent(MatchStreamConnection::closeSuperseded);
         // 구독을 먼저 건다 — 스냅샷을 보내는 사이에 온 갱신을 놓치지 않는다
-        matchRoomMembershipPort.join(userId, room.runningRoomId());
+        try {
+            matchRoomMembershipPort.join(userId, room.runningRoomId());
+        } catch (RuntimeException e) {
+            // 연결을 돌려주지 못하면 종료 콜백도 오지 않는다 — 등록한 연결은 여기서 뺀다
+            matchStreamPort.remove(userId, connection);
+            throw e;
+        }
+        // 다른 인스턴스가 들고 있을지 모를 옛 연결까지 닫게 알린다.
+        // 등록 뒤에 보낸다 — 이 인스턴스도 이 알림을 되받는데, 그때 연결표에 새 연결이 있어야 닫지 않는다
+        publishMatchStreamSupersedePort.publish(userId, connection.id());
         // 재연결이 곧 스냅샷 재수신이다 — 놓친 이벤트를 되짚을 필요가 없다.
         // 초대 방은 입장 이벤트에 시작까지 남은 시간을 더 싣는다
         connection.send(MatchStreamEvent.snapshot(room, LocalDateTime.now()));

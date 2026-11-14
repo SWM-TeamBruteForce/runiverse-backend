@@ -2,6 +2,8 @@ package com.runiverse.running_service.unit_test.presentation;
 
 import com.runiverse.running_service.application.common.exception.AuthErrorCode;
 import com.runiverse.running_service.application.common.exception.InviteErrorCode;
+import com.runiverse.running_service.application.common.exception.MatchErrorCode;
+import com.runiverse.running_service.application.common.exception.RoomChatErrorCode;
 import com.runiverse.running_service.application.common.exception.RunningErrorCode;
 import com.runiverse.running_service.application.common.exception.UserErrorCode;
 import com.runiverse.running_service.presentation.common.exception.CommonErrorCode;
@@ -107,6 +109,24 @@ public class ErrorExposurePolicyTest {
     void invitationConflictsAreExposed(InviteErrorCode errorCode) {
         // 가려지면 500으로 바뀌어, 클라가 다시 고르게 할지·버튼을 다시 그릴지 가를 수 없다
         assertThat(ErrorExposurePolicy.isExposed(HttpStatus.CONFLICT, errorCode.getCode())).isTrue();
+    }
+
+    @Test
+    @DisplayName("러닝이 시작돼 닫힌 채팅은 409 그대로 노출한다")
+    void chatClosedIsExposed() {
+        // 가려지면 500으로 바뀌어, 클라가 채팅 입력을 닫을지 가를 수 없다
+        assertThat(ErrorExposurePolicy.isExposed(
+                HttpStatus.CONFLICT,
+                RoomChatErrorCode.ROOM_CHAT_CLOSED.getCode())).isTrue();
+    }
+
+    @Test
+    @DisplayName("방 스트림 구독 실패는 노출 목록에 넣지 않는다")
+    void matchStreamUnavailableIsNotExposed() {
+        // 스트림 컨트롤러가 본문 없이 503으로 직접 답한다 — 이 정책을 타는 경로가 없다
+        assertThat(ErrorExposurePolicy.isExposed(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                MatchErrorCode.MATCH_STREAM_UNAVAILABLE.getCode())).isFalse();
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.runiverse.running_service.infrastructure.redis.match;
 import com.runiverse.running_service.application.match.command.broadcast.BroadcastMatchEventCommand;
 import com.runiverse.running_service.application.match.port.in.BroadcastMatchEventUsecase;
 import com.runiverse.running_service.application.match.port.out.MatchStreamEvent;
+import com.runiverse.running_service.domain.common.vo.UserId;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.Message;
@@ -34,6 +35,8 @@ public class MatchEventListener implements MessageListener {
         }
         broadcastMatchEventUsecase.handle(new BroadcastMatchEventCommand(
                 new MatchStreamEvent(payload.type(), payload.runningRoomId(),
-                        payload.room(), payload.ready(), null)));
+                        payload.room(), payload.ready(), null,
+                        payload.chat(),
+                        payload.excludedUserId() == null ? null : new UserId(payload.excludedUserId()))));
     }
 }

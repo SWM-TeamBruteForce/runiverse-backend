@@ -5,11 +5,13 @@ import com.runiverse.running_service.application.match.command.stream.OpenMatchS
 import com.runiverse.running_service.application.match.command.stream.OpenMatchStreamHandler;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
 import com.runiverse.running_service.application.match.exception.ActiveMatchNotFoundException;
+import com.runiverse.running_service.application.match.exception.MatchStreamUnavailableException;
 import com.runiverse.running_service.application.match.port.out.MatchEventType;
 import com.runiverse.running_service.application.match.port.out.MatchRoomMembershipPort;
 import com.runiverse.running_service.application.match.port.out.MatchStreamConnection;
 import com.runiverse.running_service.application.match.port.out.MatchStreamEvent;
 import com.runiverse.running_service.application.match.port.out.MatchStreamPort;
+import com.runiverse.running_service.application.match.port.out.PublishMatchStreamSupersedePort;
 import com.runiverse.running_service.application.match.port.out.RoomInfo;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomStatus;
@@ -31,9 +33,12 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
@@ -61,6 +66,9 @@ class OpenMatchStreamHandlerTest {
     @Mock
     private RoomInfoAssembler roomInfoAssembler;
 
+    @Mock
+    private PublishMatchStreamSupersedePort publishMatchStreamSupersedePort;
+
     @InjectMocks
     private OpenMatchStreamHandler openMatchStreamHandler;
 
@@ -79,7 +87,7 @@ class OpenMatchStreamHandlerTest {
         InOrder order = inOrder(matchRoomMembershipPort, newConnection);
         order.verify(matchRoomMembershipPort).join(new UserId(USER_ID), ROOM_ID);
         order.verify(newConnection)
-                .send(MatchStreamEvent.updated(ROOM_INFO));
+                .send(new MatchStreamEvent(MatchEventType.MATCH_ROOM_ENTRANCE, ROOM_ID, ROOM_INFO, null, null, null, null));
     }
 
     @Test
@@ -95,7 +103,7 @@ class OpenMatchStreamHandlerTest {
         // when
         openMatchStreamHandler.handle(new OpenMatchStreamCommand(USER_ID, newConnection));
 
-        // then -> 매칭 방의 MATCH_ROOM_UPDATED 대신 INVITE_ROOM_ENTRANCE다. 남은 시간은 보낸 시점 기준이다
+        // then -> 매칭 방의 MATCH_ROOM_ENTRANCE 대신 INVITE_ROOM_ENTRANCE다. 남은 시간은 보낸 시점 기준이다
         ArgumentCaptor<MatchStreamEvent> sent = ArgumentCaptor.forClass(MatchStreamEvent.class);
         verify(newConnection).send(sent.capture());
         assertThat(sent.getValue().type()).isEqualTo(MatchEventType.INVITE_ROOM_ENTRANCE);
@@ -160,6 +168,82 @@ class OpenMatchStreamHandlerTest {
 
         // then
         verifyNoInteractions(matchStreamPort, matchRoomMembershipPort, newConnection);
+        // then -> 실패한 연결이 다른 인스턴스의 정상 연결을 닫으면 안 된다
+        verifyNoInteractions(publishMatchStreamSupersedePort);
+    }
+
+    @Test
+    @DisplayName("등록·구독 뒤, 스냅샷 전에 다른 인스턴스에 대체를 알린다")
+    void publishesSupersedeAfterRegisterAndJoin() {
+        // given
+        givenActiveMatch();
+        given(newConnection.id()).willReturn("conn-new");
+        given(matchStreamPort.register(new UserId(USER_ID), newConnection)).willReturn(Optional.empty());
+
+        // when
+        openMatchStreamHandler.handle(new OpenMatchStreamCommand(USER_ID, newConnection));
+
+        // then -> 이 인스턴스도 이 알림을 되받는다. 등록이 먼저여야 되받았을 때 새 연결을 이긴 연결로 알아본다
+        InOrder order = inOrder(matchStreamPort, matchRoomMembershipPort, publishMatchStreamSupersedePort, newConnection);
+        order.verify(matchStreamPort).register(new UserId(USER_ID), newConnection);
+        order.verify(matchRoomMembershipPort).join(new UserId(USER_ID), ROOM_ID);
+        order.verify(publishMatchStreamSupersedePort).publish(new UserId(USER_ID), "conn-new");
+        order.verify(newConnection).send(any());
+    }
+
+    @Test
+    @DisplayName("같은 인스턴스의 옛 연결을 닫았어도 다른 인스턴스에 대체를 알린다")
+    void publishesSupersedeEvenWhenLocalConnectionWasReplaced() {
+        // given -> 이 인스턴스에서 하나를 닫았다고 다른 인스턴스에 옛 연결이 없다는 보장은 없다
+        givenActiveMatch();
+        given(newConnection.id()).willReturn("conn-new");
+        given(matchStreamPort.register(new UserId(USER_ID), newConnection))
+                .willReturn(Optional.of(supersededConnection));
+
+        // when
+        openMatchStreamHandler.handle(new OpenMatchStreamCommand(USER_ID, newConnection));
+
+        // then
+        verify(supersededConnection).closeSuperseded();
+        verify(publishMatchStreamSupersedePort).publish(new UserId(USER_ID), "conn-new");
+        verify(supersededConnection, never()).send(any());
+    }
+
+    @Test
+    @DisplayName("방 구독에 실패하면 등록한 연결을 연결표에서 빼고 예외를 그대로 알린다")
+    void removesConnectionWhenJoinFails() {
+        // given
+        givenActiveMatch();
+        given(matchStreamPort.register(new UserId(USER_ID), newConnection)).willReturn(Optional.empty());
+        willThrow(new MatchStreamUnavailableException())
+                .given(matchRoomMembershipPort).join(new UserId(USER_ID), ROOM_ID);
+
+        // when
+        assertThatThrownBy(() ->
+                openMatchStreamHandler.handle(new OpenMatchStreamCommand(USER_ID, newConnection)))
+                .isInstanceOf(MatchStreamUnavailableException.class);
+
+        // then -> 응답이 에러로 나가 연결 종료 콜백이 오지 않는다. 남기면 이벤트가 닿지 않는 연결에 쌓인다
+        verify(matchStreamPort).remove(new UserId(USER_ID), newConnection);
+    }
+
+    @Test
+    @DisplayName("방 구독에 실패한 연결은 다른 인스턴스에 대체를 알리지 않고 스냅샷도 보내지 않는다")
+    void sendsNothingWhenJoinFails() {
+        // given
+        givenActiveMatch();
+        given(matchStreamPort.register(new UserId(USER_ID), newConnection)).willReturn(Optional.empty());
+        willThrow(new MatchStreamUnavailableException())
+                .given(matchRoomMembershipPort).join(new UserId(USER_ID), ROOM_ID);
+
+        // when
+        assertThatThrownBy(() ->
+                openMatchStreamHandler.handle(new OpenMatchStreamCommand(USER_ID, newConnection)))
+                .isInstanceOf(MatchStreamUnavailableException.class);
+
+        // then -> 실패한 연결이 다른 인스턴스의 정상 연결을 닫으면 안 된다
+        verifyNoInteractions(publishMatchStreamSupersedePort);
+        verify(newConnection, never()).send(any());
     }
 
     private void givenActiveMatch() {

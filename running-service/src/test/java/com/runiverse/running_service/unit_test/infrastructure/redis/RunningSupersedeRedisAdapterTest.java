@@ -2,7 +2,7 @@ package com.runiverse.running_service.unit_test.infrastructure.redis;
 
 import ch.qos.logback.classic.Level;
 import com.runiverse.running_service.application.running.exception.RunningSessionUnavailableException;
-import com.runiverse.running_service.infrastructure.redis.running.SupersedeRedisAdapter;
+import com.runiverse.running_service.infrastructure.redis.running.RunningSupersedeRedisAdapter;
 import com.runiverse.running_service.support.LogCapture;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,7 +25,7 @@ import static org.mockito.BDDMockito.willThrow;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("이전 세션 종료 통지 발행 어댑터 단위 테스트")
-class SupersedeRedisAdapterTest {
+class RunningSupersedeRedisAdapterTest {
 
     private static final Long ROOM_ID = 42L;
     private static final UUID USER_ID = UUID.randomUUID();
@@ -33,13 +33,13 @@ class SupersedeRedisAdapterTest {
     @Mock
     private StringRedisTemplate redisTemplate;
 
-    private SupersedeRedisAdapter adapter;
+    private RunningSupersedeRedisAdapter adapter;
     private LogCapture log;
 
     @BeforeEach
     void setUp() {
-        adapter = new SupersedeRedisAdapter(redisTemplate, JsonMapper.builder().build());
-        log = LogCapture.of(SupersedeRedisAdapter.class);
+        adapter = new RunningSupersedeRedisAdapter(redisTemplate, JsonMapper.builder().build());
+        log = LogCapture.of(RunningSupersedeRedisAdapter.class);
     }
 
     @AfterEach

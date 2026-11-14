@@ -71,7 +71,7 @@ public class UserNotificationItemAssembler {
             InvitationSnapshot snapshot = invitations.get(roomId);
             if (snapshot == null) {
                 // 초대는 받은 사람이 탈퇴할 때만 지워지는데 그때는 알림도 함께 지워진다 — 여기 오면 어긋난 데이터다
-                log.warn("[알림] 목록 항목 건너뜀: 초대 행 없음 - notificationId={}, runningRoomId={}",
+                log.warn("[알림] 목록 항목 건너뜀: 초대 행 없음 - notificationId={}, roomId={}",
                         row.userNotificationId(), roomId);
                 return Optional.empty();
             }
