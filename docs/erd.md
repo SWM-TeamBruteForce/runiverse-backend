@@ -459,8 +459,8 @@
 
 | 컬럼 | 타입 | 제약 | 비고 |
 |---|---|---|---|
-| record_card_id | UUID | PK | UUIDv7. **DB가 매기지 않고 작성 요청(api-spec 9-1)이 정한다** — 사진 key가 카드 폴더(`record-cards/{userId}/{recordCardId}/…`) 아래라 업로드 URL을 주기 전에 ID가 있어야 한다. 확정(9-2)이 이 값으로 행을 넣는다. 되살리면 예전 값 그대로다. AI 서버도 이 값을 키로 저장한다 |
-| running_record_id | bigint | FK → running_records, NOT NULL, UNIQUE, ON DELETE CASCADE | 카드가 붙은 기록. **기록과 1:1** — 지운 카드도 행이 남아 기록당 행은 평생 하나다([§0](#0-공통-규칙)) |
+| record_card_id | UUID | PK | UUIDv7. **DB가 매기지 않고 작성 요청(api-spec 9-1)이 정한다** — 사진 key가 카드 폴더(`record-cards/{userId}/{recordCardId}/…`) 아래라 업로드 URL을 주기 전에 ID가 있어야 한다. 확정(9-2)이 이 값으로 행을 넣는다. AI 서버도 이 값을 키로 저장한다 |
+| running_record_id | bigint | FK → running_records, NOT NULL, UNIQUE, ON DELETE CASCADE | 카드가 붙은 기록. **기록과 1:1** — 지우면 행이 사라져(하드 삭제) 같은 기록으로 새 카드를 만들 수 있다([§0](#0-공통-규칙)) |
 | user_id | UUID | → users, NOT NULL | 작성자. **기록 주인과 같다** — 생성 시 `running_records.user_id`와 대조한다 |
 | visibility | enum | NOT NULL | 카드별 공개 범위. 기본값을 서버에 두지 않는다 — 작성 화면 기본값은 클라가 `PUBLIC`으로 둔다 |
 | activity_type | enum | NOT NULL | 그날 러닝의 성격 — `DAILY`(일상) / `TRAVEL`(여행) / `RACE`(대회). 사용자가 고르고, AI가 기본곡·사진 음악의 맥락으로 쓴다 |
