@@ -2771,6 +2771,11 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 {
   "code": "INVALID_REQUEST",
+  "message": "입력값이 올바르지 않습니다."
+}
+
+{
+  "code": "INVALID_REQUEST",
   "message": "활동 유형은 필수입니다."
 }
 
@@ -2840,6 +2845,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 }
 ```
 
+- `"입력값이 올바르지 않습니다."`는 `runningRecordId`가 1보다 작을 때다
 - 이미지 형식·크기의 나머지 문구(필수·1바이트 이상)는 11-1과 같다
 
 - **에러 (404 Not Found — 기록이 없거나 내 기록이 아님)**
@@ -2897,6 +2903,17 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **DB에는 저장됐는데 "확정됨" 표시를 못 남긴 채 끊겼어도 재시도는 같은 카드를 받는다** — 확정 때 이 기록에 살아 있는 카드가 있으면 그 카드 ID가 초안의 `recordCardId`와 같은지 본다. 같으면 이 초안이 만든 카드라 "확정됨"으로 표시하고 그 카드를 돌려주고(201), 다르면 다른 초안이 먼저 만든 카드라 409 `RECORD_CARD_ALREADY_EXISTS`다
 - **같은 사람이 다른 기록으로 동시에 확정해 순위(`display_order`)가 겹치면 409 `RECORD_CARD_DRAFT_IN_PROGRESS`로 돌려보낸다** — 기록 행 잠금은 같은 기록끼리만 줄을 세워, 다른 기록끼리는 최댓값을 같이 읽을 수 있다. `uk_record_card_user_display_order`가 하나를 막고, 막힌 쪽은 다시 시도하지 않고 409를 받는다. 트랜잭션이 롤백돼 카드 행도 음악 생성 요청도 남지 않고 초안은 확정 전 그대로라, 앱이 다시 부르면 다시 읽은 순위로 확정된다. 다시 부르지 않고 떠나면 올린 사진만 S3에 남는다(확정 안 된 사진과 같다)
 - **같은 초안의 확정이 이미 처리 중이면 기다리지 않고 409로 돌려보낸다** — `recordCardDraftId` 단위로 잠근다(Redis, 잠금 유효 시간은 운영값으로 현재 30초 — 처리하던 서버가 죽어도 풀린다). 다시 부를지는 앱이 정한다. 앞의 확정이 끝난 뒤 다시 부르면 위 규칙대로 같은 카드를 받는다
+
+- **에러 (400 Bad Request — 요청 검증: `recordCardDraftId`가 UUIDv7 형식이 아님)**
+
+```json
+{
+  "code": "INVALID_REQUEST",
+  "message": "입력값이 올바르지 않습니다."
+}
+```
+
+- 서버가 만든 초안 ID는 늘 UUIDv7이다 — 형식이 다르면 Redis를 찾지 않고 400으로 돌려보낸다. 형식은 맞는데 없는 ID는 404다
 
 - **에러 (400 Bad Request — 사진 key에 해당하는 객체가 S3에 없음, 나눠 올린 조각이 빠짐)**
 
