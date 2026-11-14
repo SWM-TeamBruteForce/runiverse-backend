@@ -34,6 +34,7 @@ services:
       # init 스크립트가 만들 버킷 — .env.test의 S3_*_BUCKET과 반드시 같아야 한다
       E2E_GPS_TRACK_BUCKET: runiverse-e2e-gps-track
       E2E_USER_ASSET_BUCKET: runiverse-e2e-user-asset
+      E2E_RECORD_CARD_BUCKET: runiverse-e2e-record-card
     networks:
       default:
         aliases:
@@ -44,11 +45,13 @@ services:
           - s3.localhost.localstack.cloud
           - runiverse-e2e-gps-track.s3.localhost.localstack.cloud
           - runiverse-e2e-user-asset.s3.localhost.localstack.cloud
+          - runiverse-e2e-record-card.s3.localhost.localstack.cloud
     volumes:
       - ./localstack/init-s3.sh:/etc/localstack/init/ready.d/init-s3.sh:ro
     healthcheck:
       # 기동만이 아니라 버킷 생성까지 끝났는지를 본다 — 앱이 그 전에 붙으면 의미가 없다
-      test: ["CMD-SHELL", "awslocal s3api head-bucket --bucket runiverse-e2e-gps-track"]
+      # init 스크립트가 마지막에 만드는 버킷을 본다 — 앞 버킷만 보면 뒤 버킷이 생기기 전에 통과한다
+      test: ["CMD-SHELL", "awslocal s3api head-bucket --bucket runiverse-e2e-record-card"]
       interval: 5s
       timeout: 5s
       retries: 12

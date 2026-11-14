@@ -39,6 +39,7 @@ public class GpsTrackS3AdapterTest {
     // 두 버킷 값을 다르게 둬야 어댑터가 버킷을 바꿔 쓰는 실수가 테스트에 드러난다
     private static final String USER_ASSET_BUCKET = "runiverse-user-assets-test";
     private static final String GPS_TRACK_BUCKET = "runiverse-gps-tracks-test";
+    private static final String RECORD_CARD_BUCKET = "runiverse-record-cards-test";
     private static final Duration TTL = Duration.ofMinutes(10);
     private static final Duration VIEW_TTL = Duration.ofHours(1);
 
@@ -59,7 +60,7 @@ public class GpsTrackS3AdapterTest {
     @BeforeEach
     void setUp() {
         adapter = new GpsTrackS3Adapter(s3Client, new S3Properties(
-                REGION, USER_ASSET_BUCKET, GPS_TRACK_BUCKET, TTL, VIEW_TTL, null, null));
+                REGION, USER_ASSET_BUCKET, GPS_TRACK_BUCKET, RECORD_CARD_BUCKET, TTL, VIEW_TTL, null, null));
     }
 
     private static GpsTrackUpload upload(LocalDateTime startAt, LocalDateTime endAt) {

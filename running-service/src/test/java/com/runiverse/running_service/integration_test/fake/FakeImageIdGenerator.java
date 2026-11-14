@@ -1,6 +1,6 @@
 package com.runiverse.running_service.integration_test.fake;
 
-import com.runiverse.running_service.application.user.port.out.GenerateImageIdPort;
+import com.runiverse.running_service.application.common.port.out.GenerateImageIdPort;
 
 import java.util.UUID;
 

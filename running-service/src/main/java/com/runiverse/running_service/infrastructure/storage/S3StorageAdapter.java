@@ -1,10 +1,10 @@
 package com.runiverse.running_service.infrastructure.storage;
 
 import com.runiverse.running_service.application.user.port.out.DeleteImagesPort;
-import com.runiverse.running_service.application.user.port.out.GenerateUploadUrlPort;
+import com.runiverse.running_service.application.common.port.out.GenerateUploadUrlPort;
 import com.runiverse.running_service.application.user.port.out.GenerateViewUrlPort;
-import com.runiverse.running_service.application.user.port.out.LoadUploadedImagePort;
-import com.runiverse.running_service.application.user.port.out.UploadedImage;
+import com.runiverse.running_service.application.common.port.out.LoadUploadedImagePort;
+import com.runiverse.running_service.application.common.port.out.UploadedImage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;

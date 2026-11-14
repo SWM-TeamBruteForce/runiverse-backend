@@ -3,6 +3,7 @@ package com.runiverse.running_service.unit_test.presentation;
 import com.runiverse.running_service.application.common.exception.AuthErrorCode;
 import com.runiverse.running_service.application.common.exception.InviteErrorCode;
 import com.runiverse.running_service.application.common.exception.MatchErrorCode;
+import com.runiverse.running_service.application.common.exception.RecordCardErrorCode;
 import com.runiverse.running_service.application.common.exception.RoomChatErrorCode;
 import com.runiverse.running_service.application.common.exception.RunningErrorCode;
 import com.runiverse.running_service.application.common.exception.UserErrorCode;
@@ -127,6 +128,24 @@ public class ErrorExposurePolicyTest {
         assertThat(ErrorExposurePolicy.isExposed(
                 HttpStatus.SERVICE_UNAVAILABLE,
                 MatchErrorCode.MATCH_STREAM_UNAVAILABLE.getCode())).isFalse();
+    }
+
+    @Test
+    @DisplayName("이미 카드가 있는 기록은 409 그대로 노출한다")
+    void recordCardAlreadyExistsIsExposed() {
+        // 가려지면 500으로 바뀌어, 클라가 작성 화면을 닫고 카드로 보낼지 가를 수 없다
+        assertThat(ErrorExposurePolicy.isExposed(
+                HttpStatus.CONFLICT,
+                RecordCardErrorCode.RECORD_CARD_ALREADY_EXISTS.getCode())).isTrue();
+    }
+
+    @Test
+    @DisplayName("처리 중인 확정과 부딪힌 기록 카드 확정은 409 그대로 노출한다")
+    void recordCardDraftInProgressIsExposed() {
+        // 가려지면 500으로 바뀌어, 클라가 잠시 뒤 다시 부를지 가를 수 없다
+        assertThat(ErrorExposurePolicy.isExposed(
+                HttpStatus.CONFLICT,
+                RecordCardErrorCode.RECORD_CARD_DRAFT_IN_PROGRESS.getCode())).isTrue();
     }
 
     @Test

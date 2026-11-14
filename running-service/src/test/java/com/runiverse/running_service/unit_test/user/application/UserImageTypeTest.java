@@ -1,6 +1,6 @@
 package com.runiverse.running_service.unit_test.user.application;
 
-import com.runiverse.running_service.application.user.common.ImageContentType;
+import com.runiverse.running_service.application.common.ImageContentType;
 import com.runiverse.running_service.application.user.common.UserImageType;
 import com.runiverse.running_service.application.user.exception.BackgroundImageNotUploadedException;
 import com.runiverse.running_service.application.user.exception.InvalidBackgroundImageException;

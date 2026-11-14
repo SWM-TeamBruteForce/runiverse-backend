@@ -3,8 +3,8 @@ package com.runiverse.running_service.domain.recordcard.vo;
 import com.runiverse.running_service.domain.recordcard.exception.MusicKeyRequiredException;
 import com.runiverse.running_service.domain.recordcard.exception.MusicKeyTooLongException;
 
-// AI가 음악을 올릴 S3 key — 서버가 정해 생성 요청에 실어 보내고, 완료 알림도 이 값으로 돌아온다.
-// 값이 있어도 생성이 끝나기 전에는 저장소에 객체가 없다
+// AI가 올린 음악의 S3 key — 서버가 정하지 않고, AI 서버가 완료 알림으로 알려 준 값을 그대로 담는다.
+// 그래서 생성이 끝나(COMPLETED) 객체가 올라온 음악에만 있다
 public record MusicKey(String value) {
 
     private static final int MAX_LENGTH = 255;

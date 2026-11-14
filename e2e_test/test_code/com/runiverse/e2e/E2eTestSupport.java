@@ -295,9 +295,36 @@ public abstract class E2eTestSupport {
         String script = "head -c \"$3\" /dev/zero > /tmp/e2e-upload"
                 + " && awslocal s3api put-object --bucket \"$E2E_USER_ASSET_BUCKET\""
                 + " --key \"$1\" --content-type \"$2\" --body /tmp/e2e-upload > /dev/null";
+        runInS3Container(script, key, contentType, String.valueOf(sizeBytes));
+    }
+
+    /**
+     * 기록 카드 버킷에 사진을 한 번에 올린다(9-1의 SINGLE). 이유는 {@link #uploadUserAsset}과 같다 —
+     * 서버가 확정(9-2) 때 보는 것은 HeadObject의 크기와 Content-Type뿐이다.
+     */
+    protected void uploadRecordCardImage(String key, String contentType, int sizeBytes) {
+        String script = "head -c \"$3\" /dev/zero > /tmp/e2e-record-card"
+                + " && awslocal s3api put-object --bucket \"$E2E_RECORD_CARD_BUCKET\""
+                + " --key \"$1\" --content-type \"$2\" --body /tmp/e2e-record-card > /dev/null";
+        runInS3Container(script, key, contentType, String.valueOf(sizeBytes));
+    }
+
+    /**
+     * 나눠 올리기(9-1의 MULTIPART) 조각 하나를 올린다. 업로드 시작은 서버가 이미 했다 —
+     * uploadId는 서버가 준 조각 URL에 실려 온다. 조각을 합치는 것은 확정(9-2)이 한다.
+     */
+    protected void uploadRecordCardPart(String key, String uploadId, int partNumber, int sizeBytes) {
+        String script = "head -c \"$4\" /dev/zero > /tmp/e2e-record-card-part"
+                + " && awslocal s3api upload-part --bucket \"$E2E_RECORD_CARD_BUCKET\""
+                + " --key \"$1\" --upload-id \"$2\" --part-number \"$3\" --body /tmp/e2e-record-card-part > /dev/null";
+        runInS3Container(script, key, uploadId, String.valueOf(partNumber), String.valueOf(sizeBytes));
+    }
+
+    private void runInS3Container(String script, String... arguments) {
+        List<String> command = new ArrayList<>(List.of("docker", "exec", S3_CONTAINER, "sh", "-c", script, "sh"));
+        command.addAll(List.of(arguments));
         try {
-            Process process = new ProcessBuilder("docker", "exec", S3_CONTAINER,
-                    "sh", "-c", script, "sh", key, contentType, String.valueOf(sizeBytes))
+            Process process = new ProcessBuilder(command)
                     .redirectErrorStream(true)
                     .start();
             String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);

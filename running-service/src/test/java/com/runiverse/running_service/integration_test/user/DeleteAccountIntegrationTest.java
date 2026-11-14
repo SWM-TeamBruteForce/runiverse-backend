@@ -1,13 +1,13 @@
 package com.runiverse.running_service.integration_test.user;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.common.ImageContentType;
 import com.runiverse.running_service.application.user.command.accountdeletion.AccountDeletionProperties;
 import com.runiverse.running_service.application.user.command.accountdeletion.DeleteAccountCommand;
 import com.runiverse.running_service.application.user.command.accountdeletion.DeleteAccountHandler;
 import com.runiverse.running_service.application.user.command.accountdeletion.DeletedUserRedactor;
 import com.runiverse.running_service.application.user.command.accountdeletion.KakaoUnlinkRequestedEvent;
 import com.runiverse.running_service.application.user.command.accountdeletion.RedactDeletedUsersHandler;
-import com.runiverse.running_service.application.user.common.ImageContentType;
 import com.runiverse.running_service.application.user.common.UserImageType;
 import com.runiverse.running_service.application.user.port.out.AccountSnapshot;
 import com.runiverse.running_service.domain.common.vo.Platform;
@@ -69,7 +69,8 @@ public class DeleteAccountIntegrationTest {
         settledUserIds = new ArrayList<>();
 
         deleteAccountHandler = new DeleteAccountHandler(
-                id -> { },                                        // LockUserPort — 한 스레드라 줄 세울 일이 없다
+                id -> {
+                },                                        // LockUserPort — 한 스레드라 줄 세울 일이 없다
                 deletedUserStore,                                 // LoadAccountSnapshotPort
                 command -> settledUserIds.add(command.userId()),  // SettleRunningForAccountDeletionUsecase
                 deletedUserStore,                                 // SaveDeletedUserPort

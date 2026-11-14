@@ -1,6 +1,6 @@
 package com.runiverse.running_service.unit_test.infrastructure.storage;
 
-import com.runiverse.running_service.application.user.port.out.UploadedImage;
+import com.runiverse.running_service.application.common.port.out.UploadedImage;
 import com.runiverse.running_service.infrastructure.storage.S3Properties;
 import com.runiverse.running_service.infrastructure.storage.S3StorageAdapter;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +33,7 @@ public class S3StorageAdapterLoadTest {
     // 두 버킷 값을 다르게 둬야 어댑터가 버킷을 바꿔 쓰는 실수가 테스트에 드러난다
     private static final String USER_ASSET_BUCKET = "runiverse-user-assets-test";
     private static final String GPS_TRACK_BUCKET = "runiverse-gps-tracks-test";
+    private static final String RECORD_CARD_BUCKET = "runiverse-record-cards-test";
     private static final Duration TTL = Duration.ofMinutes(10);
     private static final Duration VIEW_TTL = Duration.ofHours(1);
     private static final String KEY = "profiles/9f1cf1a0-0000-7000-8000-000000000001/0198a3f2.jpg";
@@ -46,7 +47,7 @@ public class S3StorageAdapterLoadTest {
     void setUp() {
         // 조회 경로는 presigner를 쓰지 않는다. 호출되면 NPE로 드러나도록 null을 넣는다
         adapter = new S3StorageAdapter(null,
-                new S3Properties(REGION, USER_ASSET_BUCKET, GPS_TRACK_BUCKET, TTL, VIEW_TTL, null, null), s3Client);
+                new S3Properties(REGION, USER_ASSET_BUCKET, GPS_TRACK_BUCKET, RECORD_CARD_BUCKET, TTL, VIEW_TTL, null, null), s3Client);
     }
 
     @Test

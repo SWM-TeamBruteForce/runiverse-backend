@@ -1,4 +1,4 @@
-package com.runiverse.running_service.application.user.port.out;
+package com.runiverse.running_service.application.common.port.out;
 
 import java.util.UUID;
 

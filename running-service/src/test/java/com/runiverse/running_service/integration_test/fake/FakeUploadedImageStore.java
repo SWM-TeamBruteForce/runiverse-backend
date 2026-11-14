@@ -1,7 +1,7 @@
 package com.runiverse.running_service.integration_test.fake;
 
-import com.runiverse.running_service.application.user.port.out.LoadUploadedImagePort;
-import com.runiverse.running_service.application.user.port.out.UploadedImage;
+import com.runiverse.running_service.application.common.port.out.LoadUploadedImagePort;
+import com.runiverse.running_service.application.common.port.out.UploadedImage;
 
 import java.util.HashMap;
 import java.util.Map;

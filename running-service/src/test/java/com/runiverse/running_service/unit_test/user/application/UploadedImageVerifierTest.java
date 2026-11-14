@@ -1,14 +1,14 @@
 package com.runiverse.running_service.unit_test.user.application;
 
-import com.runiverse.running_service.application.user.common.ImageContentType;
+import com.runiverse.running_service.application.common.ImageContentType;
 import com.runiverse.running_service.application.user.common.UploadedImageVerifier;
 import com.runiverse.running_service.application.user.common.UserImageType;
 import com.runiverse.running_service.application.user.exception.BackgroundImageNotUploadedException;
 import com.runiverse.running_service.application.user.exception.InvalidBackgroundImageException;
 import com.runiverse.running_service.application.user.exception.InvalidProfileImageException;
 import com.runiverse.running_service.application.user.exception.ProfileImageNotUploadedException;
-import com.runiverse.running_service.application.user.port.out.LoadUploadedImagePort;
-import com.runiverse.running_service.application.user.port.out.UploadedImage;
+import com.runiverse.running_service.application.common.port.out.LoadUploadedImagePort;
+import com.runiverse.running_service.application.common.port.out.UploadedImage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

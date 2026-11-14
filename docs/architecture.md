@@ -35,6 +35,7 @@ application/
   <domain>/common/      한 도메인 안의 여러 유스케이스가 함께 쓰는 정책·조립기 (포트는 두지 않는다)
   common/exception/     BusinessException · ErrorCode (유스케이스용)
   common/port/out/      도메인에 매이지 않는 공통 아웃바운드 포트
+  common/               여러 도메인의 유스케이스가 함께 쓰는 정책 (포트는 두지 않는다 — 예: ImageContentType)
 
 infrastructure/         기술 단위 — persistence · redis · security · oauth · mail · storage · identifier · config 등
 

@@ -1,11 +1,11 @@
 package com.runiverse.running_service.unit_test.user.application;
 
-import com.runiverse.running_service.application.user.common.ImageContentType;
+import com.runiverse.running_service.application.common.ImageContentType;
 import com.runiverse.running_service.application.user.common.ImageUploadUrlIssuer;
 import com.runiverse.running_service.application.user.common.ImageUploadUrlIssuer.IssuedUpload;
 import com.runiverse.running_service.application.user.common.UserImageType;
-import com.runiverse.running_service.application.user.port.out.GenerateImageIdPort;
-import com.runiverse.running_service.application.user.port.out.GenerateUploadUrlPort;
+import com.runiverse.running_service.application.common.port.out.GenerateImageIdPort;
+import com.runiverse.running_service.application.common.port.out.GenerateUploadUrlPort;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

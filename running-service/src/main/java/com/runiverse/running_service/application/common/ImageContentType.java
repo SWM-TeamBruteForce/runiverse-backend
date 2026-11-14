@@ -1,4 +1,4 @@
-package com.runiverse.running_service.application.user.common;
+package com.runiverse.running_service.application.common;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;

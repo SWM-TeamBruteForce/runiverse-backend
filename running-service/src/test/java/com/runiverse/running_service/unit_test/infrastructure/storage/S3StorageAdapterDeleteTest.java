@@ -40,6 +40,7 @@ public class S3StorageAdapterDeleteTest {
     // 두 버킷 값을 다르게 둬야 어댑터가 버킷을 바꿔 쓰는 실수가 테스트에 드러난다
     private static final String USER_ASSET_BUCKET = "runiverse-user-assets-test";
     private static final String GPS_TRACK_BUCKET = "runiverse-gps-tracks-test";
+    private static final String RECORD_CARD_BUCKET = "runiverse-record-cards-test";
     private static final String PREFIX = "profiles/9f1cf1a0-0000-7000-8000-000000000001/";
 
     @Mock
@@ -51,7 +52,7 @@ public class S3StorageAdapterDeleteTest {
     void setUp() {
         // 삭제 경로는 presigner를 쓰지 않는다. 호출되면 NPE로 드러나도록 null을 넣는다
         adapter = new S3StorageAdapter(null,
-                new S3Properties(REGION, USER_ASSET_BUCKET, GPS_TRACK_BUCKET,
+                new S3Properties(REGION, USER_ASSET_BUCKET, GPS_TRACK_BUCKET, RECORD_CARD_BUCKET,
                         Duration.ofMinutes(10), Duration.ofHours(1), null, null), s3Client);
         // 목이 아니라 진짜 페이지네이터를 목 클라이언트 위에 올린다 — 페이지 넘김도 함께 검증된다
         when(s3Client.listObjectsV2Paginator(any(ListObjectsV2Request.class)))

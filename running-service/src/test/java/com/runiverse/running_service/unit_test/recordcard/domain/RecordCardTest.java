@@ -4,22 +4,21 @@ import com.runiverse.running_service.domain.recordcard.RecordCard;
 import com.runiverse.running_service.domain.recordcard.RecordCard.ImageDraft;
 import com.runiverse.running_service.domain.recordcard.RecordCard.ImageSlot;
 import com.runiverse.running_service.domain.recordcard.RecordCardImage;
-import com.runiverse.running_service.domain.recordcard.exception.DeletedAtRequiredException;
-import com.runiverse.running_service.domain.recordcard.exception.DuplicateMusicKeyException;
+import com.runiverse.running_service.domain.recordcard.exception.MusicKeyRequiredException;
+import com.runiverse.running_service.domain.recordcard.exception.MusicKeyStatusMismatchException;
 import com.runiverse.running_service.domain.recordcard.exception.DuplicateRecordCardImageException;
 import com.runiverse.running_service.domain.recordcard.exception.InvalidDisplayOrderException;
 import com.runiverse.running_service.domain.recordcard.exception.InvalidMusicResultException;
 import com.runiverse.running_service.domain.recordcard.exception.InvalidThumbnailIndexException;
 import com.runiverse.running_service.domain.recordcard.exception.RecordCardActivityTypeRequiredException;
-import com.runiverse.running_service.domain.recordcard.exception.RecordCardDeletedException;
 import com.runiverse.running_service.domain.recordcard.exception.RecordCardImageCaptionTooLongException;
 import com.runiverse.running_service.domain.recordcard.exception.RecordCardImageNotInCardException;
 import com.runiverse.running_service.domain.recordcard.exception.RecordCardMemoRequiredException;
-import com.runiverse.running_service.domain.recordcard.exception.RecordCardNotDeletedException;
 import com.runiverse.running_service.domain.recordcard.exception.RecordCardVisibilityRequiredException;
 import com.runiverse.running_service.domain.recordcard.exception.ThumbnailNotInImagesException;
 import com.runiverse.running_service.domain.recordcard.exception.TooManyRecordCardImagesException;
 import com.runiverse.running_service.domain.recordcard.vo.DisplayOrder;
+import com.runiverse.running_service.domain.recordcard.vo.MusicKey;
 import com.runiverse.running_service.domain.recordcard.vo.MusicStatus;
 import com.runiverse.running_service.domain.recordcard.vo.RecordCardActivityType;
 import com.runiverse.running_service.domain.recordcard.vo.RecordCardId;
@@ -32,7 +31,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -45,10 +43,10 @@ import static org.assertj.core.api.Assertions.tuple;
 class RecordCardTest {
 
     private static final UUID USER_ID = UUID.fromString("01a0f2d4-6180-7000-8000-446655440015");
+    private static final UUID CARD_ID = UUID.fromString("01a0f2d4-6180-7000-8000-4466554400c8");
     private static final Long RUNNING_RECORD_ID = 501L;
     private static final String BASE_MUSIC_KEY = "record-cards/u/music/base";
     private static final String MEMO = "힘들었지만 끝까지 달려서 뿌듯했다";
-    private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 8, 21, 0);
 
     @Nested
     @DisplayName("생성")
@@ -61,15 +59,13 @@ class RecordCardTest {
             RecordCard card = create(List.of(draft("a"), draft("b")), null);
 
             // then
-            assertThat(card.isNew()).isTrue();
-            assertThat(card.isDeleted()).isFalse();
-            assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.PENDING);
+            assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.GENERATING);
             assertThat(card.getImages())
                     .extracting(image -> image.getImageKey().value(), RecordCardImage::getSortOrder,
                             RecordCardImage::getMusicStatus)
                     .containsExactly(
-                            tuple(imageKey("a"), 0, MusicStatus.PENDING),
-                            tuple(imageKey("b"), 1, MusicStatus.PENDING));
+                            tuple(imageKey("a"), 0, MusicStatus.GENERATING),
+                            tuple(imageKey("b"), 1, MusicStatus.GENERATING));
             assertThat(card.getThumbnailImageKey()).contains(new RecordCardImageKey(imageKey("a")));
         }
 
@@ -78,8 +74,8 @@ class RecordCardTest {
         void createWithCaption() {
             // given
             List<ImageDraft> drafts = List.of(
-                    new ImageDraft(imageKey("a"), musicKey("a"), "다리 밑 노을"),
-                    new ImageDraft(imageKey("b"), musicKey("b"), "  "));
+                    new ImageDraft(imageId("a"), imageKey("a"), "다리 밑 노을"),
+                    new ImageDraft(imageId("b"), imageKey("b"), "  "));
 
             // when
             RecordCard card = create(drafts, null);
@@ -142,8 +138,8 @@ class RecordCardTest {
         void rejectDuplicateImage() {
             // given
             List<ImageDraft> drafts = List.of(
-                    new ImageDraft(imageKey("a"), musicKey("1"), null),
-                    new ImageDraft(imageKey("a"), musicKey("2"), null));
+                    new ImageDraft(imageId("a"), imageKey("a"), null),
+                    new ImageDraft(imageId("a"), imageKey("a"), null));
 
             // when & then
             assertThatThrownBy(() -> create(drafts, null))
@@ -151,36 +147,36 @@ class RecordCardTest {
         }
 
         @Test
-        @DisplayName("사진 음악 key가 서로 겹치거나 기본곡 key와 겹치면 거부한다")
-        void rejectDuplicateMusicKey() {
-            // given -> 음악 key가 겹치면 완료 알림이 어느 음악인지 가릴 수 없다
-            List<ImageDraft> sameAsEachOther = List.of(
-                    new ImageDraft(imageKey("a"), musicKey("1"), null),
-                    new ImageDraft(imageKey("b"), musicKey("1"), null));
-            List<ImageDraft> sameAsBase = List.of(new ImageDraft(imageKey("a"), BASE_MUSIC_KEY, null));
+        @DisplayName("사진 key가 달라도 사진 ID가 같으면 거부한다")
+        void rejectDuplicateImageId() {
+            // given -> 사진 ID가 겹치면 완료 결과가 어느 사진의 것인지 가릴 수 없다
+            UUID sameId = imageId("a");
+            List<ImageDraft> drafts = List.of(
+                    new ImageDraft(sameId, imageKey("a"), null),
+                    new ImageDraft(sameId, imageKey("b"), null));
 
             // when & then
-            assertThatThrownBy(() -> create(sameAsEachOther, null))
-                    .isInstanceOf(DuplicateMusicKeyException.class);
-            assertThatThrownBy(() -> create(sameAsBase, null))
-                    .isInstanceOf(DuplicateMusicKeyException.class);
+            assertThatThrownBy(() -> create(drafts, null))
+                    .isInstanceOf(DuplicateRecordCardImageException.class);
         }
 
         @Test
-        @DisplayName("삭제 표시 순위로는 만들 수 없다")
-        void rejectDeletedOrder() {
-            // when & then
-            assertThatThrownBy(() -> RecordCard.create(RUNNING_RECORD_ID, USER_ID, RecordCardVisibility.PUBLIC,
-                    RecordCardActivityType.DAILY, MEMO, DisplayOrder.DELETED, BASE_MUSIC_KEY, List.of(), null))
-                    .isInstanceOf(InvalidDisplayOrderException.class);
+        @DisplayName("새 카드의 기본곡·사진 음악은 key 없이 생성 중이다 — key는 AI 서버가 완료 알림으로 준다")
+        void newMusicHasNoKey() {
+            // when
+            RecordCard card = create(List.of(draft("a")), null);
+
+            // then
+            assertThat(card.getBaseMusicKey()).isEmpty();
+            assertThat(card.getImages().getFirst().getMusicKey()).isEmpty();
         }
 
         @Test
         @DisplayName("공개 범위가 없으면 거부한다")
         void rejectMissingVisibility() {
             // when & then
-            assertThatThrownBy(() -> RecordCard.create(RUNNING_RECORD_ID, USER_ID, null,
-                    RecordCardActivityType.DAILY, MEMO, DisplayOrder.FIRST, BASE_MUSIC_KEY, List.of(), null))
+            assertThatThrownBy(() -> RecordCard.create(CARD_ID, RUNNING_RECORD_ID, USER_ID, null,
+                    RecordCardActivityType.DAILY, MEMO, DisplayOrder.FIRST, List.of(), null))
                     .isInstanceOf(RecordCardVisibilityRequiredException.class);
         }
 
@@ -188,8 +184,8 @@ class RecordCardTest {
         @DisplayName("활동유형이 없으면 거부한다")
         void rejectMissingActivityType() {
             // when & then
-            assertThatThrownBy(() -> RecordCard.create(RUNNING_RECORD_ID, USER_ID, RecordCardVisibility.PUBLIC,
-                    null, MEMO, DisplayOrder.FIRST, BASE_MUSIC_KEY, List.of(), null))
+            assertThatThrownBy(() -> RecordCard.create(CARD_ID, RUNNING_RECORD_ID, USER_ID, RecordCardVisibility.PUBLIC,
+                    null, MEMO, DisplayOrder.FIRST, List.of(), null))
                     .isInstanceOf(RecordCardActivityTypeRequiredException.class);
         }
 
@@ -197,11 +193,11 @@ class RecordCardTest {
         @DisplayName("회고 글이 없거나 공백뿐이면 거부한다")
         void rejectMissingMemo() {
             // when & then -> 음악 생성이 회고 글로 기본곡의 감정을 정한다
-            assertThatThrownBy(() -> RecordCard.create(RUNNING_RECORD_ID, USER_ID, RecordCardVisibility.PUBLIC,
-                    RecordCardActivityType.DAILY, null, DisplayOrder.FIRST, BASE_MUSIC_KEY, List.of(), null))
+            assertThatThrownBy(() -> RecordCard.create(CARD_ID, RUNNING_RECORD_ID, USER_ID, RecordCardVisibility.PUBLIC,
+                    RecordCardActivityType.DAILY, null, DisplayOrder.FIRST, List.of(), null))
                     .isInstanceOf(RecordCardMemoRequiredException.class);
-            assertThatThrownBy(() -> RecordCard.create(RUNNING_RECORD_ID, USER_ID, RecordCardVisibility.PUBLIC,
-                    RecordCardActivityType.DAILY, "   ", DisplayOrder.FIRST, BASE_MUSIC_KEY, List.of(), null))
+            assertThatThrownBy(() -> RecordCard.create(CARD_ID, RUNNING_RECORD_ID, USER_ID, RecordCardVisibility.PUBLIC,
+                    RecordCardActivityType.DAILY, "   ", DisplayOrder.FIRST, List.of(), null))
                     .isInstanceOf(RecordCardMemoRequiredException.class);
         }
 
@@ -209,8 +205,8 @@ class RecordCardTest {
         @DisplayName("활동유형과 회고 글을 담는다")
         void keepActivityTypeAndMemo() {
             // when
-            RecordCard card = RecordCard.create(RUNNING_RECORD_ID, USER_ID, RecordCardVisibility.PUBLIC,
-                    RecordCardActivityType.TRAVEL, MEMO, DisplayOrder.FIRST, BASE_MUSIC_KEY, List.of(), null);
+            RecordCard card = RecordCard.create(CARD_ID, RUNNING_RECORD_ID, USER_ID, RecordCardVisibility.PUBLIC,
+                    RecordCardActivityType.TRAVEL, MEMO, DisplayOrder.FIRST, List.of(), null);
 
             // then
             assertThat(card.getActivityType()).isEqualTo(RecordCardActivityType.TRAVEL);
@@ -232,7 +228,7 @@ class RecordCardTest {
             RecordCard card = restored(images, imageKey("a"));
 
             // then
-            assertThat(card.getRecordCardId()).contains(new RecordCardId(88L));
+            assertThat(card.getRecordCardId()).isEqualTo(new RecordCardId(CARD_ID));
             assertThat(card.getImages())
                     .extracting(image -> image.getImageKey().value())
                     .containsExactly(imageKey("a"), imageKey("b"));
@@ -243,8 +239,8 @@ class RecordCardTest {
         void restoreCaption() {
             // given
             List<RecordCardImage> images = List.of(
-                    RecordCardImage.restore(1L, imageKey("a"), "다리 밑 노을", musicKey("a"), MusicStatus.READY, 0),
-                    RecordCardImage.restore(2L, imageKey("b"), null, musicKey("b"), MusicStatus.READY, 1));
+                    RecordCardImage.restore(id(1), imageKey("a"), "다리 밑 노을", musicKey("a"), MusicStatus.COMPLETED, 0),
+                    RecordCardImage.restore(id(2), imageKey("b"), null, musicKey("b"), MusicStatus.COMPLETED, 1));
 
             // when
             RecordCard card = restored(images, imageKey("a"));
@@ -252,24 +248,6 @@ class RecordCardTest {
             // then
             assertThat(card.getImages().get(0).getCaption()).contains(new RecordCardImageCaption("다리 밑 노을"));
             assertThat(card.getImages().get(1).getCaption()).isEmpty();
-        }
-
-        @Test
-        @DisplayName("지운 카드인데 순위가 -1이 아니거나, 살아 있는데 -1이면 거부한다")
-        void rejectDeletionMismatch() {
-            // when & then
-            assertThatThrownBy(() -> RecordCard.restore(88L)
-                    .runningRecordId(RUNNING_RECORD_ID).userId(USER_ID).visibility(RecordCardVisibility.PUBLIC)
-                    .activityType(RecordCardActivityType.DAILY).memo(MEMO)
-                    .baseMusicStatus(MusicStatus.READY).displayOrder(3).baseMusicKey(BASE_MUSIC_KEY)
-                    .deletedAt(NOW).build())
-                    .isInstanceOf(InvalidDisplayOrderException.class);
-            assertThatThrownBy(() -> RecordCard.restore(88L)
-                    .runningRecordId(RUNNING_RECORD_ID).userId(USER_ID).visibility(RecordCardVisibility.PUBLIC)
-                    .activityType(RecordCardActivityType.DAILY).memo(MEMO)
-                    .baseMusicStatus(MusicStatus.READY).displayOrder(-1).baseMusicKey(BASE_MUSIC_KEY)
-                    .build())
-                    .isInstanceOf(InvalidDisplayOrderException.class);
         }
 
         @Test
@@ -295,7 +273,7 @@ class RecordCardTest {
         @Test
         @DisplayName("남긴 사진은 음악 상태를 유지하고, 새 사진만 생성 중이며, 빠진 사진은 사라진다")
         void keepAddAndDrop() {
-            // given -> a(READY), b(FAILED), c(PENDING)
+            // given -> a(COMPLETED), b(FAILED), c(GENERATING)
             RecordCard card = restoredWithThreeImages();
 
             // when -> [c, 새 d, a] — b는 뺀다
@@ -306,10 +284,10 @@ class RecordCardTest {
                     .extracting(image -> image.getImageKey().value(), RecordCardImage::getSortOrder,
                             RecordCardImage::getMusicStatus)
                     .containsExactly(
-                            tuple(imageKey("c"), 0, MusicStatus.PENDING),
-                            tuple(imageKey("d"), 1, MusicStatus.PENDING),
-                            tuple(imageKey("a"), 2, MusicStatus.READY));
-            assertThat(card.getImages().get(1).getRecordCardImageId()).isEmpty();
+                            tuple(imageKey("c"), 0, MusicStatus.GENERATING),
+                            tuple(imageKey("d"), 1, MusicStatus.GENERATING),
+                            tuple(imageKey("a"), 2, MusicStatus.COMPLETED));
+            assertThat(card.getImages().get(1).getRecordCardImageId()).isEqualTo(new RecordCardImageId(imageId("d")));
         }
 
         @Test
@@ -317,25 +295,25 @@ class RecordCardTest {
         void changeKeptCaption() {
             // given
             RecordCard card = restored(List.of(
-                    RecordCardImage.restore(1L, imageKey("a"), "옛 설명", musicKey("a"), MusicStatus.READY, 0),
-                    RecordCardImage.restore(2L, imageKey("b"), "지울 설명", musicKey("b"), MusicStatus.FAILED, 1),
-                    RecordCardImage.restore(3L, imageKey("c"), "그대로", musicKey("c"), MusicStatus.PENDING, 2)),
+                    RecordCardImage.restore(id(1), imageKey("a"), "옛 설명", musicKey("a"), MusicStatus.COMPLETED, 0),
+                    RecordCardImage.restore(id(2), imageKey("b"), "지울 설명", null, MusicStatus.FAILED, 1),
+                    RecordCardImage.restore(id(3), imageKey("c"), "그대로", null, MusicStatus.GENERATING, 2)),
                     imageKey("a"));
 
             // when
             card.rearrangeImages(List.of(
-                    new ImageSlot.Keep(1L, "새 설명"),
-                    new ImageSlot.Keep(2L, "  "),
-                    new ImageSlot.Keep(3L, "그대로")), null);
+                    new ImageSlot.Keep(id(1), "새 설명"),
+                    new ImageSlot.Keep(id(2), "  "),
+                    new ImageSlot.Keep(id(3), "그대로")), null);
 
             // then
             assertThat(card.getImages())
                     .extracting(image -> image.getCaption().map(RecordCardImageCaption::value).orElse(null),
-                            image -> image.getMusicKey().value(), RecordCardImage::getMusicStatus)
+                            image -> image.getMusicKey().map(MusicKey::value).orElse(null), RecordCardImage::getMusicStatus)
                     .containsExactly(
-                            tuple("새 설명", musicKey("a"), MusicStatus.READY),
-                            tuple(null, musicKey("b"), MusicStatus.FAILED),
-                            tuple("그대로", musicKey("c"), MusicStatus.PENDING));
+                            tuple("새 설명", musicKey("a"), MusicStatus.COMPLETED),
+                            tuple(null, null, MusicStatus.FAILED),
+                            tuple("그대로", null, MusicStatus.GENERATING));
         }
 
         @Test
@@ -343,14 +321,14 @@ class RecordCardTest {
         void rejectTooLongKeptCaption() {
             // given
             RecordCard card = restored(List.of(
-                    RecordCardImage.restore(1L, imageKey("a"), "옛 설명", musicKey("a"), MusicStatus.READY, 0),
-                    RecordCardImage.restore(2L, imageKey("b"), null, musicKey("b"), MusicStatus.READY, 1)),
+                    RecordCardImage.restore(id(1), imageKey("a"), "옛 설명", musicKey("a"), MusicStatus.COMPLETED, 0),
+                    RecordCardImage.restore(id(2), imageKey("b"), null, musicKey("b"), MusicStatus.COMPLETED, 1)),
                     imageKey("a"));
 
             // when & then
             assertThatThrownBy(() -> card.rearrangeImages(List.of(
-                    new ImageSlot.Keep(2L, null),
-                    new ImageSlot.Keep(1L, "가".repeat(101))), null))
+                    new ImageSlot.Keep(id(2), null),
+                    new ImageSlot.Keep(id(1), "가".repeat(101))), null))
                     .isInstanceOf(RecordCardImageCaptionTooLongException.class);
             assertThat(card.getImages())
                     .extracting(image -> image.getImageKey().value(),
@@ -363,13 +341,13 @@ class RecordCardTest {
         void keepCaptionWhenOtherCheckFails() {
             // given
             RecordCard card = restored(List.of(
-                    RecordCardImage.restore(1L, imageKey("a"), "옛 설명", musicKey("a"), MusicStatus.READY, 0)),
+                    RecordCardImage.restore(id(1), imageKey("a"), "옛 설명", musicKey("a"), MusicStatus.COMPLETED, 0)),
                     imageKey("a"));
 
             // when & then — 없는 사진 99를 가리킨다
             assertThatThrownBy(() -> card.rearrangeImages(List.of(
-                    new ImageSlot.Keep(1L, "새 설명"),
-                    new ImageSlot.Keep(99L, null)), null))
+                    new ImageSlot.Keep(id(1), "새 설명"),
+                    new ImageSlot.Keep(id(99), null)), null))
                     .isInstanceOf(RecordCardImageNotInCardException.class);
             assertThat(card.getImages().get(0).getCaption()).contains(new RecordCardImageCaption("옛 설명"));
         }
@@ -543,178 +521,112 @@ class RecordCardTest {
     }
 
     @Nested
-    @DisplayName("삭제")
-    class Delete {
-
-        @Test
-        @DisplayName("지우면 순위는 -1, 사진과 썸네일은 비고, 회고 글·활동유형·기본곡은 남는다")
-        void delete() {
-            // given
-            RecordCard card = restoredWithThreeImages();
-
-            // when
-            card.delete(NOW);
-
-            // then
-            assertThat(card.isDeleted()).isTrue();
-            assertThat(card.getDeletedAt()).contains(NOW);
-            assertThat(card.getDisplayOrder()).isEqualTo(DisplayOrder.DELETED);
-            assertThat(card.getImages()).isEmpty();
-            assertThat(card.getThumbnailImageKey()).isEmpty();
-            assertThat(card.getMemo()).isEqualTo(new RecordCardMemo(MEMO));
-            assertThat(card.getActivityType()).isEqualTo(RecordCardActivityType.DAILY);
-            assertThat(card.getBaseMusicKey().value()).isEqualTo(BASE_MUSIC_KEY);
-        }
-
-        @Test
-        @DisplayName("지운 카드는 다시 지우거나 고칠 수 없다")
-        void rejectChangesAfterDelete() {
-            // given
-            RecordCard card = restoredWithThreeImages();
-            card.delete(NOW);
-
-            // when & then
-            assertThatThrownBy(() -> card.delete(NOW)).isInstanceOf(RecordCardDeletedException.class);
-            assertThatThrownBy(() -> card.changeMemo("x")).isInstanceOf(RecordCardDeletedException.class);
-            assertThatThrownBy(() -> card.changeActivityType(RecordCardActivityType.RACE))
-                    .isInstanceOf(RecordCardDeletedException.class);
-            assertThatThrownBy(() -> card.changeVisibility(RecordCardVisibility.PUBLIC))
-                    .isInstanceOf(RecordCardDeletedException.class);
-            assertThatThrownBy(() -> card.rearrangeImages(List.of(), null))
-                    .isInstanceOf(RecordCardDeletedException.class);
-            assertThatThrownBy(() -> card.changeThumbnail(0)).isInstanceOf(RecordCardDeletedException.class);
-        }
-
-        @Test
-        @DisplayName("삭제 시각이 없으면 거부한다")
-        void rejectMissingDeletedAt() {
-            // given
-            RecordCard card = restoredWithThreeImages();
-
-            // when & then
-            assertThatThrownBy(() -> card.delete(null)).isInstanceOf(DeletedAtRequiredException.class);
-            assertThat(card.isDeleted()).isFalse();
-        }
-    }
-
-    @Nested
-    @DisplayName("되살리기")
-    class Revive {
-
-        @Test
-        @DisplayName("지운 카드를 새 내용으로 덮는다 — ID는 그대로고 기본곡은 새 key로 다시 만든다")
-        void revive() {
-            // given
-            RecordCard card = restoredWithThreeImages();
-            card.delete(NOW);
-
-            // when
-            card.revive(RecordCardVisibility.FRIENDS, RecordCardActivityType.TRAVEL, "다시 뛰었다", new DisplayOrder(7),
-                    "record-cards/u/music/new", List.of(draft("z")), null);
-
-            // then
-            assertThat(card.isDeleted()).isFalse();
-            assertThat(card.getRecordCardId()).contains(new RecordCardId(88L));
-            assertThat(card.getVisibility()).isEqualTo(RecordCardVisibility.FRIENDS);
-            assertThat(card.getActivityType()).isEqualTo(RecordCardActivityType.TRAVEL);
-            assertThat(card.getMemo()).isEqualTo(new RecordCardMemo("다시 뛰었다"));
-            assertThat(card.getDisplayOrder()).isEqualTo(new DisplayOrder(7));
-            assertThat(card.getBaseMusicKey().value()).isEqualTo("record-cards/u/music/new");
-            assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.PENDING);
-            assertThat(card.getImages()).extracting(image -> image.getImageKey().value())
-                    .containsExactly(imageKey("z"));
-            assertThat(card.getThumbnailImageKey()).contains(new RecordCardImageKey(imageKey("z")));
-        }
-
-        @Test
-        @DisplayName("지우지 않은 카드는 되살릴 수 없다")
-        void rejectLiveCard() {
-            // given
-            RecordCard card = restoredWithThreeImages();
-
-            // when & then
-            assertThatThrownBy(() -> card.revive(RecordCardVisibility.PUBLIC, RecordCardActivityType.DAILY, MEMO,
-                    new DisplayOrder(7), "record-cards/u/music/new", List.of(), null))
-                    .isInstanceOf(RecordCardNotDeletedException.class);
-        }
-
-        @Test
-        @DisplayName("되살리는 내용이 틀리면 거부하고 지운 상태 그대로다")
-        void rejectBadContentAndStayDeleted() {
-            // given
-            RecordCard card = restoredWithThreeImages();
-            card.delete(NOW);
-
-            // when & then
-            assertThatThrownBy(() -> card.revive(RecordCardVisibility.PUBLIC, RecordCardActivityType.DAILY, MEMO,
-                    new DisplayOrder(7), "record-cards/u/music/new", List.of(draft("z")), 3))
-                    .isInstanceOf(InvalidThumbnailIndexException.class);
-            assertThatThrownBy(() -> card.revive(RecordCardVisibility.PUBLIC, RecordCardActivityType.DAILY, "",
-                    new DisplayOrder(7), "record-cards/u/music/new", List.of(), null))
-                    .isInstanceOf(RecordCardMemoRequiredException.class);
-            assertThat(card.isDeleted()).isTrue();
-            assertThat(card.getDisplayOrder()).isEqualTo(DisplayOrder.DELETED);
-        }
-    }
-
-    @Nested
     @DisplayName("음악 생성 완료")
     class CompleteMusic {
 
         @Test
-        @DisplayName("생성 중인 기본곡에 결과가 오면 바꾸고, 같은 알림이 다시 오면 무시한다")
+        @DisplayName("생성 중인 기본곡이 COMPLETED가 되면 AI가 준 key를 담고, 같은 알림이 다시 오면 무시한다")
         void completeBaseMusicOnce() {
             // given
             RecordCard card = create(List.of(), null);
 
             // when & then
-            assertThat(card.completeMusic(BASE_MUSIC_KEY, MusicStatus.READY)).isTrue();
-            assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.READY);
-            assertThat(card.completeMusic(BASE_MUSIC_KEY, MusicStatus.FAILED)).isFalse();
-            assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.READY);
+            assertThat(card.completeBaseMusic(MusicStatus.COMPLETED, "ai/music/base.wav")).isTrue();
+            assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.COMPLETED);
+            assertThat(card.getBaseMusicKey()).contains(new MusicKey("ai/music/base.wav"));
+            assertThat(card.completeBaseMusic(MusicStatus.FAILED, null)).isFalse();
+            assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.COMPLETED);
         }
 
         @Test
-        @DisplayName("사진 음악 key로 온 결과는 그 사진에만 반영한다")
+        @DisplayName("실패면 key를 받아도 버린다 — 실패한 음악은 객체가 없다")
+        void failedDropsKey() {
+            // given
+            RecordCard card = create(List.of(), null);
+
+            // when
+            card.completeBaseMusic(MusicStatus.FAILED, "ai/music/ignored.wav");
+
+            // then
+            assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.FAILED);
+            assertThat(card.getBaseMusicKey()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("COMPLETED인데 key가 없으면 거부하고 상태를 바꾸지 않는다")
+        void readyNeedsKey() {
+            // given
+            RecordCard card = create(List.of(draft("a")), null);
+
+            // when & then
+            assertThatThrownBy(() -> card.completeBaseMusic(MusicStatus.COMPLETED, null))
+                    .isInstanceOf(MusicKeyRequiredException.class);
+            assertThatThrownBy(() -> card.completeImageMusic(imageId("a"), MusicStatus.COMPLETED, " "))
+                    .isInstanceOf(MusicKeyRequiredException.class);
+            assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.GENERATING);
+            assertThat(card.getImages().getFirst().getMusicStatus()).isEqualTo(MusicStatus.GENERATING);
+        }
+
+        @Test
+        @DisplayName("사진 ID로 온 결과는 그 사진에만 반영한다")
         void completeImageMusic() {
             // given
             RecordCard card = create(List.of(draft("a"), draft("b")), null);
 
             // when
-            boolean changed = card.completeMusic(musicKey("b"), MusicStatus.FAILED);
+            boolean changed = card.completeImageMusic(imageId("b"), MusicStatus.COMPLETED, "ai/music/b.wav");
 
             // then
             assertThat(changed).isTrue();
             assertThat(card.getImages()).extracting(RecordCardImage::getMusicStatus)
-                    .containsExactly(MusicStatus.PENDING, MusicStatus.FAILED);
-            assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.PENDING);
+                    .containsExactly(MusicStatus.GENERATING, MusicStatus.COMPLETED);
+            assertThat(card.getImages().get(1).getMusicKey()).contains(new MusicKey("ai/music/b.wav"));
+            assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.GENERATING);
         }
 
         @Test
-        @DisplayName("이 카드에 없는 key나 지운 카드에 온 결과는 무시한다")
-        void ignoreUnknownKeyAndDeletedCard() {
+        @DisplayName("이 카드에 없는 사진에 온 결과는 무시한다")
+        void ignoreUnknownImage() {
             // given
             RecordCard card = restoredWithThreeImages();
 
             // when & then -> 수정에서 뺀 사진의 음악이 늦게 끝난 경우다
-            assertThat(card.completeMusic("record-cards/u/music/gone", MusicStatus.READY)).isFalse();
-
-            // given
-            card.delete(NOW);
-
-            // when & then
-            assertThat(card.completeMusic(BASE_MUSIC_KEY, MusicStatus.READY)).isFalse();
+            assertThat(card.completeImageMusic(id(99), MusicStatus.COMPLETED, "ai/music/gone.wav")).isFalse();
+            assertThat(card.getImages()).extracting(RecordCardImage::getMusicStatus)
+                    .containsExactly(MusicStatus.COMPLETED, MusicStatus.FAILED, MusicStatus.GENERATING);
         }
 
         @Test
-        @DisplayName("결과로 PENDING이 오면 거부한다")
+        @DisplayName("결과로 GENERATING이 오면 거부한다")
         void rejectPendingResult() {
             // given
             RecordCard card = create(List.of(), null);
 
             // when & then
-            assertThatThrownBy(() -> card.completeMusic(BASE_MUSIC_KEY, MusicStatus.PENDING))
+            assertThatThrownBy(() -> card.completeBaseMusic(MusicStatus.GENERATING, null))
                     .isInstanceOf(InvalidMusicResultException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("음악 key와 상태")
+    class MusicKeyAndStatus {
+
+        @Test
+        @DisplayName("저장값에서 COMPLETED인데 key가 없거나, 생성 중·실패인데 key가 있으면 거부한다")
+        void rejectMismatchOnRestore() {
+            // when & then
+            assertThatThrownBy(() -> RecordCardImage.restore(id(1), imageKey("a"), null, null, MusicStatus.COMPLETED, 0))
+                    .isInstanceOf(MusicKeyStatusMismatchException.class);
+            assertThatThrownBy(() -> RecordCardImage.restore(id(1), imageKey("a"), null, musicKey("a"),
+                    MusicStatus.GENERATING, 0))
+                    .isInstanceOf(MusicKeyStatusMismatchException.class);
+            assertThatThrownBy(() -> RecordCard.restore(CARD_ID)
+                    .runningRecordId(RUNNING_RECORD_ID).userId(USER_ID).visibility(RecordCardVisibility.PUBLIC)
+                    .activityType(RecordCardActivityType.DAILY).memo(MEMO)
+                    .baseMusicStatus(MusicStatus.FAILED).displayOrder(3).baseMusicKey(BASE_MUSIC_KEY)
+                    .build())
+                    .isInstanceOf(MusicKeyStatusMismatchException.class);
         }
     }
 
@@ -731,27 +643,27 @@ class RecordCardTest {
     }
 
     private static RecordCard create(List<ImageDraft> drafts, Integer thumbnailIndex) {
-        return RecordCard.create(RUNNING_RECORD_ID, USER_ID, RecordCardVisibility.PUBLIC,
-                RecordCardActivityType.DAILY, MEMO, DisplayOrder.FIRST, BASE_MUSIC_KEY, drafts, thumbnailIndex);
+        return RecordCard.create(CARD_ID, RUNNING_RECORD_ID, USER_ID, RecordCardVisibility.PUBLIC,
+                RecordCardActivityType.DAILY, MEMO, DisplayOrder.FIRST, drafts, thumbnailIndex);
     }
 
-    // a(READY)·b(FAILED)·c(PENDING), 썸네일은 a
+    // a(COMPLETED)·b(FAILED)·c(GENERATING), 썸네일은 a
     private static RecordCard restoredWithThreeImages() {
         List<RecordCardImage> images = List.of(
-                RecordCardImage.restore(1L, imageKey("a"), null, musicKey("a"), MusicStatus.READY, 0),
-                RecordCardImage.restore(2L, imageKey("b"), null, musicKey("b"), MusicStatus.FAILED, 1),
-                RecordCardImage.restore(3L, imageKey("c"), null, musicKey("c"), MusicStatus.PENDING, 2));
+                RecordCardImage.restore(id(1), imageKey("a"), null, musicKey("a"), MusicStatus.COMPLETED, 0),
+                RecordCardImage.restore(id(2), imageKey("b"), null, null, MusicStatus.FAILED, 1),
+                RecordCardImage.restore(id(3), imageKey("c"), null, null, MusicStatus.GENERATING, 2));
         return restored(images, imageKey("a"));
     }
 
     private static RecordCard restored(List<RecordCardImage> images, String thumbnailImageKey) {
-        return RecordCard.restore(88L)
+        return RecordCard.restore(CARD_ID)
                 .runningRecordId(RUNNING_RECORD_ID)
                 .userId(USER_ID)
                 .visibility(RecordCardVisibility.PUBLIC)
                 .activityType(RecordCardActivityType.DAILY)
                 .memo(MEMO)
-                .baseMusicStatus(MusicStatus.READY)
+                .baseMusicStatus(MusicStatus.COMPLETED)
                 .displayOrder(3)
                 .thumbnailImageKey(thumbnailImageKey)
                 .baseMusicKey(BASE_MUSIC_KEY)
@@ -759,8 +671,8 @@ class RecordCardTest {
                 .build();
     }
 
-    private static RecordCardImage storedImage(Long id, String name, int sortOrder) {
-        return RecordCardImage.restore(id, imageKey(name), null, musicKey(name), MusicStatus.READY, sortOrder);
+    private static RecordCardImage storedImage(long id, String name, int sortOrder) {
+        return RecordCardImage.restore(id(id), imageKey(name), null, musicKey(name), MusicStatus.COMPLETED, sortOrder);
     }
 
     private static List<ImageDraft> drafts(int count) {
@@ -772,15 +684,25 @@ class RecordCardTest {
     }
 
     private static ImageDraft draft(String name) {
-        return new ImageDraft(imageKey(name), musicKey(name), null);
+        return new ImageDraft(imageId(name), imageKey(name), null);
     }
 
-    private static ImageSlot keep(Long recordCardImageId) {
-        return new ImageSlot.Keep(recordCardImageId, null);
+    private static ImageSlot keep(long recordCardImageId) {
+        return new ImageSlot.Keep(id(recordCardImageId), null);
     }
 
     private static ImageSlot add(String name) {
         return new ImageSlot.Add(draft(name));
+    }
+
+    // 저장된 사진 ID — 숫자로 구분만 한다
+    private static UUID id(long value) {
+        return new UUID(0L, value);
+    }
+
+    // 새 사진 ID — 이름이 같으면 같은 ID다
+    private static UUID imageId(String name) {
+        return UUID.nameUUIDFromBytes(name.getBytes());
     }
 
     private static String imageKey(String name) {

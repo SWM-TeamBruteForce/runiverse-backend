@@ -7,7 +7,8 @@ public enum RedisKey {
     USER("user"),
     MATCH("match"),
     RUNNING_TRACK("running:track"),
-    RUNNING_COMBO("running:combo");
+    RUNNING_COMBO("running:combo"),
+    RECORD_CARD("record-card");
 
     private static final String DELIMITER = ":";
     private final String prefix;

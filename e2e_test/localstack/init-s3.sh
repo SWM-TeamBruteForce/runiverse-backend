@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # LocalStack이 준비된 직후 한 번 실행된다(ready.d).
-# 러닝 종료가 GPS 원본 트랙을 PutObject 하고, 프로필 사진 반영이 HeadObject를 친다 —
+# 러닝 종료가 GPS 원본 트랙을 PutObject 하고, 프로필 사진 반영·기록 카드 확정이 HeadObject를 친다 —
 # 버킷이 없으면 둘 다 실패하므로 여기서 미리 만든다.
 set -eu
 
@@ -14,3 +14,4 @@ create_bucket() {
 
 create_bucket "${E2E_GPS_TRACK_BUCKET}"
 create_bucket "${E2E_USER_ASSET_BUCKET}"
+create_bucket "${E2E_RECORD_CARD_BUCKET}"

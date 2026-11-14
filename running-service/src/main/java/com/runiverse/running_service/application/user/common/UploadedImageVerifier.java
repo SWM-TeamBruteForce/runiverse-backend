@@ -1,7 +1,8 @@
 package com.runiverse.running_service.application.user.common;
 
-import com.runiverse.running_service.application.user.port.out.LoadUploadedImagePort;
-import com.runiverse.running_service.application.user.port.out.UploadedImage;
+import com.runiverse.running_service.application.common.ImageContentType;
+import com.runiverse.running_service.application.common.port.out.LoadUploadedImagePort;
+import com.runiverse.running_service.application.common.port.out.UploadedImage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

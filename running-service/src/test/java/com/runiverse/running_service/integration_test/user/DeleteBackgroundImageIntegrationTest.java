@@ -1,11 +1,11 @@
 package com.runiverse.running_service.integration_test.user;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.common.ImageContentType;
 import com.runiverse.running_service.application.user.command.backgroundimage.ChangeBackgroundImageCommand;
 import com.runiverse.running_service.application.user.command.backgroundimage.ChangeBackgroundImageHandler;
 import com.runiverse.running_service.application.user.command.backgroundimage.DeleteBackgroundImageCommand;
 import com.runiverse.running_service.application.user.command.backgroundimage.DeleteBackgroundImageHandler;
-import com.runiverse.running_service.application.user.common.ImageContentType;
 import com.runiverse.running_service.application.user.common.UploadedImageVerifier;
 import com.runiverse.running_service.application.user.common.UserImageType;
 import com.runiverse.running_service.integration_test.fake.FakeUploadedImageStore;

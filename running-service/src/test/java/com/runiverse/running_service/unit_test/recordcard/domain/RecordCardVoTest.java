@@ -27,6 +27,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -37,21 +38,10 @@ class RecordCardVoTest {
     @DisplayName("식별자")
     class Ids {
 
-        @ParameterizedTest
-        @ValueSource(longs = {0L, -1L})
-        @DisplayName("카드·사진 ID는 1보다 작은 값을 거부한다")
-        void rejectNonPositive(long value) {
-            // when & then
-            assertThatThrownBy(() -> new RecordCardId(value))
-                    .isInstanceOf(InvalidRecordCardIdException.class);
-            assertThatThrownBy(() -> new RecordCardImageId(value))
-                    .isInstanceOf(InvalidRecordCardImageIdException.class);
-        }
-
         @Test
         @DisplayName("카드·사진 ID는 null을 거부한다")
         void rejectNull() {
-            // when & then -> 저장 전은 애그리거트 필드가 null로 표현한다
+            // when & then -> ID는 작성 요청이 정하므로 저장 전에도 있다
             assertThatThrownBy(() -> new RecordCardId(null))
                     .isInstanceOf(InvalidRecordCardIdException.class);
             assertThatThrownBy(() -> new RecordCardImageId(null))
@@ -59,11 +49,14 @@ class RecordCardVoTest {
         }
 
         @Test
-        @DisplayName("카드·사진 ID는 bigint 최대값까지 담는다")
-        void acceptBigintRange() {
+        @DisplayName("카드·사진 ID는 받은 UUID를 그대로 담는다")
+        void keepUuid() {
+            // given
+            UUID value = UUID.fromString("01a0f2d4-6180-7000-8000-4466554400c8");
+
             // when & then
-            assertThat(new RecordCardId(Long.MAX_VALUE).value()).isEqualTo(Long.MAX_VALUE);
-            assertThat(new RecordCardImageId(Long.MAX_VALUE).value()).isEqualTo(Long.MAX_VALUE);
+            assertThat(new RecordCardId(value).value()).isEqualTo(value);
+            assertThat(new RecordCardImageId(value).value()).isEqualTo(value);
         }
     }
 
@@ -115,8 +108,8 @@ class RecordCardVoTest {
     class Order {
 
         @ParameterizedTest
-        @ValueSource(ints = {0, -2, Integer.MIN_VALUE})
-        @DisplayName("1 이상과 삭제 표시(-1) 밖의 값은 거부한다")
+        @ValueSource(ints = {0, -1, -2, Integer.MIN_VALUE})
+        @DisplayName("1보다 작은 순위는 거부한다 — 지운 카드는 행이 사라져 -1 표시가 없다")
         void rejectOutOfRange(int value) {
             // when & then
             assertThatThrownBy(() -> new DisplayOrder(value))
@@ -130,21 +123,6 @@ class RecordCardVoTest {
             assertThat(DisplayOrder.FIRST.next()).isEqualTo(new DisplayOrder(2));
         }
 
-        @Test
-        @DisplayName("삭제 표시에서는 다음 순위를 셀 수 없다")
-        void deletedHasNoNext() {
-            // when & then -> -1 + 1 = 0은 순위가 아니다
-            assertThatThrownBy(DisplayOrder.DELETED::next)
-                    .isInstanceOf(InvalidDisplayOrderException.class);
-        }
-
-        @Test
-        @DisplayName("-1만 삭제 표시다")
-        void onlyMinusOneIsDeleted() {
-            // when & then
-            assertThat(new DisplayOrder(-1).isDeleted()).isTrue();
-            assertThat(DisplayOrder.FIRST.isDeleted()).isFalse();
-        }
     }
 
     @Nested
@@ -230,30 +208,30 @@ class RecordCardVoTest {
     class Status {
 
         @ParameterizedTest
-        @EnumSource(value = MusicStatus.class, names = {"READY", "FAILED"})
-        @DisplayName("생성 결과는 READY·FAILED를 받는다")
+        @EnumSource(value = MusicStatus.class, names = {"COMPLETED", "FAILED"})
+        @DisplayName("생성 결과는 COMPLETED·FAILED를 받는다")
         void acceptResult(MusicStatus result) {
             // when & then
             assertThat(MusicStatus.result(result)).isEqualTo(result);
         }
 
         @Test
-        @DisplayName("생성 결과로 PENDING이나 null은 거부한다")
+        @DisplayName("생성 결과로 GENERATING이나 null은 거부한다")
         void rejectNonResult() {
             // when & then
-            assertThatThrownBy(() -> MusicStatus.result(MusicStatus.PENDING))
+            assertThatThrownBy(() -> MusicStatus.result(MusicStatus.GENERATING))
                     .isInstanceOf(InvalidMusicResultException.class);
             assertThatThrownBy(() -> MusicStatus.result(null))
                     .isInstanceOf(InvalidMusicResultException.class);
         }
 
         @Test
-        @DisplayName("PENDING만 생성 중이다")
+        @DisplayName("GENERATING만 생성 중이다")
         void onlyPendingIsPending() {
             // when & then
-            assertThat(MusicStatus.PENDING.isPending()).isTrue();
-            assertThat(MusicStatus.READY.isPending()).isFalse();
-            assertThat(MusicStatus.FAILED.isPending()).isFalse();
+            assertThat(MusicStatus.GENERATING.isGenerating()).isTrue();
+            assertThat(MusicStatus.COMPLETED.isGenerating()).isFalse();
+            assertThat(MusicStatus.FAILED.isGenerating()).isFalse();
         }
     }
 }
