@@ -13,7 +13,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.ForeignKey;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.OneToOne;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
@@ -54,7 +54,9 @@ public class RecordCardJpaEntity extends BaseTimeEntity {
     @Column(name = "record_card_id", nullable = false, updatable = false)
     private UUID recordCardId;
 
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    // 기록과 1:1은 uk_record_card_running_record가 지킨다 — @OneToOne은 UNIQUE를 자동 이름으로 따로 만들어
+    // 위 제약 이름을 덮는다. 어댑터가 제약 이름으로 409를 가르므로 이름이 환경마다(운영 DDL·ddl-auto) 같아야 한다
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "running_record_id", nullable = false, updatable = false,
             foreignKey = @ForeignKey(name = "fk_record_card_running_record"))
     @OnDelete(action = OnDeleteAction.CASCADE)

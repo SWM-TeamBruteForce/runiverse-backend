@@ -328,6 +328,19 @@ class RecordCardE2eTest extends E2eTestSupport {
         assertThat(anonymous.status()).isEqualTo(401);
     }
 
+    @Test
+    @DisplayName("앱이 만든 스키마에도 어댑터가 이름으로 가르는 UNIQUE 제약이 운영 DDL과 같은 이름으로 있다")
+    void uniqueConstraintNamesMatchProductionDdl() {
+        // 어댑터는 제약 이름으로 409(기록에 카드가 이미 있음·순위 충돌)를 가른다. 이름이 다르면 같은 위반이 500이 된다 —
+        // ddl-auto로 스키마를 만드는 local·test 서버에서 운영과 다르게 동작하지 않는지 본다
+        assertThat(querySql("""
+                SELECT conname FROM pg_constraint
+                WHERE conrelid = 'record_cards'::regclass AND contype = 'u'
+                ORDER BY conname
+                """))
+                .containsExactly("uk_record_card_running_record", "uk_record_card_user_display_order");
+    }
+
     private String createCardWithoutImages(TestUser user, long runningRecordId) {
         Response draft = post("/record-cards", draftRequest(runningRecordId, List.of(), null), user.accessToken());
         assertThat(draft.status()).isEqualTo(200);
