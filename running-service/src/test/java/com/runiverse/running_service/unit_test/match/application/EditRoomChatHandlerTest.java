@@ -171,7 +171,7 @@ class EditRoomChatHandlerTest {
 
             // then -> 원문은 수정 이력 테이블이 갖는다
             assertThat(log.messages(Level.INFO)).containsExactly(
-                    "[매칭] 채팅 수정 성공 - runningRoomId=" + ROOM_ID + ", chatId=" + CHAT_ID);
+                    "[매칭] 채팅 수정 성공 - roomId=" + ROOM_ID + ", chatId=" + CHAT_ID);
         }
     }
 

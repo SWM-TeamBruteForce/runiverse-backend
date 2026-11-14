@@ -16,9 +16,9 @@ import com.runiverse.running_service.application.user.port.in.GetProfileImageUse
 import com.runiverse.running_service.application.user.port.in.GetUserProfileUsecase;
 import com.runiverse.running_service.application.user.query.backgroundimage.GetBackgroundImageUrlQuery;
 import com.runiverse.running_service.application.user.query.backgroundimage.GetBackgroundImageUrlResult;
-import com.runiverse.running_service.application.user.query.profileimage.GetProfileImageUrlQuery;
 import com.runiverse.running_service.application.user.query.profile.GetUserProfileQuery;
 import com.runiverse.running_service.application.user.query.profile.GetUserProfileResult;
+import com.runiverse.running_service.application.user.query.profileimage.GetProfileImageUrlQuery;
 import com.runiverse.running_service.application.user.query.profileimage.GetProfileImageUrlResult;
 import com.runiverse.running_service.domain.relationship.vo.RelationshipType;
 import com.runiverse.running_service.presentation.common.exception.GlobalExceptionHandler;
@@ -135,9 +135,8 @@ class UserControllerTest {
         // when
         MvcResult result = mockMvc.perform(get("/users/" + userId)).andReturn();
 
-        // then
-        assertThat(result.getResponse().getStatus()).isEqualTo(200);
         // then -> 1.1.x 앱도 friendStatus를 읽지 않아 다시 내리지 않는다
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
         assertThat(body(result).keySet()).containsExactly(
                 "userId", "isMe", "nickname", "profileImageUrl", "introduction", "friendCount", "relationshipType");
         assertThat(body(result)).containsEntry("relationshipType", "NONE");

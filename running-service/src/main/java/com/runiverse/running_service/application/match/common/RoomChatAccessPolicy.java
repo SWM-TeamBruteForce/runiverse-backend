@@ -10,7 +10,7 @@ import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-// 대기방 채팅을 쓸 수 있는가 — 보내기·목록(그리고 이후 수정·삭제)이 같은 판정을 써야 응답이 어긋나지 않는다.
+// 대기방 채팅을 쓸 수 있는가 — 보내기·목록·수정·삭제가 같은 판정을 써야 응답이 어긋나지 않는다.
 // 판정 순서는 방 안인가(404) → 채팅이 열려 있나(409)다. 방 밖의 사람에게는 방 상태를 알려 주지 않는다.
 // 방을 잠그지 않는다 — 채팅은 방 상태를 바꾸지 않아 지킬 불변식이 없고,
 // 채팅마다 방 행을 잡으면 참가·이탈과 서로 기다린다

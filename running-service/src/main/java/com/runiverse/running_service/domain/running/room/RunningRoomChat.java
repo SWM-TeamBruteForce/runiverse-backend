@@ -60,7 +60,7 @@ public class RunningRoomChat {
     }
 
     // 내용을 바꾸고 바꾸기 직전 내용을 이력으로 돌려준다 — 이력 저장은 같은 트랜잭션에서 호출한 쪽이 한다.
-    // 같은 내용으로 고쳐도 수정으로 친다(api-spec 5-E-3)
+    // 같은 내용으로 고쳐도 수정으로 친다
     public RunningRoomChatHistory edit(UserId editor, String newContent, LocalDateTime editedAt) {
         RunningRoomChatId savedId = requireChangeable(editor, editedAt);
         RunningRoomChatContent next = new RunningRoomChatContent(newContent);

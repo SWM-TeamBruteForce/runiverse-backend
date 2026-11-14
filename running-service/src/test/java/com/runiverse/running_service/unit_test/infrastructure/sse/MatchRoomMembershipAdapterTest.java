@@ -1,6 +1,7 @@
 package com.runiverse.running_service.unit_test.infrastructure.sse;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.application.match.exception.MatchStreamUnavailableException;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.infrastructure.redis.match.MatchRoomSubscriber;
 import com.runiverse.running_service.infrastructure.sse.MatchRoomMemberRegistry;
@@ -14,6 +15,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -168,6 +171,44 @@ class MatchRoomMembershipAdapterTest {
             // then -> 끊었다 다시 걸면 그 틈의 이벤트를 놓친다
             verify(matchRoomSubscriber, never()).unsubscribe(OLD_ROOM);
             verify(matchRoomSubscriber, times(1)).subscribe(OLD_ROOM);
+            assertThat(registry.usersIn(OLD_ROOM)).containsExactly(chulsu);
+        }
+    }
+
+    @Nested
+    @DisplayName("구독 실패 테스트")
+    class SubscribeFailureTest {
+
+        @Test
+        @DisplayName("구독에 실패하면 명부 등록을 되돌리고 예외를 그대로 알린다")
+        void rollsBackMembershipWhenSubscribeFails() {
+            // given
+            willThrow(new MatchStreamUnavailableException())
+                    .given(matchRoomSubscriber).subscribe(OLD_ROOM);
+
+            // when & then -> 구독 없이 명부만 남으면 재연결이 첫 참가자가 아니게 돼 구독을 영영 건너뛴다
+            assertThatThrownBy(() -> adapter.join(chulsu, OLD_ROOM))
+                    .isInstanceOf(MatchStreamUnavailableException.class);
+            assertThat(registry.usersIn(OLD_ROOM)).isEmpty();
+            assertThat(registry.roomOf(chulsu)).isEmpty();
+            verify(matchRoomSubscriber).unsubscribe(OLD_ROOM);
+        }
+
+        @Test
+        @DisplayName("구독 실패 뒤 같은 방으로 다시 들어오면 다시 첫 참가자가 되어 구독을 다시 시도한다")
+        void retriesSubscriptionAfterRollback() {
+            // given -> 첫 시도만 실패하는 일시 장애
+            willThrow(new MatchStreamUnavailableException())
+                    .willDoNothing()
+                    .given(matchRoomSubscriber).subscribe(OLD_ROOM);
+            assertThatThrownBy(() -> adapter.join(chulsu, OLD_ROOM))
+                    .isInstanceOf(MatchStreamUnavailableException.class);
+
+            // when -> 앱이 다시 연결한다
+            adapter.join(chulsu, OLD_ROOM);
+
+            // then
+            verify(matchRoomSubscriber, times(2)).subscribe(OLD_ROOM);
             assertThat(registry.usersIn(OLD_ROOM)).containsExactly(chulsu);
         }
     }

@@ -5,6 +5,7 @@ import com.runiverse.running_service.application.match.command.stream.OpenMatchS
 import com.runiverse.running_service.application.match.command.stream.OpenMatchStreamHandler;
 import com.runiverse.running_service.application.match.common.RoomInfoAssembler;
 import com.runiverse.running_service.application.match.exception.ActiveMatchNotFoundException;
+import com.runiverse.running_service.application.match.exception.MatchStreamUnavailableException;
 import com.runiverse.running_service.application.match.port.out.MatchEventType;
 import com.runiverse.running_service.application.match.port.out.MatchRoomMembershipPort;
 import com.runiverse.running_service.application.match.port.out.MatchStreamConnection;
@@ -34,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
@@ -205,6 +207,43 @@ class OpenMatchStreamHandlerTest {
         verify(supersededConnection).closeSuperseded();
         verify(publishMatchStreamSupersedePort).publish(new UserId(USER_ID), "conn-new");
         verify(supersededConnection, never()).send(any());
+    }
+
+    @Test
+    @DisplayName("방 구독에 실패하면 등록한 연결을 연결표에서 빼고 예외를 그대로 알린다")
+    void removesConnectionWhenJoinFails() {
+        // given
+        givenActiveMatch();
+        given(matchStreamPort.register(new UserId(USER_ID), newConnection)).willReturn(Optional.empty());
+        willThrow(new MatchStreamUnavailableException())
+                .given(matchRoomMembershipPort).join(new UserId(USER_ID), ROOM_ID);
+
+        // when
+        assertThatThrownBy(() ->
+                openMatchStreamHandler.handle(new OpenMatchStreamCommand(USER_ID, newConnection)))
+                .isInstanceOf(MatchStreamUnavailableException.class);
+
+        // then -> 응답이 에러로 나가 연결 종료 콜백이 오지 않는다. 남기면 이벤트가 닿지 않는 연결에 쌓인다
+        verify(matchStreamPort).remove(new UserId(USER_ID), newConnection);
+    }
+
+    @Test
+    @DisplayName("방 구독에 실패한 연결은 다른 인스턴스에 대체를 알리지 않고 스냅샷도 보내지 않는다")
+    void sendsNothingWhenJoinFails() {
+        // given
+        givenActiveMatch();
+        given(matchStreamPort.register(new UserId(USER_ID), newConnection)).willReturn(Optional.empty());
+        willThrow(new MatchStreamUnavailableException())
+                .given(matchRoomMembershipPort).join(new UserId(USER_ID), ROOM_ID);
+
+        // when
+        assertThatThrownBy(() ->
+                openMatchStreamHandler.handle(new OpenMatchStreamCommand(USER_ID, newConnection)))
+                .isInstanceOf(MatchStreamUnavailableException.class);
+
+        // then -> 실패한 연결이 다른 인스턴스의 정상 연결을 닫으면 안 된다
+        verifyNoInteractions(publishMatchStreamSupersedePort);
+        verify(newConnection, never()).send(any());
     }
 
     private void givenActiveMatch() {
