@@ -211,6 +211,10 @@ jobs:
           PARAMETER_PATH="/runiverse/test"
           ENV_DIRECTORY="/opt/runiverse"
           ENV_FILE="${ENV_DIRECTORY}/.env"
+          # Kafka 브로커 CA 인증서 — 여러 줄(PEM)이라 env-file에 못 넣어 다른 경로에 두고 파일로 마운트한다
+          KAFKA_CA_PARAMETER="/runiverse/files/test/kafka-ca.crt"
+          KAFKA_CA_FILE="${ENV_DIRECTORY}/kafka-ca.crt"
+          KAFKA_CA_MOUNT="/app/config/kafka-ca.crt"
 
           echo "===== Runiverse deployment started ====="
           echo "Image: ${IMAGE_URI}"
@@ -263,6 +267,32 @@ jobs:
           echo "Loaded environment variable names:"
           cut -d= -f1 "${ENV_FILE}"
 
+          # Kafka CA 인증서 내려받기 — 값은 파일로만 쓰고 화면에 내지 않는다(이 스크립트의 출력은 Actions 로그에 남는다).
+          # SecureString이다 — 인증서 SAN에 VPC 안 브로커 주소가 들어 있어 콘솔에서 바로 보이지 않게 했다.
+          # 컨테이너 사용자(spring)가 읽어야 해서 644다 — 공개 인증서라 괜찮다(비밀번호가 든 .env는 600)
+          echo "Loading Kafka CA certificate from Parameter Store..."
+
+          TEMP_CA=$(mktemp)
+
+          aws ssm get-parameter \
+            --region "${AWS_REGION}" \
+            --name "${KAFKA_CA_PARAMETER}" \
+            --with-decryption \
+            --query 'Parameter.Value' \
+            --output text > "${TEMP_CA}"
+
+          if ! grep -q 'BEGIN CERTIFICATE' "${TEMP_CA}"; then
+            echo "Invalid Kafka CA certificate: ${KAFKA_CA_PARAMETER}" >&2
+            rm -f "${TEMP_CA}"
+            exit 1
+          fi
+
+          chown root:root "${TEMP_CA}"
+          chmod 644 "${TEMP_CA}"
+          mv "${TEMP_CA}" "${KAFKA_CA_FILE}"
+
+          echo "Kafka CA certificate saved."
+
           # ECR 인증
           echo "Logging in to Amazon ECR..."
 
@@ -304,6 +334,7 @@ jobs:
             --restart unless-stopped \
             --network host \
             --env-file "${ENV_FILE}" \
+            -v "${KAFKA_CA_FILE}:${KAFKA_CA_MOUNT}:ro" \
             --label "runiverse.commit=__GITHUB_SHA__" \
             "${IMAGE_URI}"
 
@@ -359,6 +390,7 @@ jobs:
                 --restart unless-stopped \
                 --network host \
                 --env-file "${ENV_FILE}" \
+                -v "${KAFKA_CA_FILE}:${KAFKA_CA_MOUNT}:ro" \
                 "${PREVIOUS_IMAGE}"
             fi
 

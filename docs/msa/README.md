@@ -63,7 +63,7 @@ Runiverse에서 서비스가 나뉘는 부분과, 이 백엔드(running-service)
 | 토픽 (`{env}.` 생략) | 방향 | 보내는 방식 | 받는 쪽 중복 거르기 | 상태 |
 |---|---|---|---|---|
 | `record-card.music.requested` | running-service → AI | 아웃박스 + CDC | AI 서버 inbox (헤더 `id`) | test·prod CDC 동작 중 |
-| `record-card.music.generated` | AI → running-service | AI 서버가 직접 발행 | running-service inbox + `GENERATING`인 행만 바꾸는 규칙 | 구독·inbox 구현 전 |
+| `record-card.music.generated` | AI → running-service | AI 서버가 직접 발행 | running-service inbox(헤더 `id` = `inference_id`) + `GENERATING`인 행만 바꾸는 규칙 | 구현·로컬 검증 됨, test·prod 배포 전 |
 
 ### 흐름 — 기록 카드 음악
 
@@ -91,9 +91,9 @@ Runiverse에서 서비스가 나뉘는 부분과, 이 백엔드(running-service)
 | 아웃박스 쓰기 (9-2) | 됨 |
 | Kafka 클러스터 (개발·운영) | 됨 — 계정·토픽·ACL |
 | CDC (test·prod) | 됨 — 커넥터 동작, 발행·재기동·heartbeat 검증, prod 슬롯 지연 경보 |
-| 아웃박스 코드 배포 | test 서버·prod 배포 전 — `KAFKA_ENV`는 Parameter Store에 있다 |
-| AI 서버 연동 | test 됨 — 카드 확정 → 아웃박스 → Debezium → Kafka → AI 서버 수신·음악 생성. prod와 헤더 `id` inbox는 AI 쪽 확인 대기 |
-| 완료 구독 + inbox | 구현 전 — [outbox-inbox.md](outbox-inbox.md) 「받는 쪽」 |
+| 아웃박스 코드 배포 | 됨 — test 서버·prod 모두 배포된 앱의 카드가 Kafka까지 나감 |
+| AI 서버 연동 | test 됨 — 카드 확정 → 아웃박스 → Debezium → Kafka → AI 서버 수신·음악 생성. prod 수신은 AI 쪽 확인. 요청 이벤트의 헤더 `id` inbox와 완료 이벤트의 헤더 `id`(= `inference_id`)는 AI 서버와 확인 전 |
+| 완료 구독 + inbox | 구현·검증 됨 — 로컬 앱 → 개발 클러스터로 반영·중복·계약 위반·늦은 결과 확인. test·prod 배포 준비 됨(접속 값·CA 인증서·보안 그룹·prod `inbox_events`, prod 시작 템플릿 버전 8 검증), 배포 뒤 수신 확인 — [outbox-inbox.md](outbox-inbox.md) 「받는 쪽」 「검증」 |
 
 ## 서비스나 이벤트를 더할 때
 

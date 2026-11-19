@@ -26,11 +26,11 @@ dependencies {
 	developmentOnly platform("me.paulschwarz:spring-dotenv-bom:5.0.1")
 	developmentOnly "me.paulschwarz:springboot4-dotenv"
 
-	// 운영 지표 / 영속화 / Redis
-	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	// 영속화 / Redis / Kafka
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 	runtimeOnly 'org.postgresql:postgresql'
+	implementation 'org.springframework.boot:spring-boot-starter-kafka'
 
 	// 보안 — Argon2 해시(bcprov) / JWT 검증(resource-server)
 	implementation 'org.springframework.boot:spring-boot-starter-security'
@@ -63,7 +63,8 @@ dependencies {
 		exclude group: 'com.fasterxml.jackson.dataformat', module: 'jackson-dataformat-xml'
 	}
 
-	// 메트릭
+	// 운영 지표
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
 	// 테스트

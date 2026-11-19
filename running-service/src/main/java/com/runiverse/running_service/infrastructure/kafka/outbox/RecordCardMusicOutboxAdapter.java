@@ -18,7 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// 음악 생성 요청을 아웃박스에 쓴다 — 부르는 트랜잭션(카드 저장)과 함께 커밋된다. Kafka로 보내는 것은 Debezium이다(api-spec 9-5).
+// 음악 생성 요청을 아웃박스에 쓴다 — 부르는 트랜잭션(카드 저장)과 함께 커밋된다. Kafka로 보내는 것은 Debezium이다.
 // 본문 키 이름(snake_case)·시각 형식은 AI 서버와 맞춘 약속이라 바꾸지 않는다
 @Component
 @RequiredArgsConstructor

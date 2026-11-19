@@ -2926,7 +2926,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
      - **작성(9-1에서 온 것)**: 9-1이 정한 `recordCardId`로 카드·사진 행을 새로 넣는다. 순위(`display_order`)는 내 카드 중 최댓값 + 1(맨 뒤)이다. 같은 사람이 다른 기록으로 동시에 만들어 순위가 겹치면(`uk_record_card_user_display_order`) 409로 돌려보낸다(아래)
      - **수정(9-3에서 온 것)**: 9-3이 받은 변경을 한 번에 반영한다(아래 9-3 사진 처리)
      - 음악 key는 정하지 않는다 — 기본곡·사진 음악은 key 없이(null) `GENERATING`으로 넣고, AI 서버의 완료 이벤트가 준 key를 그때 저장한다(9-5). 썸네일은 `thumbnailIndex` 위치 사진의 key를 `record_cards.thumbnail_image_key`에 복사한다
-     - **같은 트랜잭션에서 음악 생성 요청 이벤트를 아웃박스에 기록한다** — 작성이면 기본곡 + 사진 전부, 수정이면 새 사진만(9-5). 만들 음악이 없으면 기록하지 않는다
+     - **같은 트랜잭션에서 음악 생성 요청 이벤트를 아웃박스에 기록한다** — 작성이면 기본곡 + 사진 전부, 수정이면 기본곡 + 새 사진(9-5). 수정이면 기본곡을 기록하기 전에 `GENERATING`으로 되돌린다 — AI 서버가 요청마다 기본곡을 다시 만들어 덮어쓴다
   5. 커밋한 뒤 임시 정보를 "확정됨"으로 바꾼다. Kafka 발행은 이 요청이 하지 않는다 — CDC가 아웃박스를 읽어 발행한다(9-5)
 - **Response**
   - 작성: `201 Created` — 만든 카드의 ID만 준다. 앱은 9-1에서 초안 ID만 받아 카드 ID를 모르므로 이 값으로 상세(8-1)를 연다. 음악은 전부 `GENERATING`이다
@@ -3048,12 +3048,12 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 - **새 사진이 있으면 아직 반영하지 않는다** — 변경 전체를 Redis에 임시 저장하고 업로드 URL을 내준다. 앱이 사진을 올리고 9-2로 확정하면 그때 **회고 글·공개 범위 등 다른 변경까지 한 번에** 반영한다. 확정 전까지 카드는 그대로다
   - `Response 202 Accepted`: 9-1 응답과 같은 모양(`recordCardDraftId`·`expiresAt`·`uploads`). `uploads`는 `images` 안의 새 사진만, 그 순서대로 담는다
 - **사진 처리**(바로 반영할 때와 9-2 확정 때 같다)
-  - 이미 올린 사진(`recordCardImageId`)은 음악과 생성 상태를 그대로 두고 순서와 설명을 다시 매긴다 — **설명을 바꿔도 음악은 다시 만들지 않는다**(기본곡과 같다). 음악은 옛 설명으로 만든 그대로다
+  - 이미 올린 사진(`recordCardImageId`)은 음악과 생성 상태를 그대로 두고 순서와 설명을 다시 매긴다 — **설명을 바꿔도 그 사진의 음악은 다시 만들지 않는다**. 음악은 옛 설명으로 만든 그대로다
   - **`images`를 생략하면 설명도 그대로다** — 설명만 바꾸려 해도 사진 목록 전체를 보낸다
-  - 새 사진은 음악 key 없이 `GENERATING`으로 넣고, **커밋한 뒤 그 사진들의 음악만 생성을 요청한다**(9-5)
+  - 새 사진은 음악 key 없이 `GENERATING`으로 넣고, **9-2 확정 트랜잭션에서 기본곡과 그 사진들의 음악 생성을 요청한다**(아웃박스, 9-5)
   - 목록에서 빠진 사진은 행을 지운다 — 그 사진의 음악도 함께 버린다. 생성 중이었다면 나중에 오는 완료 이벤트는 무시된다
 - **썸네일 처리**: `thumbnailIndex`를 보내면 그 사진으로 바꾼다. 생략하면 지금 썸네일을 유지하되, 그 사진이 빠졌으면 수정 뒤 첫 사진으로, 사진이 하나도 없으면 null로 바꾼다
-- **기본곡은 다시 만들지 않는다** — 회고 글·활동유형·공개 범위·사진을 바꿔도 기본곡은 그대로다. 회고 글·활동유형을 바꿀 때 다시 만들지는 AI 쪽 정책이 정해지면 정한다
+- **기본곡은 새 사진을 확정할 때 다시 만든다** — AI 서버가 요청마다 기본곡을 다시 만들어 같은 경로에 덮어쓰기 때문이다(9-5). 새 사진 없이 바로 반영하는 수정(회고 글·활동유형·공개 범위·썸네일·사진 순서·사진 빼기)은 음악을 요청하지 않아 기본곡이 그대로다. 회고 글·활동유형만 바꿀 때 다시 만들지는 AI 쪽 정책이 정해지면 정한다
 
 - **에러 (400 Bad Request — 요청 검증)**
 
@@ -3205,40 +3205,124 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 
 - **이 토픽의 필드 이름은 `snake_case`다** — 앱 API(`camelCase`)와 다르다. AI 서버와의 내부 계약이라 AI 서버 쪽 이름을 따른다.
 
-> **아직 정하지 않은 것 — 요청 이벤트를 위 형태로 바꾸며 생겼다**: 이벤트에 음악 key·요청 ID가 없다. 사진은 `record_card_image_id`(UUID)로 가리킬 수 있다. 완료 이벤트(아래)·`record_cards.base_music_key`·`record_card_images.music_key`는 아직 "서버가 음악 key를 정해 요청에 싣고, 완료도 그 key로 돌아온다"는 이전 설계 그대로다. 함께 정해야 한다:
+> **아직 정하지 않은 것 — 요청 이벤트를 위 형태로 바꾸며 생겼다**: 이벤트에 음악 key·요청 ID가 없다. 사진은 `record_card_image_id`(UUID)로 가리킬 수 있다. 함께 정해야 한다:
 > 1. ~~AI가 음악을 어느 S3 key에 올리는가~~ — **정했다(11-13): AI 서버가 정하고 완료 이벤트로 알려 준다. running-service는 받은 key를 그대로 저장한다**
-> 2. 완료 이벤트가 어느 음악(기본곡·어느 사진)의 결과인지 어떻게 알리는가 — 사진은 `record_card_image_id`로 찾을 수 있다. 기본곡을 어떻게 가리킬지와 완료 이벤트 모양은 AI 서버와 정한다
-> 3. 수정(9-3)으로 새 사진만 보낼 때 기본곡을 다시 만들지 말라는 것을 어떻게 알리는가
-> 4. 같은 이벤트가 두 번 왔을 때 AI 서버 inbox가 무엇으로 거르는가 — **제안(11-16): Kafka 헤더 `id`(아웃박스 `outbox_event_id`, UUIDv7)로 거른다.** 이벤트마다 다르고 같은 이벤트를 다시 보내도 같다. 본문 JSON은 바꾸지 않는다. AI 서버가 헤더를 읽을 수 있는지 확인 대기
+> 2. ~~완료 이벤트가 어느 음악(기본곡·어느 사진)의 결과인지 어떻게 알리는가~~ — **정했다: 기본곡은 `result.base_music`, 사진은 `result.photo_music[].record_card_image_id`로 알린다(아래 완료 이벤트)**
+> 3. ~~수정(9-3)으로 새 사진만 보낼 때 기본곡을 다시 만들지 말라는 것을 어떻게 알리는가~~ — **정했다: 알리지 않는다. AI 서버는 생성·수정·재생성을 구분하지 않고 요청마다 기본곡을 다시 만들어 같은 경로에 덮어쓴다.** 구분은 running-service가 한다 — 요청을 보내기 전에 다시 만들 음악(기본곡 + 대상 사진)을 `GENERATING`으로 되돌리고, 완료를 받으면 `GENERATING`인 것만 바꾼다
+> 4. 같은 이벤트가 두 번 왔을 때 AI 서버 inbox가 무엇으로 거르는가 — **제안(11-16): Kafka 헤더 `id`(아웃박스 `outbox_event_id`, UUIDv7)로 거른다.** 이벤트마다 다르고 같은 이벤트를 다시 보내도 같다. 본문 JSON은 바꾸지 않는다. AI 서버 확인은 완료 구독(generated)을 배포한 뒤에 한다. 완료 이벤트도 같은 방식(헤더 `id` = `inference_id`)으로 맞췄다
 
 **`{env}.record-card.music.generated`** (AI → running-service)
 
+| 부분 | 값 |
+|---|---|
+| 헤더 `id` | `inference_id`와 같은 값 — running-service inbox가 같은 메시지를 두 번 처리하지 않게 거르는 키 |
+| key | `record_card_id` — 요청과 같은 파티션 키 |
+| value | 아래 JSON |
+
+성공:
+
 ```json
 {
-  "requestId": "01a0f2d4-6180-7000-8000-446655440099",
-  "recordCardId": "01a0f2d4-6180-7000-8000-4466554400c8",
-  "results": [
-    { "musicKey": "record-cards/01a0f2d4-.../music/5c3e1a9d-...", "status": "COMPLETED" },
-    { "musicKey": "record-cards/01a0f2d4-.../music/7d2e4f10-...", "status": "FAILED" }
-  ],
-  "generatedAt": "2026-07-25T21:11:30"
+  "inference_id": "d7017a39-c8ef-45f1-b198-ba3fd8776daa",
+  "record_card_id": "01a1ee0f-4fee-7741-a7b1-7eeb86bb369f",
+  "status": "SUCCEEDED",
+  "failed_stage": null,
+  "invoke": {
+    "http_status": 202,
+    "error_code": null,
+    "message": null
+  },
+  "result": {
+    "base_music": {
+      "s3_key": "audio/test/01a1e874-.../DAILY/01a1ee0f-.../base.wav",
+      "duration_seconds": 30.0
+    },
+    "photo_music": [
+      {
+        "record_card_image_id": "01a1ee0f-4fee-7d58-a7b2-925ef4d37f36",
+        "s3_key": "audio/test/01a1e874-.../DAILY/01a1ee0f-.../01a1ee0f-4fee-7d58-....wav",
+        "duration_seconds": 10.0
+      }
+    ]
+  }
+}
+```
+
+실패:
+
+```json
+{
+  "inference_id": "1c298034-bf6f-4f06-a983-dc3b59822e74",
+  "record_card_id": "01a1ee0f-4fee-7741-a7b1-7eeb86bb369f",
+  "status": "FAILED",
+  "failed_stage": "INFERENCE",
+  "invoke": {
+    "http_status": 202,
+    "error_code": null,
+    "message": null
+  },
+  "result": {
+    "base_music": {
+      "s3_key": null,
+      "duration_seconds": null
+    },
+    "photo_music": [
+      {
+        "record_card_image_id": "01a1ee0f-4fee-7d58-a7b2-925ef4d37f36",
+        "s3_key": null,
+        "duration_seconds": null
+      }
+    ],
+    "error": {
+      "code": "MUSIC_GENERATION_OOM",
+      "message": "..."
+    }
+  }
 }
 ```
 
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| `requestId` | String | O | 요청 이벤트의 `requestId` 그대로 |
-| `recordCardId` | String | O | 요청 이벤트의 `record_card_id` 그대로 |
-| `results` | Array | O | 요청에 실은 음악마다 하나. 일부만 성공해도 한 이벤트에 함께 담는다 |
-| `results[].musicKey` | String | O | 요청 이벤트의 `musicKey` 그대로 |
-| `results[].status` | String | O | `COMPLETED`(그 key에 S3 객체를 올렸음) · `FAILED`(만들지 못함) |
-| `generatedAt` | String | O | 처리 시각 |
+| `inference_id` | String | O | AI 서버가 요청마다 새로 만드는 고유값(UUID). **실패여도 늘 있다** — 추론이 시작되지 않은 실패(`INVOKE`)면 AI 서버가 그때 만든다. 헤더 `id`와 같다 |
+| `record_card_id` | String | O | 요청의 `record_card_id` 그대로 |
+| `status` | String | O | `SUCCEEDED` · `FAILED` — **요청 단위다.** 사진 하나라도 실패하면 요청 전체가 `FAILED`다(일부만 성공한 결과는 오지 않는다) |
+| `failed_stage` | String | X | 실패한 단계. `INVOKE`(호출 실패) · `INFERENCE`(추론 중 실패). 성공이면 `null` |
+| `invoke` | Object | O | AI 서버의 호출 결과(`http_status`·`error_code`·`message`). 진단용이다 — **`message`는 로그에 남기지 않는다**(AWS 계정 정보가 섞여 온 적이 있다) |
+| `result.base_music` | Object | O | 기본곡. 성공이면 `s3_key`·`duration_seconds`가 있고, 실패면 둘 다 `null` |
+| `result.photo_music[]` | Array | O | 요청 `photos`의 사진마다 하나. 성공·실패 모두 **요청한 사진을 빠짐없이** 담는다. 실패면 `s3_key`·`duration_seconds`가 `null` |
+| `result.photo_music[].record_card_image_id` | String | O | 요청 `photos[].record_card_image_id` 그대로 — running-service는 이 값으로 사진을 찾는다 |
+| `result.*.s3_key` | String | X | AI 서버가 정한 음악 S3 key. **경로가 카드·사진 ID로 정해져 같은 음악을 다시 만들면 덮어쓴다** |
+| `result.*.duration_seconds` | Number | X | 음악 길이(초). 저장하지 않는다 |
+| `result.error` | Object | X | 실패 원인(`code`·`message`). 실패일 때만. **로그에는 `code`만 남긴다** |
 
-- **받는 쪽 처리**: 결과마다 ID로 행을 찾아 상태를 바꾼다 — 기본곡은 `record_card_id`(카드당 하나), 사진 음악은 `record_card_image_id`. 음악 key로 찾지 않는다. 한 이벤트의 결과는 한 트랜잭션에서 바꾼다 (완료 이벤트 필드는 AI 서버와 정한다 — 위 "아직 정하지 않은 것")
-  - **`GENERATING`인 행만 바꾼다** — Kafka는 같은 이벤트를 두 번 줄 수 있다(최소 한 번 전달). 이미 `COMPLETED`·`FAILED`면 그 결과만 건너뛴다
-  - **행이 없으면(수정에서 뺀 사진·지운 카드) 그 결과만 건너뛰고 로그를 남긴다** — 오류로 보고 재시도하지 않는다
-  - **요청에 실었는데 `results`에 빠진 음악은 `GENERATING`에 남는다** — 계약 위반이라 WARN 로그를 남긴다
-  - **DB 오류로 처리하지 못하면 오프셋을 커밋하지 않는다** — 다시 받아도 위 규칙으로 한 번만 바뀐다
+- **AI 서버는 요청 하나에 최종 결과를 한 번만 보낸다** — 재시도는 AI 서버 안에서 하고, 끝난 결과만 발행한다.
+- **받는 쪽 처리** — 한 메시지는 한 트랜잭션에서 처리하고, 기록 행을 `FOR UPDATE`로 잠근다(모든 쓰기와 같은 잠금 규칙)
+  1. inbox에 이벤트 키(헤더 `id`)를 넣는다 — 이미 있으면 처리한 메시지라 아무것도 바꾸지 않는다. 헤더 `id`가 없으면 받지 않는다(아래 표)([msa/outbox-inbox.md](msa/outbox-inbox.md) 「받는 쪽」)
+  2. **결과에 있는 음악만 본다** — 기본곡은 `record_card_id`로, 사진 음악은 `photo_music[]`를 `record_card_image_id` → 결과 Map으로 모아 찾는다. 음악 key로 찾지 않는다. 결과에 없는 음악은 다른 요청의 것일 수 있어 건드리지 않는다
+  3. **`GENERATING`인 음악만 바꾼다** — `SUCCEEDED`면 `COMPLETED` + `s3_key`, `FAILED`면 `FAILED`(key는 null 그대로)
+  4. 커밋한 뒤 오프셋을 커밋한다 — **잠깐 생긴 DB 문제(연결 끊김·커넥션 풀 대기 초과·잠금 대기 초과·데드락)로 처리하지 못하면 오프셋을 커밋하지 않고** 다시 받는다. 그 밖의 예외는 ERROR를 남기고 건너뛴다([msa/outbox-inbox.md](msa/outbox-inbox.md) 「처리할 수 없는 메시지」)
+
+| 경우 | 처리 | 로그 |
+|---|---|---|
+| 음악이 `GENERATING` | 결과대로 바꾼다 | INFO |
+| 음악이 이미 `COMPLETED`·`FAILED` | 건너뛴다 — 늦게 온 결과가 다른 요청의 결과를 덮지 않게 | WARN (지금 상태·온 결과·`inference_id`) |
+| 결과에만 있고 사진 행이 없다(수정에서 뺀 사진·지운 카드) | 건너뛴다. **사진 행을 만들지 않는다** — 사진 행은 작성 확정(9-2)만 만든다 | WARN |
+| 결과에 없는 음악(`GENERATING`이어도) | 건드리지 않는다 — 다른 요청(생성 중에 들어온 수정·다시 만들기)의 음악일 수 있다. 그 요청의 결과가 따로 온다 | 남기지 않는다 |
+| `result`에 음악 목록이 없다(`result: null`·`error`만) | 아무것도 바꾸지 않는다 — 카드의 `GENERATING`을 모두 바꾸면 다른 요청의 음악까지 바뀐다. 계약 위반이라 그 음악은 생성 중으로 남으니 로그로 찾는다 | ERROR |
+| 본문을 읽지 못하거나 `record_card_id`·`status`가 없거나 모르는 `status` | 건너뛰고 오프셋을 커밋한다 — 다시 받아도 계속 실패해 파티션이 멈추기 때문이다 | ERROR |
+| 헤더 `id`가 없다 | **받지 않는다** — 건너뛰고 오프셋을 커밋한다. 이벤트 키 없이는 중복을 거를 수 없다(계약 위반) | ERROR |
+
+- **AI 서버는 생성·수정·다시 만들기를 구분하지 않는다** — 구분은 running-service가 한다. 요청을 보내기 전에 다시 만들 음악(기본곡 + 대상 사진)을 `GENERATING`으로 되돌리고, 받으면 `GENERATING`인 것만 바꾼다. 그래서 받는 쪽 처리는 세 경우가 같다
+
+  | 보내는 곳 | 보내기 전에 `GENERATING`으로 | 요청 `photos` |
+  |---|---|---|
+  | 9-2 작성 확정 | 기본곡 + 사진 전부 | 사진 전부 |
+  | 9-3 수정 → 9-2 확정 (예정) | 기본곡 + 새 사진 | 새 사진 |
+  | 9-6 음악 다시 만들기 (예정) | 기본곡 + `FAILED`인 사진 | `FAILED`인 사진 |
+
+  - 기본곡은 AI 서버가 요청마다 다시 만들어 같은 경로에 덮어쓰므로 늘 `GENERATING`으로 되돌린다 — 수정·다시 만들기를 하면 기본곡이 바뀐다
+  - 9-6은 사진을 다시 올리지 않아 확정 단계가 없다. 9-3은 새 사진을 올리므로 9-2 확정을 거친다
+
 - **요청 이벤트는 아웃박스 + CDC로 발행한다** — running-service는 카드 저장과 같은 트랜잭션에서 아웃박스 테이블에 쓰고, Debezium(Outbox Event Router)이 커밋된 행을 요청 토픽에 발행한다. 쓰는 규칙은 [msa/outbox-inbox.md](msa/outbox-inbox.md), 발행 경로는 [msa/cdc.md](msa/cdc.md)
   - **최소 한 번 발행이다** — 같은 요청 이벤트가 두 번 갈 수 있다. AI 서버가 inbox로 중복을 거른다(무엇으로 거를지는 위 요청 이벤트의 "아직 정하지 않은 것" 4)
   - **메시지 모양** — AI 서버가 받는 것:
@@ -3248,10 +3332,19 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
     | `aggregate_id` (`record_card_id`) | key — 파티션 키. 따옴표 없는 문자열 |
     | `topic` | 토픽 — 앱이 `KAFKA_ENV`로 환경을 붙여 쓴 값을 그대로 쓴다 |
     | `payload` | value — 위 요청 이벤트 JSON 그대로(문자열로 감싸지 않는다, `null` 필드도 남는다) |
-- **완료 이벤트도 inbox로 받는다(이후)** — 처리한 완료 이벤트를 기록해 같은 이벤트를 두 번 처리하지 않는다. 위의 "`GENERATING`인 행만 바꾼다"는 그대로 둔다 — inbox는 이벤트 단위로 중복을 막고, 이 규칙은 음악 상태가 한 번만 바뀌게 한다. inbox 스키마는 완료 구독을 구현할 때 정한다
-- **`FAILED`를 다시 만드는 경로는 아직 없다** — AI 서버는 스스로 재시도하지 않는다. 사용자가 다시 요청하는 API나 자동 재시도가 필요해지면 이 절에 더한다(같은 요청 토픽으로 실패한 음악만 다시 보낸다 — 사진 음악은 실패한 사진만 `photos`에 싣고, 기본곡을 다시 만들지 말라는 표시는 요청 이벤트의 "아직 정하지 않은 것" 3과 같은 방법으로 정한다)
+- **`FAILED`는 완료 이벤트로 바뀌지 않는다** — 다시 만들려면 running-service가 새 요청을 보낸다(9-6, 예정): `FAILED` 음악을 `GENERATING`으로 되돌리고 같은 요청 토픽으로 보낸다. AI 서버는 새 `inference_id`로 결과를 준다
 
-> **아직 정하지 않은 것**: 음악 파일 형식(AI 서버는 wav로 만든다 — key에 확장자를 붙일지), 처리하지 못한 완료 이벤트를 따로 모을지(DLT). **Kafka는 저장소에 아직 없는 의존성이다** — 요청은 Debezium이 발행해 running-service에 Kafka 클라이언트가 필요 없다. 완료 구독을 구현할 때 들어온다.
+> **아직 정하지 않은 것**
+> - 음악 S3 key가 든 **버킷**(test·prod) — 음악 재생 URL을 줄 때 필요하다. AI 서버에 확인 중
+> - `failed_stage`에 올 수 있는 값 전체 — 지금 확인한 값은 `INVOKE`·`INFERENCE`
+> - 음악 파일 형식(AI 서버는 wav로 만든다)
+> - 처리하지 못한 메시지를 따로 모을지(DLT) — 지금은 ERROR 로그를 남기고 건너뛴다
+> - **계약 위반 알람** — ERROR로 남기는 경우(읽지 못한 메시지, 음악 목록 없음)를 메트릭으로 세어 알람을 건다. 지금은 로그만 남긴다
+>
+> **나중에 다시 볼 것 — 결과를 메시지 하나에 담은 구조라 남은 한계**: 음악별 상태가 없고(요청 단위 `status`), S3 경로가 카드·사진 ID로 고정이라 덮어쓴다. 다음 중 하나로 바꿀 수 있다.
+> - 수정·다시 만들기를 위한 토픽을 따로 둔다
+> - 에러가 나면 AI 서버가 고쳐 다시 보낸다
+> - AI 서버에 아웃박스를 적용해 헤더 `id`를 아웃박스 행 ID로 바꾼다 — running-service 코드는 바뀌지 않는다
 
 ## 10. 프로필 페이지
 

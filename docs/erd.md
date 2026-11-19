@@ -6,12 +6,12 @@
 
 ## 0. 공통 규칙
 
-- **PK 타입**: `users.user_id`·`record_cards.record_card_id`·`record_card_images.record_card_image_id`·`outbox_events.outbox_event_id`는 **UUID**(모두 DB가 매기지 않고 앱이 정하는 UUIDv7 — 표 참고), 그 외 자체 PK는 **bigint**(auto-increment, `running_splits`·`running_combos`만 시퀀스 — 표 참고). 연결 테이블(`running_room_sessions`·`push_campaign_recipients`)은 **복합 PK**, 유저당 1 row(`user_onboardings`·`oauth_users`·`delete_users`)는 **참조 키가 곧 PK**. → API: `userId`·`recordCardId`·`recordCardImageId`는 UUID 문자열, 나머지 Long.
+- **PK 타입**: `users.user_id`·`record_cards.record_card_id`·`record_card_images.record_card_image_id`·`outbox_events.outbox_event_id`는 **UUID**(모두 DB가 매기지 않고 앱이 정하는 UUIDv7 — 표 참고), 그 외 자체 PK는 **bigint**(auto-increment, `running_splits`·`running_combos`만 시퀀스 — 표 참고). 연결 테이블(`running_room_sessions`·`push_campaign_recipients`)과 `inbox_events`(`topic`, `event_id`)는 **복합 PK**, 유저당 1 row(`user_onboardings`·`oauth_users`·`delete_users`)는 **참조 키가 곧 PK**. → API: `userId`·`recordCardId`·`recordCardImageId`는 UUID 문자열, 나머지 Long.
 - **FK/참조 네이밍**: 참조 테이블 PK명 그대로(예: `running_records.running_room_id`). 같은 테이블 이중 참조는 역할명(`user_relationships.user_id`/`target_id`). (`running_room_invitations.inviter_id`/`invitee_id`도 같다). `record_cards.running_record_id`는 FK + ON DELETE CASCADE(아래 정책).
 - **UNIQUE 표기**: 단일 컬럼 = 제약칸, 복합 UNIQUE = 표 아래 블록쿼트(`oauth_users`·`running_records`·`running_segments`·`running_splits`·`running_combos`·`running_room_invitations`(복합 PK)·`push_campaign_recipients`(복합 PK)·`user_relationships`·`scheduled_jobs`).
 - **CHECK 표기**: 표 아래 블록쿼트에 `CHECK 이름: 조건식`으로 적는다 — 이름·식은 엔티티 `@Check`와 같게 둔다. 다른 제약(NOT NULL·UNIQUE·FK)처럼 엔티티에 있는 것은 빠짐없이 옮긴다. 값 목록의 뜻은 [§5](#5-enum-사전), 조건의 이유는 비고가 설명한다.
 - **타임스탬프**: **접미사가 타입을 말한다** — 시점은 전부 `*_at`(`timestamp`, 시간대 없음, **KST 벽시계로 저장**). 앱이 JVM 기본 타임존을 `APP_TIME_ZONE`으로 고정한다(`DefaultTimeZoneInitializer` — 컨텍스트 전에 고정해 감사 컬럼도 같은 시간대로 찍힌다). DB에 저장하는 달력 날짜 컬럼은 `user_onboardings.birthday`뿐이며 API에서는 `YYYY-MM-DD`로 표현한다.
-- **감사 컬럼**: `created_at`·`updated_at`은 `NOT NULL`, 앱이 자동 세팅(Hibernate `@CreationTimestamp`/`@UpdateTimestamp`). **write-once 테이블은 `created_at`만 둔다**(`running_records`·`running_segments`·`running_splits`·`running_combos`·`running_room_chat_histories`·`record_card_histories`·`push_campaign_recipients`·`outbox_events`) — 고치지 않으므로 `updated_at`이 늘 같은 값이다. 엔티티는 `BaseCreatedAtEntity`를 상속한다. `scheduled_jobs`·`delete_users`·`push_campaigns`도 `created_at`만 두지만 갱신이 한 번 있다 — 실행 표시(`is_sent`·`sent_at`)와 90일 뒤 신원 비우기(`email`·`nickname`), 발송 표시(`status` — 시작 전에 서버가 정상 종료되면 한 번 더 되돌린다)다. 그 시각은 `sent_at`과 배치 기준(`created_at + 90일`)이 대신 말하고, 발송 시각은 로그로 본다.
+- **감사 컬럼**: `created_at`·`updated_at`은 `NOT NULL`, 앱이 자동 세팅(Hibernate `@CreationTimestamp`/`@UpdateTimestamp`). **write-once 테이블은 `created_at`만 둔다**(`running_records`·`running_segments`·`running_splits`·`running_combos`·`running_room_chat_histories`·`record_card_histories`·`push_campaign_recipients`·`outbox_events`·`inbox_events`) — 고치지 않으므로 `updated_at`이 늘 같은 값이다. 엔티티는 `BaseCreatedAtEntity`를 상속한다. `scheduled_jobs`·`delete_users`·`push_campaigns`도 `created_at`만 두지만 갱신이 한 번 있다 — 실행 표시(`is_sent`·`sent_at`)와 90일 뒤 신원 비우기(`email`·`nickname`), 발송 표시(`status` — 시작 전에 서버가 정상 종료되면 한 번 더 되돌린다)다. 그 시각은 `sent_at`과 배치 기준(`created_at + 90일`)이 대신 말하고, 발송 시각은 로그로 본다.
 - **지표 컬럼 접두어**: 실적 합계는 `total_*`(`total_distance`·`total_duration`·`total_calories`·`total_elevation_gain`), 평균은 `avg_*`(`avg_pace`·`avg_cadence`), 목표는 `target_*`(`target_distance`). **구간(`running_splits`)은 부분값이라 접두어 없이 적는다**(`distance`·`duration`·`calories`) — 접두어의 유무가 전체와 구간을 가른다. 개수 컬럼은 `*_count`(`max_player_count`·`current_player_count`·`desired_player_count`·`leave_count`)로 예외가 없다.
 - **컬럼 순서**: `PK → FK → 분류·상태 → 조건·속성 → 결과·이력 → 감사 컬럼` 순으로 적는다. **PK와 FK는 붙여 쓰고**, FK가 여럿이면 상위 엔티티부터(`running_room_id` → `user_id`). `created_at`·`updated_at`·`deleted_at`은 **항상 맨 아래**다.
 - **단위(컬럼에 단위 미표기 — 아래로 통일)**: 거리 = **미터**, 페이스(`avg_pace`) = **초/km**, 시간(`total_duration`·`duration`) = **초**, 칼로리 = **kcal**, 케이던스(`avg_cadence`) = **spm**, 누적 상승 고도(`total_elevation_gain`)·구간 순고도차(`elevation_change`) = **미터**, 기온(`temperature`) = **섭씨**. **좌표는 컬럼으로 두지 않는다** — 경로·지점은 전부 `running_segments.route_polyline`(encoded polyline, precision 5)에서 뽑는다. PostGIS 미사용(위치 기반 기능 도입 시 검토).
@@ -543,7 +543,7 @@
 > **수정에서 뺀 사진과 지운 카드의 사진은 행을 지운다**(하드 삭제) — 음악은 사진에 딸려 있어 사진 없이 남길 이유가 없다. 지우기 직전 모습은 `record_card_histories`의 `images`에 남는다. S3 객체는 프로필 사진처럼 남긴다.
 > UNIQUE `uk_record_card_image_sort_order`: `(record_card_id, sort_order)` **DEFERRABLE INITIALLY DEFERRED** — 한 카드에서 같은 자리에 사진 두 장이 오지 않는다. **커밋 때 검사한다** — 수정(9-3)에서 순서를 맞바꾸면 한 행씩 UPDATE하는 중간에 값이 겹치고, Hibernate는 flush 때 INSERT를 DELETE보다 먼저 보내 "빼고 같은 자리에 넣기"도 중간에 겹친다. 즉시 검사면 정상 수정이 실패한다. 최종 결과의 중복만 막는 안전장치다 — 순서는 도메인이 0부터 다시 매기므로 정상 경로에서는 걸리지 않고, 걸리면 커밋 실패(500)다. 엔티티가 `@UniqueConstraint(options = "deferrable initially deferred")`로 선언해 로컬·E2E 스키마에도 생긴다. 같은 카드를 동시에 고치는 경쟁은 이 제약이 아니라 잠금이 막는다 — 카드 쓰기는 모두 `running_records` 행을 먼저 잠근다. 앞 열이 `record_card_id`라 카드 사진 조회 인덱스를 겸한다.
 
-> **음악 생성 상태는 완료 이벤트로만 바뀐다** — AI 서버가 Kafka 완료 토픽에 발행한 이벤트를 running-service가 구독해 바꾼다(api-spec 9-5). `GENERATING` → `COMPLETED`(S3에 객체가 생김) 또는 `FAILED`, 한 번만 바뀐다. Kafka는 같은 이벤트를 두 번 줄 수 있어 `GENERATING`이 아닌 행에 온 이벤트는 무시한다. ID(`record_card_id`·`record_card_image_id`)로 찾은 행이 없거나(수정에서 뺀 사진) 카드가 지워졌으면 무시하고 로그만 남긴다. `FAILED`를 다시 생성하는 경로는 아직 없다(feature-spec 기록 카드 음악 생성).
+> **음악 생성 상태는 완료 이벤트로만 바뀐다** — AI 서버가 Kafka 완료 토픽에 발행한 이벤트를 running-service가 구독해 바꾼다(api-spec 9-5). `GENERATING` → `COMPLETED`(S3에 객체가 생김) 또는 `FAILED`. Kafka는 같은 이벤트를 두 번 줄 수 있고 다른 요청의 결과가 늦게 올 수 있어 `GENERATING`이 아닌 행에 온 결과는 무시한다. 다시 만들 때(수정 확정의 기본곡·다시 만들기)는 요청을 보내기 전에 `GENERATING`으로 되돌린다. ID(`record_card_id`·`record_card_image_id`)로 찾은 행이 없거나(수정에서 뺀 사진) 카드가 지워졌으면 무시하고 로그만 남긴다. `FAILED`는 다시 만들기 요청(api-spec 9-6, 예정)으로만 되돌린다(feature-spec 기록 카드 음악 생성).
 
 
 ### record_card_histories (기록 카드 이력)
@@ -608,6 +608,27 @@
 > **하루 지난 행은 Debezium이 같은 쿼리에서 지운다** — INSERT와 DELETE를 한 문장(CTE)으로 실행한다. DELETE는 publication이 내보내지 않는다
 > **권한**: 커넥터 DB 계정(`debezium`)에 이 테이블의 `SELECT`·`INSERT`·`DELETE`만 준다
 > **test·prod 모두 손으로 만든다** — 엔티티가 없어 JPA 자동 생성이 만들지 않는다
+
+### inbox_events (인박스 이벤트)
+
+다른 서비스에서 **받은 이벤트를 처리할 때 같은 트랜잭션에서** 한 줄 쓰는 테이블이다. 같은 이벤트가 다시 오면(Kafka는 최소 한 번 전달) PK 충돌로 걸러 두 번 처리하지 않는다. 지금은 기록 카드 음악 완료 이벤트(api-spec 9-5 `{env}.record-card.music.generated`)만 받는다. 규칙은 docs/msa/outbox-inbox.md 「받는 쪽」.
+
+| 컬럼 | 타입 | 제약 | 비고 |
+|---|---|---|---|
+| topic | varchar(100) | PK1 | 받은 토픽 이름(`test.record-card.music.generated`). 토픽마다 이벤트 키를 정하는 쪽이 달라 키가 겹칠 수 있어 PK에 넣는다 |
+| event_id | varchar(64) | PK2 | 이벤트 키 — Kafka 헤더 `id`(완료 이벤트는 `inference_id`와 같은 값). 헤더가 없는 이벤트는 받지 않는다. 보내는 쪽이 정하는 값이라 타입을 문자열로 둔다 |
+| aggregate_id | varchar(64) | NOT NULL | 이벤트 대상의 ID(기록 카드면 `record_card_id`) — Kafka key와 같다. 대상별로 받은 이벤트를 찾을 때 쓴다 |
+| payload | jsonb | NOT NULL | 받은 본문 그대로 — 무엇을 받았는지 DB에서 본다(`inference_id`·`status`·`failed_stage`·`result.error.code`) |
+| created_at | timestamp | NOT NULL | 처리한 시각 |
+
+> **write-once** — `created_at`만 둔다(§0 감사 컬럼)
+> **PK (topic, event_id)** — INSERT가 충돌하면 이미 처리한 이벤트다. 충돌을 예외로 받지 않고 `ON CONFLICT DO NOTHING`의 반영 행 수(0)로 판정한다 — 예외가 나면 트랜잭션을 더 쓸 수 없다
+> **처리와 같은 트랜잭션에서 쓴다** — 상태 변경과 함께 커밋되거나 함께 롤백된다. 처리에 실패하면 inbox 행도 남지 않아 다시 받았을 때 처리된다
+> **계약 위반 메시지는 넣지 않는다** — 처리하지 않은 메시지다(로그로 찾는다)
+> **FK를 걸지 않는다** — 대상(카드)이 지워져도 받은 기록은 남는다
+> **인덱스를 따로 두지 않는다** — 앱은 PK로만 쓴다. 대상별 조회가 생기면 `aggregate_id` 인덱스를 더한다
+> **행은 지우지 않고 남긴다** — 보관 기간과 지난 행 정리는 `outbox_events`와 함께 정한다
+> **배포 DB** — prod는 손으로 만든다(PK `pk_inbox_events`, 앱 계정에 `INSERT`·`SELECT`). test는 JPA 자동 생성(`update`)이 만든다 — CHECK가 없어 엔티티 그대로면 되고, 앱 계정이 만들어 권한을 따로 주지 않는다
 
 ## 4. delete_* (스냅샷/이력 테이블)
 

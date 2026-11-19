@@ -22,5 +22,8 @@ CLAUDE.local.md
 infra/filebeat/.env
 infra/filebeat/http_ca.crt
 
+# kafka — 로컬 검증용 CA 인증서. SAN에 VPC 안 브로커 주소가 들어 있다
+infra/kafka/*.crt
+
 # log
 logs/

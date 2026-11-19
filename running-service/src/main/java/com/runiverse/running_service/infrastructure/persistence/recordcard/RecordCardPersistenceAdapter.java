@@ -3,6 +3,8 @@ package com.runiverse.running_service.infrastructure.persistence.recordcard;
 import com.runiverse.running_service.application.recordcard.port.out.CreateRecordCardPort;
 import com.runiverse.running_service.application.recordcard.port.out.FindRecordCardIdByRunningRecordPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadMaxDisplayOrderPort;
+import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
+import com.runiverse.running_service.application.recordcard.port.out.SaveRecordCardMusicPort;
 import com.runiverse.running_service.domain.common.vo.RunningRecordId;
 import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.recordcard.RecordCard;
@@ -14,17 +16,22 @@ import com.runiverse.running_service.domain.recordcard.vo.RecordCardImageCaption
 import com.runiverse.running_service.domain.recordcard.vo.RecordCardImageKey;
 import com.runiverse.running_service.infrastructure.persistence.running.RunningRecordJpaEntity;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
 public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRecordPort, LoadMaxDisplayOrderPort,
-        CreateRecordCardPort {
+        CreateRecordCardPort, LoadRecordCardForUpdatePort, SaveRecordCardMusicPort {
 
     private static final String UK_RUNNING_RECORD = "uk_record_card_running_record";
     private static final String UK_USER_DISPLAY_ORDER = "uk_record_card_user_display_order";
@@ -92,5 +99,83 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
             }
             throw e;
         }
+    }
+
+    @Override
+    public Optional<RecordCard> loadForUpdate(RecordCardId recordCardId) {
+        // 1. 카드가 붙은 기록 ID만 읽는다 — 카드 엔티티는 잠근 뒤에 읽는다(그 사이 수정된 최신 값을 보려고)
+        Optional<Long> runningRecordId = entityManager.createQuery("""
+                        SELECT card.runningRecord.runningRecordId
+                        FROM RecordCardJpaEntity card
+                        WHERE card.recordCardId = :recordCardId
+                        """, Long.class)
+                .setParameter("recordCardId", recordCardId.value())
+                .getResultList().stream()
+                .findFirst();
+        if (runningRecordId.isEmpty()) {
+            return Optional.empty();
+        }
+
+        // 2. 기록 행 하나만 잠근다 — 카드 쓰기(작성·수정·삭제·음악 완료)는 모두 이 행으로 줄을 선다. 카드 행은 잠그지 않는다
+        entityManager.createQuery("""
+                        SELECT record.runningRecordId
+                        FROM RunningRecordJpaEntity record
+                        WHERE record.runningRecordId = :runningRecordId
+                        """, Long.class)
+                .setParameter("runningRecordId", runningRecordId.get())
+                .setLockMode(LockModeType.PESSIMISTIC_WRITE)
+                .getResultList();
+
+        // 3. 잠근 뒤에 카드와 사진을 읽는다 — 그 사이 지워졌으면 비어 있다
+        RecordCardJpaEntity card = entityManager.find(RecordCardJpaEntity.class, recordCardId.value());
+        if (card == null) {
+            return Optional.empty();
+        }
+        List<RecordCardImage> images = loadImageEntities(card.getRecordCardId()).stream()
+                .map(image -> RecordCardImage.restore(image.getRecordCardImageId(), image.getImageKey(),
+                        image.getCaption(), image.getMusicKey(), image.getMusicStatus(), image.getSortOrder()))
+                .toList();
+        return Optional.of(RecordCard.restore(card.getRecordCardId())
+                .runningRecordId(runningRecordId.get())
+                .userId(card.getUserId())
+                .visibility(card.getVisibility())
+                .activityType(card.getActivityType())
+                .baseMusicStatus(card.getBaseMusicStatus())
+                .memo(card.getMemo())
+                .displayOrder(card.getDisplayOrder())
+                .thumbnailImageKey(card.getThumbnailImageKey())
+                .baseMusicKey(card.getBaseMusicKey())
+                .images(images)
+                .build());
+    }
+
+    @Override
+    public void saveMusic(RecordCard recordCard) {
+        // loadForUpdate가 읽은 엔티티가 이 트랜잭션에 그대로 있다 — 음악 값만 옮기면 커밋 때 UPDATE된다.
+        // 글·공개 범위·순위·썸네일·사진 순서·설명은 엔티티의 지금 값을 그대로 넘겨 바꾸지 않는다
+        RecordCardJpaEntity card = entityManager.find(RecordCardJpaEntity.class, recordCard.getRecordCardId().value());
+        card.apply(card.getVisibility(), card.getActivityType(), recordCard.getBaseMusicStatus(), card.getMemo(),
+                card.getDisplayOrder(), card.getThumbnailImageKey(),
+                recordCard.getBaseMusicKey().map(MusicKey::value).orElse(null));
+
+        Map<UUID, RecordCardImageJpaEntity> imagesById = loadImageEntities(card.getRecordCardId()).stream()
+                .collect(Collectors.toMap(RecordCardImageJpaEntity::getRecordCardImageId, Function.identity()));
+        for (RecordCardImage image : recordCard.getImages()) {
+            RecordCardImageJpaEntity entity = imagesById.get(image.getRecordCardImageId().value());
+            entity.apply(image.getMusicStatus(), image.getMusicKey().map(MusicKey::value).orElse(null),
+                    entity.getSortOrder(), entity.getCaption());
+        }
+    }
+
+    // 카드의 사진을 캐러셀 순서대로 — uk_record_card_image_sort_order(record_card_id, sort_order)를 탄다
+    private List<RecordCardImageJpaEntity> loadImageEntities(UUID recordCardId) {
+        return entityManager.createQuery("""
+                        SELECT image
+                        FROM RecordCardImageJpaEntity image
+                        WHERE image.recordCard.recordCardId = :recordCardId
+                        ORDER BY image.sortOrder
+                        """, RecordCardImageJpaEntity.class)
+                .setParameter("recordCardId", recordCardId)
+                .getResultList();
     }
 }

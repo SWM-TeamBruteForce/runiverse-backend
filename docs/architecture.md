@@ -47,6 +47,7 @@ presentation/
   <domain>/             controller · request · response
   <domain>/sse/         SSE 연결 · 설정
   <domain>/websocket/   WebSocket 핸들러 · 연결 · 메시지
+  <domain>/kafka/       Kafka 리스너 · 메시지 — 다른 서비스의 이벤트를 받아 port/in을 부른다
   common/exception/     GlobalExceptionHandler · *ErrorCode · ErrorExposurePolicy
   common/filter/        서블릿 필터와 그 등록 설정
   common/response/      ErrorResponse

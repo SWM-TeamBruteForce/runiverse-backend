@@ -18,13 +18,13 @@ import java.util.Map;
 import java.util.UUID;
 
 // 다른 서비스로 보낼 이벤트 — 보내게 만든 저장과 같은 트랜잭션에서 한 줄 쓴다. 앱은 Kafka에 보내지 않는다:
-// Debezium이 WAL에서 INSERT를 읽어 topic으로 보낸다(id → 헤더 id, aggregate_id → key, payload → value). erd outbox_events.
+// Debezium이 WAL에서 INSERT를 읽어 topic으로 보낸다(id → 헤더 id, aggregate_id → key, payload → value).
 // 한 번 쓰고 고치지 않는다. 행은 남긴다 — 발행 상태 컬럼은 두지 않는다(Debezium은 이 테이블에 다시 쓰지 않는다)
 @Getter
 @Entity
 @Table(name = "outbox_events")
 @Check(name = "ck_outbox_event_aggregate_type", constraints = "aggregate_type in ('RECORD_CARD')")
-// 엔티티는 모든 환경에서 같은 코드라 세 환경을 허용한다 — 운영 DDL은 prod만으로 좁힌다(erd)
+// 엔티티는 모든 환경에서 같은 코드라 세 환경을 허용한다 — 운영 DDL은 prod만으로 좁힌다
 @Check(name = "ck_outbox_event_topic",
         constraints = "topic ~ '^(dev|test|prod)\\.record-card\\.music\\.requested$'")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

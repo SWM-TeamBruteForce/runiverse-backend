@@ -88,7 +88,7 @@ dev·test가 클러스터 하나를 같이 써서, **토픽·컨슈머 그룹·�
 - **완료 이벤트는 running-service 한 대만 처리한다** — 파티션이 1개라 ALB 뒤 인스턴스가 여럿이어도 한 대만 읽고 나머지는 대기한다. 처리 결과는 DB에만 쓴다(architecture.md 「다중 인스턴스」).
 - **배포·스케일링 때 같은 완료 이벤트가 다시 온다** — 리밸런스 중 커밋하지 못한 이벤트를 다른 인스턴스가 받는다. inbox가 거른다([outbox-inbox.md](outbox-inbox.md)).
 - **받는 쪽이 7일 넘게 멈추면 이벤트를 잃을 수 있다.**
-- **컨슈머를 만들 때 `auto.offset.reset`을 정한다** — 처음 붙는 그룹과, 7일 넘게 비어 커밋한 오프셋이 지워진 그룹이 이 값을 따른다.
+- **running-service는 `auto.offset.reset=earliest`다** — 처음 붙는 그룹과, 7일 넘게 비어 커밋한 오프셋이 지워진 그룹은 남아 있는 이벤트를 처음부터 받는다. 이미 처리한 것은 inbox가 거른다.
 - **실제 토픽에 접속 검증 메시지를 남기지 않는다** — 받는 쪽이 읽지 못하는 메시지가 되고, 기다려서 없애려면 세그먼트 규칙 때문에 약 14일이 걸린다. 보냈다면 확인 뒤 `kafka-delete-records`로 지운다.
 
 ## 접속 보안 — TLS + SASL + ACL
@@ -160,17 +160,44 @@ dev·test가 클러스터 하나를 같이 써서, **토픽·컨슈머 그룹·�
 
 ## running-service 접속 설정
 
-running-service에는 아직 Kafka 클라이언트가 없다 — 요청은 Debezium이 보낸다. `KAFKA_ENV` 말고는 **완료 구독을 만들 때** 쓴다.
+running-service는 완료 토픽만 받는다(컨슈머 하나, 프로듀서 없음 — 요청은 Debezium이 보낸다). 고정 값은 `application.properties`에 있다 — `SASL_SSL`, `SCRAM-SHA-512`, CA는 PEM(`ssl.truststore.type=PEM`), 호스트 검증 `https`, 수동 커밋(레코드마다), `auto.offset.reset=earliest`, key·value 모두 문자열. 환경마다 다른 값만 변수로 받는다.
 
 | 변수 | 예 | 설명 |
 |---|---|---|
 | `KAFKA_ENV` | `test` | `{env}` 값. 아웃박스 `topic`과 토픽·그룹 이름을 이 값 하나로 만든다. **기본값이 없고 `dev`·`test`·`prod`가 아니면 기동하지 않는다.** Parameter Store `/runiverse/test/KAFKA_ENV`(`test`) · `/runiverse/deploy/KAFKA_ENV`(`prod`). 로컬은 **붙는 DB의 환경**을 따른다([cdc.md](cdc.md)) |
+| `KAFKA_CONSUMER_ENABLED` | `true` | 완료 구독을 켠다. **기본값이 없어 없으면 기동하지 않는다.** `false`면 리스너·오류 처리기를 만들지 않아 아래 값을 보지 않는다(로컬·E2E). `true`면 아래 네 값이 모두 있고 CA 파일을 읽을 수 있어야 기동한다 — 빠진 변수 이름만 알리고 값은 싣지 않는다. Parameter Store test·deploy 모두 `true` |
 | `KAFKA_BOOTSTRAP_SERVERS` | `<브로커 VPC 주소>:9092` | 인증서 SAN과 같은 주소 |
-| `KAFKA_SECURITY_PROTOCOL` | `SASL_SSL` | 배포 환경은 항상 `SASL_SSL` |
-| `KAFKA_SASL_MECHANISM` | `SCRAM-SHA-512` | |
 | `KAFKA_SASL_USERNAME` | `test.running-service` | `{env}.running-service` |
-| `KAFKA_SASL_PASSWORD` | | 시크릿 — 로그·출력에 남기지 않는다 |
-| `KAFKA_SSL_CA_LOCATION` | `/app/config/kafka-ca.crt` | 그 환경 클러스터의 CA 인증서(PEM) 절대 경로 — `ssl.truststore.type=PEM` |
+| `KAFKA_SASL_PASSWORD` | | 시크릿(SecureString) — 로그·출력에 남기지 않는다 |
+| `KAFKA_SSL_CA_LOCATION` | `/app/config/kafka-ca.crt` | 그 환경 클러스터의 CA 인증서(PEM) 절대 경로. 배포 서버는 아래 「CA 인증서 배포」가 이 경로에 마운트한다 |
+
+- **토픽이 없으면 기동하지 않는다**(`missing-topics-fatal=true`) — 토픽 이름(`KAFKA_ENV`)이 틀리면 배포가 실패로 드러난다.
+- **배포 순서** — 새 변수는 그 변수를 읽는 버전을 배포하기 전에 Parameter Store에 넣는다(기본값이 없다). 옛 버전은 모르는 변수를 무시한다.
+
+### CA 인증서 배포
+
+| 무엇 | 값 |
+|---|---|
+| 원본 | Parameter Store `/runiverse/files/{test\|deploy}/kafka-ca.crt` (SecureString) |
+| 서버에 두는 곳 | `/opt/runiverse/kafka-ca.crt` — `root`, `644` |
+| 컨테이너 | `/app/config/kafka-ca.crt`에 읽기 전용 마운트 |
+| test | 배포 워크플로(`backend-ci-cd.yml`, SSM 명령)가 받는다 — 새 컨테이너와 롤백 컨테이너 모두 마운트 |
+| prod | Auto Scaling 시작 템플릿의 사용자 데이터가 인스턴스를 띄울 때 받는다(버전 8부터). 그룹은 템플릿 `Latest`를 쓴다 |
+
+- **앱 변수 경로(`/runiverse/{test|deploy}/`) 밖에 둔다** — 배포 스크립트가 그 경로를 통째로 env 파일로 만들고, 여러 줄 값(PEM)은 거부한다.
+- **값을 출력하지 않는다** — SSM 명령의 출력은 Actions 로그에, 사용자 데이터의 출력은 부트스트랩 로그(`/var/log/runiverse-bootstrap.log`)·콘솔 로그에 남는다. 파일로만 쓰고 `BEGIN CERTIFICATE`가 있는지만 확인한다.
+- **`644`다** — 컨테이너 사용자가 읽어야 한다. CA 인증서는 공개 정보라 읽혀도 되고, 막을 것은 **바꿔치기**다 — 지킬 것은 그 파라미터의 쓰기 권한(`ssm:PutParameter`)이다. 비밀번호가 든 `.env`는 `600`이다.
+- **인증서를 바꾸면** — 값을 고친 뒤 test는 다시 배포, prod는 인스턴스 새로 고침(종료 전 시작, 최소 정상 100%)으로 새 인스턴스에 반영한다.
+- **시작 템플릿을 고칠 때** — 원본 버전을 지금 쓰는 버전으로 고르고, 만든 뒤 바로 앞 버전과 **사용자 데이터 말고는 같은지** CLI로 비교한다(`describe-launch-template-versions`에서 `UserData`를 뺀 비교) — 콘솔 화면만으로는 원본 값이 모두 옮겨졌는지 알 수 없다. 사용자 데이터만 바꿀 때는 `create-launch-template-version --source-version`으로 만들면 나머지가 그대로 복사된다.
+- AI 서버의 CA 인증서는 AI 쪽에서 넣는다.
+
+### 로컬 앱으로 붙기
+
+브로커는 VPC 안 주소를 알려 주고(`advertised.listeners`) 서버 인증서 SAN도 그 주소 하나라, 로컬에서 다른 주소로 붙으면 재접속·호스트 검증에서 실패한다. **로컬에서도 같은 주소로 붙게 만든다.**
+
+- 로컬 루프백에 브로커의 VPC 주소를 별칭으로 붙이고, bastion을 거치는 SSH 터널을 **그 주소:9092**에 연다 — 앱은 `KAFKA_BOOTSTRAP_SERVERS`에 VPC 주소를 그대로 쓴다.
+- 개발 클러스터 계정(`dev.running-service`)과 개발 CA로 붙는다. CA 파일은 `infra/kafka/`에 두고 커밋하지 않는다(`.gitignore` `infra/kafka/*.crt`).
+- 확인이 끝나면 터널을 닫고 별칭을 지우고, `KAFKA_CONSUMER_ENABLED=false`로 되돌린다.
 
 ## CDC를 붙일 때 Kafka에 필요한 것
 
@@ -186,7 +213,7 @@ running-service에는 아직 Kafka 클라이언트가 없다 — 요청은 Debez
 
 1. **파티션 수** — 지금 1이다. 완료 구독 처리량이 모자라면 실제 이벤트가 쌓이기 전에 다시 정한다.
 2. **인증서 관리** — 클러스터마다 서버 인증서 만료일, 만료 전 알림, CA 개인키 보관 위치(브로커 EC2 밖), 갱신 절차.
-3. **CA 인증서 배포** — running-service(Auto Scaling·Docker)·AI 서버에 어떻게 넣을지(SSM·이미지·사용자 데이터).
+3. ~~CA 인증서 배포~~ — **정했다**: running-service는 Parameter Store → test 배포 워크플로·prod 시작 템플릿 사용자 데이터 → 읽기 전용 마운트(「CA 인증서 배포」). AI 서버는 AI 쪽에서 넣는다.
 4. **모니터링** — 브로커 상태·디스크·컨슈머 지연([metrics-convention.md](../metrics-convention.md)와 맞춘다).
 5. **검증용 토픽** — 접속을 확인할 때 쓸 토픽과 권한.
 6. **`test`·`dev` running-service의 요청 토픽 권한 제거** — 위 ACL ⚠️.

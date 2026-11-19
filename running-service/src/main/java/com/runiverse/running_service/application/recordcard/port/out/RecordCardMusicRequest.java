@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-// AI 서버에 보낼 음악 생성 요청(api-spec 9-5 요청 이벤트) — 보내는 형식(필드 이름·시간대)은 어댑터가 정한다.
+// AI 서버에 보낼 음악 생성 요청 — 보내는 형식(필드 이름·시간대)은 어댑터가 정한다.
 // 작성 확정(9-2)은 기본곡 + 카드 사진 전부를 요청한다
 public record RecordCardMusicRequest(
         UUID userId,

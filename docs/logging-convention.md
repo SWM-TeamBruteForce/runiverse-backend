@@ -71,6 +71,7 @@
 | `relationship` | `[관계]` |
 | `match` | `[매칭]` |
 | `running` | `[러닝]` |
+| `recordcard` | `[기록 카드]` |
 | `scheduling` | `[예약]` |
 | `notification` | `[알림]` |
 | `app` | `[앱]` |
@@ -120,7 +121,7 @@ log.error("[러닝] 트랙 저장 실패: Redis 오류 - roomId={}, userId={}", 
 | domain | 없음 | 로거를 두지 않는다 |
 | application | INFO · WARN · ERROR | 유스케이스의 결과. 업무 실패는 예외를 던지기 전에 INFO로 원인을 남긴다 |
 | infrastructure | WARN · ERROR | 외부 시스템 장애·지연. INFO는 쓰지 않는다 |
-| presentation | INFO · ERROR | 중앙 예외 핸들러만 쓴다 — 유스케이스에 닿기 전에 거절된 요청(검증·파싱 실패)은 INFO, 처리하지 못한 예외는 ERROR. 단, 서블릿 필터에서 난 예외는 중앙 핸들러에 닿지 않아 필터가 직접 ERROR로 남긴다(`AppVersionFilter`) |
+| presentation | INFO · ERROR | 중앙 예외 핸들러만 쓴다 — 유스케이스에 닿기 전에 거절된 요청(검증·파싱 실패)은 INFO, 처리하지 못한 예외는 ERROR. 단, 서블릿 필터에서 난 예외는 중앙 핸들러에 닿지 않아 필터가 직접 ERROR로 남긴다(`AppVersionFilter`). Kafka 리스너도 중앙 핸들러를 거치지 않아, 받지 않고 건너뛴 계약 위반 메시지를 직접 ERROR로 남긴다(`RecordCardMusicGeneratedListener`) |
 
 - **예외는 처리하는 곳에서 한 번만 찍는다.** 찍고 다시 던지지 않는다 — 같은 실패가 여러 줄로 남으면 추적이 흐려진다.
 - 중앙 예외 핸들러는 요청에 매핑된 컨트롤러(`HandlerMethod`)의 패키지로 태그를 정하므로 유스케이스 도메인과 다를 수 있다(`/users/me/status` → `[회원]`). 컨트롤러에 닿기 전에 난 예외(없는 경로, 보안 필터 거절)는 `[공통]`이다.
