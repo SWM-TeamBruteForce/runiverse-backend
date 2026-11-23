@@ -168,7 +168,7 @@ E2E는 `KAFKA_CONSUMER_ENABLED=false`라 리스너가 뜨지 않는다. 새 환�
                                            → LocalRecordCardMusicGeneratedListener → Mapper → usecase(inbox·음악 저장)
 ```
 
-- **켜지는 조건 — 네 가지가 모두 맞을 때만 두 빈이 생긴다**: `local` 프로필 · `KAFKA_CONSUMER_ENABLED=false` · `KAFKA_ENV=dev` · `RECORD_CARD_MUSIC_LOCAL_AI_ENABLED`(기본 `true`, 빈 값은 꺼짐). test·deploy는 앞의 두 조건에서 막힌다 — 프로필을 잘못 넣어도 구독이 켜진 서버는 만들지 않는다. 로컬 앱을 test DB에 붙이면(`KAFKA_ENV=test`, [cdc.md](cdc.md)) 꺼져, 가짜 결과로 test DB 카드를 완료하지 않는다. E2E는 카드 생성 직후 `GENERATING`을 확인하므로 `.env.test`에서 `false`로 끈다.
+- **켜지는 조건 — 네 가지가 모두 맞을 때만 두 빈이 생긴다**: `local` 프로필 · `KAFKA_CONSUMER_ENABLED=false` · `KAFKA_ENV=dev` · `RECORD_CARD_MUSIC_LOCAL_AI_ENABLED`(기본 `true`, 빈 값은 꺼짐). test·deploy는 앞의 두 조건에서 막힌다 — 프로필을 잘못 넣어도 구독이 켜진 서버는 만들지 않는다. 로컬 앱을 test DB에 붙이면(`KAFKA_ENV=test`, [cdc.md](cdc.md)) 꺼져, 가짜 결과로 test DB 카드를 완료하지 않는다. E2E도 `KAFKA_ENV=test`라 꺼지고, 카드 생성 직후 `GENERATING`을 확인하므로 `.env.test`에서 `false`로도 끈다.
 - **음악 key**: 기본곡·사진곡 모두 `RECORD_CARD_MUSIC_LOCAL_AI_MUSIC_KEY` 하나(로컬 버킷에 올려 둔 파일)를 쓴다. 서버는 AI가 준 key를 그대로 저장·조회하므로 key 규칙을 흉내 내지 않는다. 켜졌는데 비어 있으면 기동하지 않는다.
 - **결과는 성공만 보낸다.** 실패·늦은 결과·중복은 운영 리스너 단위 테스트가 본다.
 - **예약은 인스턴스 메모리에만 있다** — 5초 안에 서버를 끄면 그 카드는 `GENERATING`으로 남는다. 로컬 전용이라 다시 보내지 않는다.
