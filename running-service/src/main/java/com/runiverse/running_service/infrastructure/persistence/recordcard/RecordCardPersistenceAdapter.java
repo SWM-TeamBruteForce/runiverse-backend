@@ -298,7 +298,7 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
 
     @Override
     public void snapshot(RecordCardId recordCardId, RecordCardSnapshotReason reason) {
-        // 엔티티의 지금 값을 남긴다 — loadOwnedForUpdate가 읽은 카드·사진이 이 트랜잭션에 있어 다시 SELECT하지 않는다.
+        // 엔티티의 지금 값을 남긴다 — loadOwnedForUpdate가 읽은 카드가 이 트랜잭션에 있어 다시 SELECT하지 않는다.
         // 수정 저장(update)보다 먼저 불러 엔티티가 아직 바뀌기 전이다
         RecordCardJpaEntity card = entityManager.find(RecordCardJpaEntity.class, recordCardId.value());
         if (card == null) {
