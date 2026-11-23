@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.PayloadApplicationEvent;
 import org.springframework.context.annotation.Primary;
@@ -30,12 +31,14 @@ import java.util.Map;
 // 로컬 전용 가짜 AI 서버 — 로컬엔 Debezium·Kafka·AI 서버가 없어 음악이 계속 GENERATING이라, 그 자리만 대신한다.
 // 아웃박스는 진짜 어댑터가 그대로 쓰고, 커밋 뒤 DELAY가 지나면 AI 서버가 보낼 완료 메시지(api-spec 9-5 성공 형식)를
 // ConsumerRecord 그대로 Spring 이벤트로 낸다 — LocalRecordCardMusicGeneratedListener가 받아 운영과 같은 Mapper·usecase를 탄다.
-// 세 조건이 모두 맞아야 만든다: local 프로필 · Kafka 구독 꺼짐(test·deploy는 켜져 있다) · local-ai 설정(E2E는 끈다)
+// 네 조건이 모두 맞아야 만든다: local 프로필 · Kafka 구독 꺼짐(test·deploy는 켜져 있다) ·
+// KAFKA_ENV=dev(로컬 앱을 test DB에 붙이면 test다) · local-ai 설정(E2E는 끈다)
 @Slf4j
 @Component
 @Primary
 @Profile("local")
 @ConditionalOnBooleanProperty(name = "kafka.consumer.enabled", havingValue = false)
+@ConditionalOnProperty(name = "kafka.env", havingValue = "dev")
 @ConditionalOnBooleanProperty("record-card.music.local-ai.enabled")
 public class LocalAiMusicAdapter implements RequestRecordCardMusicPort {
 

@@ -45,25 +45,28 @@ class LocalAiMusicWiringTest {
 
     private static final UUID CARD_ID = UUID.fromString("01a0f2d4-6180-7000-8000-4466554400c8");
 
-    @ParameterizedTest(name = "profile={0}, kafka.consumer.enabled={1}, local-ai={2} → 생성={3}")
+    @ParameterizedTest(name = "profile={0}, kafka.consumer.enabled={1}, kafka.env={2}, local-ai={3} → 생성={4}")
     @CsvSource(nullValues = "-", value = {
             // 로컬 개발 — 설정을 주지 않아도(기본 true) 켜진다
-            "local, false, -,     true",
-            "local, false, true,  true",
+            "local, false, dev,  -,     true",
+            "local, false, dev,  true,  true",
             // E2E — local 프로필이지만 설정으로 끈다
-            "local, false, false, false",
+            "local, false, dev,  false, false",
             // 빈 값은 꺼짐으로 읽힌다 — .env에 값 없이 키만 두면 꺼진다(.env.example 주석의 근거)
-            "local, false, '',    false",
+            "local, false, dev,  '',    false",
+            // 로컬 앱을 test DB에 붙였다 — 가짜 결과로 test DB 카드를 완료하지 않는다
+            "local, false, test, true,  false",
             // test·deploy — 프로필이 local이 아니다
-            "-,     true,  true,  false",
-            "-,     false, true,  false",
+            "-,     true,  dev,  true,  false",
+            "-,     false, dev,  true,  false",
             // 프로필이 잘못 local로 들어가도 Kafka 구독이 켜진 서버는 만들지 않는다
-            "local, true,  true,  false"
+            "local, true,  dev,  true,  false"
     })
-    @DisplayName("세 조건이 모두 맞을 때만 두 가짜 빈이 함께 생긴다")
-    void createdOnlyWhenAllConditionsMatch(String profile, boolean kafkaConsumerEnabled, String localAiEnabled,
-                                           boolean expected) {
-        try (AnnotationConfigApplicationContext context = context(profile, kafkaConsumerEnabled, localAiEnabled)) {
+    @DisplayName("네 조건이 모두 맞을 때만 두 가짜 빈이 함께 생긴다")
+    void createdOnlyWhenAllConditionsMatch(String profile, boolean kafkaConsumerEnabled, String kafkaEnv,
+                                           String localAiEnabled, boolean expected) {
+        try (AnnotationConfigApplicationContext context =
+                     context(profile, kafkaConsumerEnabled, kafkaEnv, localAiEnabled)) {
             assertThat(context.getBeanNamesForType(LocalAiMusicAdapter.class)).hasSize(expected ? 1 : 0);
             assertThat(context.getBeanNamesForType(LocalRecordCardMusicGeneratedListener.class))
                     .hasSize(expected ? 1 : 0);
@@ -73,7 +76,7 @@ class LocalAiMusicWiringTest {
     @Test
     @DisplayName("로컬에서는 음악 요청 포트에 가짜 어댑터가 꽂힌다(@Primary)")
     void localUsesFakeAdapter() {
-        try (AnnotationConfigApplicationContext context = context("local", false, null)) {
+        try (AnnotationConfigApplicationContext context = context("local", false, "dev", null)) {
             assertThat(context.getBean(RequestRecordCardMusicPort.class)).isInstanceOf(LocalAiMusicAdapter.class);
         }
     }
@@ -81,7 +84,7 @@ class LocalAiMusicWiringTest {
     @Test
     @DisplayName("local이 아니면 음악 요청 포트는 진짜 아웃박스 어댑터 하나뿐이다")
     void nonLocalUsesOutboxAdapter() {
-        try (AnnotationConfigApplicationContext context = context(null, true, "true")) {
+        try (AnnotationConfigApplicationContext context = context(null, true, "dev", "true")) {
             assertThat(context.getBean(RequestRecordCardMusicPort.class))
                     .isInstanceOf(RecordCardMusicOutboxAdapter.class)
                     .isNotInstanceOf(LocalAiMusicAdapter.class);
@@ -91,7 +94,7 @@ class LocalAiMusicWiringTest {
     @Test
     @DisplayName("요청 → 커밋 → 5초 뒤 예약 실행 → 가짜 수신기 → usecase까지 실제 빈 연결로 이어진다")
     void requestReachesUsecaseThroughEvent() {
-        try (AnnotationConfigApplicationContext context = context("local", false, null)) {
+        try (AnnotationConfigApplicationContext context = context("local", false, "dev", null)) {
             // given
             TransactionSynchronizationManager.initSynchronization();
             try {
@@ -126,13 +129,14 @@ class LocalAiMusicWiringTest {
 
     // 운영과 같은 의존 빈을 올린 뒤 두 가짜를 조건과 함께 등록한다 — 조건은 등록할 때 평가된다
     private static AnnotationConfigApplicationContext context(String profile, boolean kafkaConsumerEnabled,
-                                                              String localAiEnabled) {
+                                                              String kafkaEnv, String localAiEnabled) {
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
         if (profile != null) {
             context.getEnvironment().setActiveProfiles(profile);
         }
         Map<String, Object> properties = new HashMap<>();
         properties.put("kafka.consumer.enabled", String.valueOf(kafkaConsumerEnabled));
+        properties.put("kafka.env", kafkaEnv);
         // application.properties의 기본값(${RECORD_CARD_MUSIC_LOCAL_AI_ENABLED:true})과 같게 둔다
         properties.put("record-card.music.local-ai.enabled", localAiEnabled == null ? "true" : localAiEnabled);
         properties.put("record-card.music.local-ai.music-key", "Night_Walk.wav");
