@@ -6,7 +6,7 @@ import com.runiverse.running_service.application.running.port.out.RoutePoint;
 import java.util.ArrayList;
 import java.util.List;
 
-// 기록의 구간 경로를 카드용 선 아트로 바꾼다 — 실제 위치를 지우고 모양만 남긴다(api-spec 8-1 「경로 선 아트」).
+// 기록의 구간 경로를 카드용 선 아트로 바꾼다 — 실제 위치를 지우고 모양만 남긴다.
 // 카드는 남에게도 보이므로 위경도를 싣지 않는다. 보는 사람이 본인이어도 같다 — 본인의 실제 경로는 6-1이 준다
 public final class RouteArtConverter {
 

@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-// 8-1 기록 카드 상세 — api-spec 「기록 카드 공통 객체」. 경로는 위경도가 아닌 선 아트(0~1)다
+// 8-1 기록 카드 상세 — 수정(9-3) 응답의 카드도 이 모양이다. 경로는 위경도가 아닌 선 아트(0~1)다
 public record RecordCardDetailResponse(
         UUID recordCardId,
         Author author,

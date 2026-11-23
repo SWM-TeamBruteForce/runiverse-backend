@@ -29,7 +29,7 @@ import java.util.List;
 import java.util.Map;
 
 // 로컬 전용 가짜 AI 서버 — 로컬엔 Debezium·Kafka·AI 서버가 없어 음악이 계속 GENERATING이라, 그 자리만 대신한다.
-// 아웃박스는 진짜 어댑터가 그대로 쓰고, 커밋 뒤 DELAY가 지나면 AI 서버가 보낼 완료 메시지(api-spec 9-5 성공 형식)를
+// 아웃박스는 진짜 어댑터가 그대로 쓰고, 커밋 뒤 DELAY가 지나면 AI 서버가 보낼 성공 완료 메시지를
 // ConsumerRecord 그대로 Spring 이벤트로 낸다 — LocalRecordCardMusicGeneratedListener가 받아 운영과 같은 Mapper·usecase를 탄다.
 // 네 조건이 모두 맞아야 만든다: local 프로필 · Kafka 구독 꺼짐(test·deploy는 켜져 있다) ·
 // KAFKA_ENV=dev(로컬 앱을 test DB에 붙이면 test다) · local-ai 설정(E2E는 끈다)

@@ -375,7 +375,7 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
         entityManager.remove(card);
     }
 
-    // 이력의 사진 한 장 — 키 이름은 erd에 적은 저장 약속이다. 값이 없어도 키를 빼지 않는다(LinkedHashMap은 null을 담는다)
+    // 이력의 사진 한 장 — 키 이름은 images 칸의 저장 약속이라 바꾸지 않는다. 값이 없어도 키를 빼지 않는다(LinkedHashMap은 null을 담는다)
     private static Map<String, Object> historyImage(RecordCardImageJpaEntity image) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("recordCardImageId", image.getRecordCardImageId().toString());
