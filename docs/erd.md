@@ -508,7 +508,7 @@
 | created_at / updated_at | timestamp | NOT NULL | |
 
 > UNIQUE `uk_record_card_running_record`: `(running_record_id)` — 기록 하나에 카드 하나. 처음 만드는 요청이 동시에 두 번 와도 이 제약이 하나만 남긴다(api-spec 9-2의 409). 지운 뒤 같은 기록으로 다시 만들면 새 행(새 카드 ID)이다
-> **잠금**: 카드 쓰기(작성·수정·삭제, 이후 음악 완료 처리까지)는 모두 **`running_records` 행을 먼저 `FOR UPDATE`로 잠근다** — 기록과 카드가 1:1이라 기록 행 하나로 줄을 세운다. 처음 만들 때는 잠글 카드 행이 없고, 카드 행을 따로 잠그지 않는다(잠금 대상이 하나라 순서 문제가 없다)
+> **잠금**: 카드 쓰기(작성·수정·삭제·다시 만들기·음악 완료)는 모두 **`running_records` 행을 먼저 `FOR UPDATE`로 잠근다** — 기록과 카드가 1:1이라 기록 행 하나로 줄을 세운다. 처음 만들 때는 잠글 카드 행이 없고, 카드 행을 따로 잠그지 않는다(잠금 대상이 하나라 순서 문제가 없다)
 > **삭제**: 하드 삭제다. 한 트랜잭션에서 지우기 직전 모습을 `record_card_histories`에 스냅샷으로 남기고(`snapshot_reason = DELETE`) 카드 행을 지운다 — 사진 행은 CASCADE로 함께 지워진다. S3 객체(사진·음악)는 지우지 않는다
 > CHECK `ck_record_card_visibility`: `visibility in ('FRIENDS', 'PUBLIC', 'PRIVATE')`
 > CHECK `ck_record_card_base_music_status`: `base_music_status in ('GENERATING', 'COMPLETED', 'FAILED')`
