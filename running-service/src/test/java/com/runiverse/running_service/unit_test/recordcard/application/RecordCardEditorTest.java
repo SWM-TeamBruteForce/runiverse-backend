@@ -5,6 +5,7 @@ import com.runiverse.running_service.application.recordcard.command.update.Recor
 import com.runiverse.running_service.application.recordcard.command.update.RecordCardEditor.Changes;
 import com.runiverse.running_service.application.recordcard.exception.InvalidRecordCardImageException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardNotFoundException;
+import com.runiverse.running_service.application.recordcard.exception.RecordCardThumbnailOutOfRangeException;
 import com.runiverse.running_service.application.recordcard.port.out.LoadLastRecordCardHistoryPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadOwnRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRunningSummaryPort;
@@ -117,6 +118,18 @@ class RecordCardEditorTest {
         assertThatThrownBy(() -> editor.applyNow(OWNER_ID, CARD_ID, slots(
                 List.of(new ImageSlot.Keep(UuidCreator.getTimeOrderedEpoch(), null)))))
                 .isInstanceOf(InvalidRecordCardImageException.class);
+        verifyNoInteractions(snapshotRecordCardPort, updateRecordCardPort, requestRecordCardMusicPort);
+    }
+
+    @Test
+    @DisplayName("사진 목록 없이 보낸 썸네일 위치가 지금 사진 수 밖이면 400 RECORD_CARD_THUMBNAIL_OUT_OF_RANGE이고 아무것도 쓰지 않는다")
+    void thumbnailOutOfRangeWithoutSlots() {
+        // given -> 사진 두 장인 카드
+        givenCard();
+
+        // when & then
+        assertThatThrownBy(() -> editor.applyNow(OWNER_ID, CARD_ID, new Changes(null, null, null, null, 2)))
+                .isInstanceOf(RecordCardThumbnailOutOfRangeException.class);
         verifyNoInteractions(snapshotRecordCardPort, updateRecordCardPort, requestRecordCardMusicPort);
     }
 
