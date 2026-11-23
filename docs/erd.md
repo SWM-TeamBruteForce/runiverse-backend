@@ -528,10 +528,10 @@
 |---|---|---|---|
 | record_card_image_id | UUID | PK | UUIDv7. **DB가 매기지 않고 사진 key를 발급할 때(api-spec 9-1·9-3) 정한다** — 사진 key의 사진 폴더(`…/{recordCardId}/{recordCardImageId}/…`)가 이 값이다. AI 서버가 이 값을 키로 저장하고 완료 이벤트로 돌려주므로, 받은 결과가 어느 사진의 것인지 이 값으로 찾는다 |
 | record_card_id | UUID | FK → record_cards, NOT NULL, ON DELETE CASCADE | 카드를 지우면(하드 삭제, 기록 삭제 CASCADE 모두) 사진 행도 함께 지워진다 |
-| music_status | enum | NOT NULL, default `GENERATING` | 이 사진 음악의 생성 상태. `record_cards.base_music_status`와 같은 규칙 |
+| music_status | enum | NOT NULL, default `GENERATING` | 이 사진 음악의 생성 상태. 값은 `record_cards.base_music_status`와 같고, 완료 결과는 `GENERATING`일 때만 반영한다(기본곡은 끝난 곡에도 반영) |
 | sort_order | int | NOT NULL | 캐러셀 순서(0부터). 지도 장 다음부터 센다. 수정(9-3) 때 다시 매긴다 |
 | image_key | varchar(255) | NOT NULL | 사진 원본 S3 key — 9-1이 발급한 키. **작은 버전(썸네일)은 같은 사진 폴더의 `thumbnail/{파일 이름}`에 있다** — 원본 key에서 계산하므로 따로 저장하지 않는다(api-spec 9-1). 확정(9-2)이 둘 다 있는지 확인한 뒤에만 행이 생긴다 |
-| caption | varchar(100) | nullable | 사용자가 사진에 붙이는 한 줄 설명(선택). 수정(9-3)에서 바꿀 수 있고, 바꿔도 음악은 다시 만들지 않는다. AI가 사진 음악을 만들 때 사진만으로 장면을 알기 어려우면 이 설명을 쓴다. 비우면 null(빈 문자열로 저장하지 않는다) |
+| caption | varchar(100) | nullable | 사용자가 사진에 붙이는 한 줄 설명(선택). 수정(9-3)에서 바꿀 수 있고, 바꾸면 그 사진 음악을 다시 만든다. AI가 사진 음악을 만들 때 사진만으로 장면을 알기 어려우면 이 설명을 쓴다. 비우면 null(빈 문자열로 저장하지 않는다) |
 | music_key | varchar(255) | nullable | 이 사진 음악의 S3 key. 기본곡과 같이 AI 서버가 완료 이벤트로 알려 준 값을 `COMPLETED`가 될 때 저장한다(그 전·`FAILED`면 null). 완료 이벤트는 `record_card_image_id`로 행을 찾는다 |
 | created_at / updated_at | timestamp | NOT NULL | `updated_at`은 음악 생성 상태·설명·순서가 바뀔 때 갱신된다 |
 
@@ -543,7 +543,7 @@
 > **수정에서 뺀 사진과 지운 카드의 사진은 행을 지운다**(하드 삭제) — 음악은 사진에 딸려 있어 사진 없이 남길 이유가 없다. 지우기 직전 모습은 `record_card_histories`의 `images`에 남는다. S3 객체는 프로필 사진처럼 남긴다.
 > UNIQUE `uk_record_card_image_sort_order`: `(record_card_id, sort_order)` **DEFERRABLE INITIALLY DEFERRED** — 한 카드에서 같은 자리에 사진 두 장이 오지 않는다. **커밋 때 검사한다** — 수정(9-3)에서 순서를 맞바꾸면 한 행씩 UPDATE하는 중간에 값이 겹치고, Hibernate는 flush 때 INSERT를 DELETE보다 먼저 보내 "빼고 같은 자리에 넣기"도 중간에 겹친다. 즉시 검사면 정상 수정이 실패한다. 최종 결과의 중복만 막는 안전장치다 — 순서는 도메인이 0부터 다시 매기므로 정상 경로에서는 걸리지 않고, 걸리면 커밋 실패(500)다. 엔티티가 `@UniqueConstraint(options = "deferrable initially deferred")`로 선언해 로컬·E2E 스키마에도 생긴다. 같은 카드를 동시에 고치는 경쟁은 이 제약이 아니라 잠금이 막는다 — 카드 쓰기는 모두 `running_records` 행을 먼저 잠근다. 앞 열이 `record_card_id`라 카드 사진 조회 인덱스를 겸한다.
 
-> **음악 생성 상태는 완료 이벤트로만 바뀐다** — AI 서버가 Kafka 완료 토픽에 발행한 이벤트를 running-service가 구독해 바꾼다(api-spec 9-5). `GENERATING` → `COMPLETED`(S3에 객체가 생김) 또는 `FAILED`. Kafka는 같은 이벤트를 두 번 줄 수 있고(inbox로 거른다) 다른 요청의 결과가 늦게 올 수 있어, 사진 음악은 `GENERATING`이 아닌 행에 온 결과를 무시한다. 기본곡은 끝난 곡에도 온 결과(성공·실패)를 따른다 — 같은 상태·key면 건너뛴다(api-spec 9-3). 다시 만들 때는 요청을 보내기 전에 `GENERATING`으로 되돌린다 — 수정은 대상 사진만, 다시 만들기(9-6)는 `FAILED`인 음악만. ID(`record_card_id`·`record_card_image_id`)로 찾은 행이 없거나(수정에서 뺀 사진) 카드가 지워졌으면 무시하고 로그만 남긴다. `FAILED`는 다시 만들기 요청(api-spec 9-6)으로만 되돌린다(feature-spec 기록 카드 음악 생성).
+> **음악 생성 상태는 완료 이벤트로만 바뀐다** — AI 서버가 Kafka 완료 토픽에 발행한 이벤트를 running-service가 구독해 바꾼다(api-spec 9-5). `GENERATING` → `COMPLETED`(S3에 객체가 생김) 또는 `FAILED`. Kafka는 같은 이벤트를 두 번 줄 수 있고(inbox로 거른다) 다른 요청의 결과가 늦게 올 수 있어, 사진 음악은 `GENERATING`이 아닌 행에 온 결과를 무시한다. 기본곡은 끝난 곡에도 온 결과(성공·실패)를 따른다 — 같은 상태·key면 건너뛴다(api-spec 9-3). 다시 만들 때는 요청을 보내기 전에 `GENERATING`으로 되돌린다 — 수정은 대상 사진만, 다시 만들기(9-6)는 `FAILED`인 음악만. ID(`record_card_id`·`record_card_image_id`)로 찾은 행이 없거나(수정에서 뺀 사진) 카드가 지워졌으면 무시하고 로그만 남긴다. 사진 음악의 `FAILED`는 다시 만들기(api-spec 9-6)나 그 사진 설명을 고친 수정으로 되돌린다(feature-spec 기록 카드 음악 생성).
 
 
 ### record_card_histories (기록 카드 이력)
@@ -672,7 +672,7 @@ FK 강제 없는 독립 테이블(원본 삭제/수정된 row를 참조하므로
 | record_cards.visibility | FRIENDS / PUBLIC / PRIVATE | 카드별 개별 저장 — 친구만 / 전체 / 나만 |
 | record_cards.activity_type | DAILY / TRAVEL / RACE | 일상 / 여행 / 대회 — 카드 단위. AI 음악 생성 입력 |
 | outbox_events.aggregate_type | RECORD_CARD | 이벤트를 만든 대상 — 지금은 기록 카드뿐. 대상이 늘면 값을 더한다 |
-| record_cards.base_music_status · record_card_images.music_status | GENERATING / COMPLETED / FAILED | 생성 중 / 완료(AI가 준 key가 있다) / 생성 실패. 완료 이벤트로만 바뀐다 |
+| record_cards.base_music_status · record_card_images.music_status | GENERATING / COMPLETED / FAILED | 생성 중 / 완료(AI가 준 key가 있다) / 생성 실패. 완료·실패는 완료 이벤트로만 정해지고, 수정(설명이 바뀐 사진)·다시 만들기(실패한 음악)가 요청 전에 생성 중으로 되돌린다 |
 | users.profile_visibility | FRIENDS / PUBLIC | 지인 마스킹 — FRIENDS는 `user_relationships`로 직접 판정 |
 | user_relationships.type | NONE / FRIEND / FRIEND_REQUEST_SENT / FRIEND_REQUEST_RECEIVED / BLOCKED | 행 주인 관점의 관계 — 관계 없음(끝난 관계) / 친구 / 보낸 요청 / 받은 요청 / 내가 차단함. API `relationshipType`과 같은 값(`BLOCKED`는 차단 구현 때 API에 추가). 행이 없어도 `NONE`이다 |
 | running_room_invitations.status | PENDING / ACCEPTED / DECLINED / LEFT / EXPIRED | 응답 대기 / 수락(지금 방에 있음) / 거절 / 수락 뒤 방을 나감 / 모집 마감·방 취소로 만료. `user_relationships`와 달리 거절을 값으로 남긴다 — 화면(`RoomInfo.invitations`)은 `PENDING`만 보여주지만, 다시 초대할 때 보낸 횟수를 이어서 세려면 행이 남아야 한다 |
