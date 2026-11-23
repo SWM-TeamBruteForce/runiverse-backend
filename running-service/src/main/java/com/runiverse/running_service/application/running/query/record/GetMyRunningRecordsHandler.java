@@ -73,10 +73,10 @@ public class GetMyRunningRecordsHandler implements GetMyRunningRecordsUsecase {
         }
         if (row.thumbnailImageKey() != null) {
             String thumbnailKey = RecordCardStorageKeys.thumbnailKeyOf(row.thumbnailImageKey());
-            return new GetMyRunningRecordsResult.RecordCard(row.recordCardId(),
+            return new GetMyRunningRecordsResult.RecordCard(row.recordCardId(), row.cardActivityType(),
                     generateRecordCardViewUrlPort.imageUrl(thumbnailKey), null);
         }
-        return new GetMyRunningRecordsResult.RecordCard(row.recordCardId(), null,
+        return new GetMyRunningRecordsResult.RecordCard(row.recordCardId(), row.cardActivityType(), null,
                 RouteArtConverter.convert(segments.getOrDefault(row.runningRecordId(), List.of()),
                         CALENDAR_ROUTE_ART_POINTS));
     }

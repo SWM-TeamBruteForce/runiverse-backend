@@ -47,12 +47,13 @@ public record RunningRecordsResponse(List<RunningRecordResponse> runningRecords)
     // 기록에 붙은 카드 요약 — 사진이 있으면 thumbnailUrl, 없으면 routeArt(8-1과 같은 [x, y] 배열)
     public record RecordCardResponse(
             UUID recordCardId,
+            String activityType,                // DAILY·TRAVEL·RACE — 8-1과 같은 값
             String thumbnailUrl,                // 사진 없는 카드면 null
             List<List<double[]>> routeArt       // 사진 있는 카드면 null, 경로가 없으면 빈 배열
     ) {
 
         static RecordCardResponse from(GetMyRunningRecordsResult.RecordCard card) {
-            return new RecordCardResponse(card.recordCardId(), card.thumbnailUrl(),
+            return new RecordCardResponse(card.recordCardId(), card.activityType().name(), card.thumbnailUrl(),
                     card.routeArt() == null ? null : RecordCardDetailResponse.routeArt(card.routeArt()));
         }
     }

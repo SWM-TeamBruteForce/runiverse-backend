@@ -1,6 +1,7 @@
 package com.runiverse.running_service.unit_test.running.application;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.runiverse.running_service.domain.recordcard.vo.RecordCardActivityType;
 import com.runiverse.running_service.application.recordcard.port.out.GenerateRecordCardViewUrlPort;
 import com.runiverse.running_service.application.running.common.PolylineEncoder;
 import com.runiverse.running_service.application.running.port.out.LoadMyRunningRecordsPort;
@@ -100,7 +101,7 @@ class GetMyRunningRecordsHandlerTest {
         given(loadMyRunningRecordsPort.loadByPeriod(ME, FROM_START, AFTER_TO_START))
                 .willReturn(List.of(new RunningRecordRow(
                         501L, 125L, RunningRoomType.MATCH, 3L, startedAt,
-                        5020, 1800, 359, 42, null, null)));
+                        5020, 1800, 359, 42, null, null, null)));
 
         // when
         GetMyRunningRecordsResult result = handler.handle(new GetMyRunningRecordsQuery(USER_ID, FROM, TO));
@@ -125,7 +126,7 @@ class GetMyRunningRecordsHandlerTest {
         given(loadMyRunningRecordsPort.loadByPeriod(ME, FROM_START, AFTER_TO_START))
                 .willReturn(List.of(new RunningRecordRow(
                         501L, 125L, RunningRoomType.SOLO, 1L, LocalDateTime.of(2026, 9, 28, 19, 0),
-                        5020, 1800, 359, null, null, null)));
+                        5020, 1800, 359, null, null, null, null)));
 
         // when
         GetMyRunningRecordsResult result = handler.handle(new GetMyRunningRecordsQuery(USER_ID, FROM, TO));
@@ -187,7 +188,7 @@ class GetMyRunningRecordsHandlerTest {
     void 사진_있는_카드는_썸네일이다() {
         // given
         given(loadMyRunningRecordsPort.loadByPeriod(ME, FROM_START, AFTER_TO_START))
-                .willReturn(List.of(cardRow(501L, CARD_A, "record-cards/u/a/thumb.jpg")));
+                .willReturn(List.of(cardRow(501L, CARD_A, "record-cards/u/a/thumb.jpg", RecordCardActivityType.RACE)));
         given(generateRecordCardViewUrlPort.imageUrl("record-cards/u/a/thumbnail/thumb.jpg")).willReturn("https://thumb");
 
         // when
@@ -195,7 +196,7 @@ class GetMyRunningRecordsHandlerTest {
 
         // then
         assertThat(result.runningRecords().get(0).recordCard())
-                .isEqualTo(new GetMyRunningRecordsResult.RecordCard(CARD_A, "https://thumb", null));
+                .isEqualTo(new GetMyRunningRecordsResult.RecordCard(CARD_A, RecordCardActivityType.RACE, "https://thumb", null));
         verifyNoInteractions(loadSegmentPolylinesPort);
     }
 
@@ -208,7 +209,7 @@ class GetMyRunningRecordsHandlerTest {
                         cardRow(501L, CARD_A, "record-cards/u/a/thumb.jpg"),
                         cardRow(502L, CARD_B, null),
                         row(503L, LocalDateTime.of(2026, 9, 29, 7, 0)),
-                        cardRow(504L, CARD_C, null)));
+                        cardRow(504L, CARD_C, null, RecordCardActivityType.TRAVEL)));
         given(generateRecordCardViewUrlPort.imageUrl("record-cards/u/a/thumbnail/thumb.jpg")).willReturn("https://thumb");
         List<RoutePoint> line = new ArrayList<>();
         for (int i = 0; i < 300; i++) {
@@ -225,23 +226,29 @@ class GetMyRunningRecordsHandlerTest {
         assertThat(records.get(0).recordCard().routeArt()).isNull();
         GetMyRunningRecordsResult.RecordCard noPhoto = records.get(1).recordCard();
         assertThat(noPhoto.recordCardId()).isEqualTo(CARD_B);
+        assertThat(noPhoto.activityType()).isEqualTo(RecordCardActivityType.DAILY);
         assertThat(noPhoto.thumbnailUrl()).isNull();
         assertThat(noPhoto.routeArt()).singleElement().satisfies(segment -> assertThat(segment).hasSize(50));
         assertThat(records.get(2).recordCard()).isNull();
         assertThat(records.get(3).recordCard())
-                .isEqualTo(new GetMyRunningRecordsResult.RecordCard(CARD_C, null, List.of()));
+                .isEqualTo(new GetMyRunningRecordsResult.RecordCard(CARD_C, RecordCardActivityType.TRAVEL, null, List.of()));
         verify(loadSegmentPolylinesPort).loadSegmentPolylines(List.of(502L, 504L));
     }
 
     private static RunningRecordRow cardRow(long runningRecordId, UUID recordCardId, String thumbnailImageKey) {
+        return cardRow(runningRecordId, recordCardId, thumbnailImageKey, RecordCardActivityType.DAILY);
+    }
+
+    private static RunningRecordRow cardRow(long runningRecordId, UUID recordCardId, String thumbnailImageKey,
+                                            RecordCardActivityType activityType) {
         return new RunningRecordRow(
                 runningRecordId, 125L, RunningRoomType.SOLO, 1L, LocalDateTime.of(2026, 9, 28, 7, 0),
-                5020, 1800, 359, 42, recordCardId, thumbnailImageKey);
+                5020, 1800, 359, 42, recordCardId, thumbnailImageKey, activityType);
     }
 
     private static RunningRecordRow row(long runningRecordId, LocalDateTime startedAt) {
         return new RunningRecordRow(
                 runningRecordId, 125L, RunningRoomType.SOLO, 1L, startedAt,
-                5020, 1800, 359, 42, null, null);
+                5020, 1800, 359, 42, null, null, null);
     }
 }

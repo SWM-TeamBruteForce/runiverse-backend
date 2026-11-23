@@ -2551,6 +2551,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
       "totalElevationGainMeters": 42, // 유효 표본이 부족하면 null
       "recordCard": {                 // 이 기록의 카드가 없으면 null
         "recordCardId": "01a0f2d4-6180-7000-8000-4466554400c8",
+        "activityType": "DAILY",
         "thumbnailUrl": "https://...",
         "routeArt": null              // 사진이 없는 카드만 값이 있다
       }
@@ -2573,11 +2574,12 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 |---|---|---|---|
 | `recordCard` | Object | X | 기록 카드 요약. 카드가 없으면 null |
 | `recordCard.recordCardId` | String | O | 기록 카드 ID(UUID) — 탭하면 8-1로 상세, 작성 화면에서는 9-3 수정으로 간다 |
+| `recordCard.activityType` | String | O | 카드의 활동 유형 `DAILY`·`TRAVEL`·`RACE` — 8-1과 같은 값. 달력의 유형 필터는 이 값으로 거른다 |
 | `recordCard.thumbnailUrl` | String | X | 대표 사진의 **작은 버전(썸네일)** URL(presigned GET, 8-1과 같은 유효 시간) — 10-3과 같다. **사진이 없는 카드는 null** |
 | `recordCard.routeArt` | Number[][][] | X | **사진이 없는 카드만** 선 아트를 싣는다 — 8-1 「경로 선 아트」와 같은 규칙이고 **점은 최대 50개**다(달력 칸이 작다). 사진이 있으면 null. 경로가 없으면 빈 배열 |
 
   - **내 기록이라 공개 범위와 상관없이 카드를 싣는다** — `PRIVATE` 카드도 실린다
-  - **달력은 이 응답 하나로 그린다** — 한 달을 한 번 조회해 `startedAt` 날짜로 묶는다. 카드가 있는 날은 `thumbnailUrl` → 없으면 `routeArt` → 둘 다 비면 점, 기록은 있는데 카드가 하나도 없는 날은 "뛰었지만 카드 없음", 기록이 없는 날은 빈 칸이다. 같은 날 카드가 여러 장이면 그날 목록에서 한 장을 연다
+  - **달력은 이 응답 하나로 그린다** — 한 달을 한 번 조회해 `startedAt` 날짜로 묶는다. 카드가 있는 날은 `thumbnailUrl` → 없으면 `routeArt` → 둘 다 비면 점, 기록은 있는데 카드가 하나도 없는 날은 "뛰었지만 카드 없음", 기록이 없는 날은 빈 칸이다. 같은 날 카드가 여러 장이면 그날 목록에서 한 장을 연다. 유형 필터는 `recordCard.activityType`으로 클라이언트가 거르고, 서버에 따로 묻지 않는다
   - **작성 화면은 하루만 조회한다**(`from`=`to`) — `recordCard`가 있는 기록은 이미 카드가 있어 9-1 대신 9-3 수정으로 보낸다(9-1은 409)
   - 음악·회고 글·사진 수는 싣지 않는다 — 상세(8-1)에서 본다
 - **기록 상세는 별도 API 없이 `runningRoomId`로 6-1·6-2를 조회한다** — 러닝 직후 결과 화면과 같은 화면이다
