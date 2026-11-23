@@ -6,7 +6,7 @@ import com.runiverse.running_service.application.recordcard.command.update.Recor
 import com.runiverse.running_service.application.recordcard.exception.InvalidRecordCardImageException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardNotFoundException;
 import com.runiverse.running_service.application.recordcard.port.out.LoadLastRecordCardHistoryPort;
-import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
+import com.runiverse.running_service.application.recordcard.port.out.LoadOwnRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRunningSummaryPort;
 import com.runiverse.running_service.application.recordcard.port.out.RecordCardMusicRequest;
 import com.runiverse.running_service.application.recordcard.port.out.RecordCardMusicRequest.Photo;
@@ -16,6 +16,7 @@ import com.runiverse.running_service.application.recordcard.port.out.RequestReco
 import com.runiverse.running_service.application.recordcard.port.out.SnapshotRecordCardPort;
 import com.runiverse.running_service.application.recordcard.port.out.UpdateRecordCardPort;
 import com.runiverse.running_service.domain.common.vo.RunningRecordId;
+import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.recordcard.RecordCard;
 import com.runiverse.running_service.domain.recordcard.RecordCard.ImageSlot;
 import com.runiverse.running_service.domain.recordcard.RecordCardImage;
@@ -59,7 +60,7 @@ class RecordCardEditorTest {
             LocalDateTime.of(2026, 10, 19, 6, 30), 61, new BigDecimal("15.0"), 22);
 
     @Mock
-    private LoadRecordCardForUpdatePort loadRecordCardForUpdatePort;
+    private LoadOwnRecordCardForUpdatePort loadOwnRecordCardForUpdatePort;
     @Mock
     private SnapshotRecordCardPort snapshotRecordCardPort;
     @Mock
@@ -75,7 +76,7 @@ class RecordCardEditorTest {
 
     @BeforeEach
     void setUp() {
-        editor = new RecordCardEditor(loadRecordCardForUpdatePort, snapshotRecordCardPort, updateRecordCardPort,
+        editor = new RecordCardEditor(loadOwnRecordCardForUpdatePort, snapshotRecordCardPort, updateRecordCardPort,
                 loadRunningSummaryPort, requestRecordCardMusicPort, loadLastRecordCardHistoryPort);
     }
 
@@ -83,7 +84,8 @@ class RecordCardEditorTest {
     @DisplayName("없는 카드는 404이고 아무것도 쓰지 않는다")
     void notFound() {
         // given
-        when(loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(CARD_ID))).thenReturn(Optional.empty());
+        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
+                .thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> editor.applyNow(OWNER_ID, CARD_ID, memo("새 회고")))
@@ -92,13 +94,15 @@ class RecordCardEditorTest {
     }
 
     @Test
-    @DisplayName("남의 카드는 없는 카드와 같은 404다")
+    @DisplayName("남의 카드는 요청한 사람 ID로 찾아 없는 카드와 같은 404다 — 주인 확인은 잠그기 전 조회가 한다")
     void othersCard() {
         // given
-        givenCard();
+        UUID stranger = UuidCreator.getTimeOrderedEpoch();
+        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(stranger)))
+                .thenReturn(Optional.empty());
 
         // when & then
-        assertThatThrownBy(() -> editor.applyNow(UuidCreator.getTimeOrderedEpoch(), CARD_ID, memo("새 회고")))
+        assertThatThrownBy(() -> editor.applyNow(stranger, CARD_ID, memo("새 회고")))
                 .isInstanceOf(RecordCardNotFoundException.class);
         verifyNoInteractions(snapshotRecordCardPort, updateRecordCardPort, requestRecordCardMusicPort);
     }
@@ -208,7 +212,8 @@ class RecordCardEditorTest {
                         RecordCardImage.restore(IMAGE_B, "record-cards/b.jpg", null, "audio/b.wav",
                                 MusicStatus.COMPLETED, 1)))
                 .build();
-        when(loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(CARD_ID))).thenReturn(Optional.of(card));
+        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
+                .thenReturn(Optional.of(card));
     }
 
     private static Changes memo(String memo) {

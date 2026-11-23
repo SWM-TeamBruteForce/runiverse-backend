@@ -5,6 +5,7 @@ import com.runiverse.running_service.application.recordcard.port.out.DeleteRecor
 import com.runiverse.running_service.application.recordcard.port.out.FindRecordCardIdByRunningRecordPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadLastRecordCardHistoryPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadMaxDisplayOrderPort;
+import com.runiverse.running_service.application.recordcard.port.out.LoadOwnRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardDetailPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardSummariesPort;
@@ -45,9 +46,9 @@ import java.util.stream.Collectors;
 @Component
 @RequiredArgsConstructor
 public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRecordPort, LoadMaxDisplayOrderPort,
-        CreateRecordCardPort, LoadRecordCardForUpdatePort, SaveRecordCardMusicPort, LoadRecordCardDetailPort,
-        SnapshotRecordCardPort, DeleteRecordCardPort, UpdateRecordCardPort, LoadLastRecordCardHistoryPort,
-        LoadRecordCardSummariesPort {
+        CreateRecordCardPort, LoadRecordCardForUpdatePort, LoadOwnRecordCardForUpdatePort, SaveRecordCardMusicPort,
+        LoadRecordCardDetailPort, SnapshotRecordCardPort, DeleteRecordCardPort, UpdateRecordCardPort,
+        LoadLastRecordCardHistoryPort, LoadRecordCardSummariesPort {
 
     private static final String UK_RUNNING_RECORD = "uk_record_card_running_record";
     private static final String UK_USER_DISPLAY_ORDER = "uk_record_card_user_display_order";
@@ -136,14 +137,37 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
         if (runningRecordId.isEmpty()) {
             return Optional.empty();
         }
+        return lockAndLoad(recordCardId, runningRecordId.get());
+    }
 
+    @Override
+    public Optional<RecordCard> loadOwnedForUpdate(RecordCardId recordCardId, UserId userId) {
+        // 1. 이 사람 카드일 때만 기록 ID를 읽는다 — 남의 카드면 여기서 끝나 기록 행을 잠그지 않는다.
+        //    카드 주인은 바뀌지 않아(user_id는 수정 불가) 잠그기 전에 봐도 된다
+        Optional<Long> runningRecordId = entityManager.createQuery("""
+                        SELECT card.runningRecord.runningRecordId
+                        FROM RecordCardJpaEntity card
+                        WHERE card.recordCardId = :recordCardId
+                          AND card.userId = :userId
+                        """, Long.class)
+                .setParameter("recordCardId", recordCardId.value())
+                .setParameter("userId", userId.value())
+                .getResultList().stream()
+                .findFirst();
+        if (runningRecordId.isEmpty()) {
+            return Optional.empty();
+        }
+        return lockAndLoad(recordCardId, runningRecordId.get());
+    }
+
+    private Optional<RecordCard> lockAndLoad(RecordCardId recordCardId, Long runningRecordId) {
         // 2. 기록 행 하나만 잠근다 — 카드 쓰기(작성·수정·삭제·음악 완료)는 모두 이 행으로 줄을 선다. 카드 행은 잠그지 않는다
         entityManager.createQuery("""
                         SELECT record.runningRecordId
                         FROM RunningRecordJpaEntity record
                         WHERE record.runningRecordId = :runningRecordId
                         """, Long.class)
-                .setParameter("runningRecordId", runningRecordId.get())
+                .setParameter("runningRecordId", runningRecordId)
                 .setLockMode(LockModeType.PESSIMISTIC_WRITE)
                 .getResultList();
 
@@ -157,7 +181,7 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
                         image.getCaption(), image.getMusicKey(), image.getMusicStatus(), image.getSortOrder()))
                 .toList();
         return Optional.of(RecordCard.restore(card.getRecordCardId())
-                .runningRecordId(runningRecordId.get())
+                .runningRecordId(runningRecordId)
                 .userId(card.getUserId())
                 .visibility(card.getVisibility())
                 .activityType(card.getActivityType())
@@ -172,7 +196,7 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
 
     @Override
     public void saveMusic(RecordCard recordCard) {
-        // loadForUpdate가 읽은 엔티티가 이 트랜잭션에 그대로 있다 — 음악 값만 옮기면 커밋 때 UPDATE된다.
+        // loadForUpdate·loadOwnedForUpdate가 읽은 엔티티가 이 트랜잭션에 그대로 있다 — 음악 값만 옮기면 커밋 때 UPDATE된다.
         // 글·공개 범위·순위·썸네일·사진 순서·설명은 엔티티의 지금 값을 그대로 넘겨 바꾸지 않는다
         RecordCardJpaEntity card = entityManager.find(RecordCardJpaEntity.class, recordCard.getRecordCardId().value());
         card.apply(card.getVisibility(), card.getActivityType(), recordCard.getBaseMusicStatus(), card.getMemo(),
@@ -276,7 +300,7 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
 
     @Override
     public void snapshot(RecordCardId recordCardId, RecordCardSnapshotReason reason) {
-        // 엔티티의 지금 값을 남긴다 — loadForUpdate가 읽은 카드·사진이 이 트랜잭션에 있어 다시 SELECT하지 않는다.
+        // 엔티티의 지금 값을 남긴다 — loadOwnedForUpdate가 읽은 카드·사진이 이 트랜잭션에 있어 다시 SELECT하지 않는다.
         // 수정 저장(update)보다 먼저 불러 엔티티가 아직 바뀌기 전이다
         RecordCardJpaEntity card = entityManager.find(RecordCardJpaEntity.class, recordCardId.value());
         if (card == null) {
@@ -307,7 +331,7 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
 
     @Override
     public void update(RecordCard recordCard) {
-        // loadForUpdate가 읽은 엔티티에 도메인이 바꾼 값을 옮긴다 — 커밋 때 UPDATE된다. 순위(display_order)는 수정이 바꾸지 않는다
+        // loadOwnedForUpdate가 읽은 엔티티에 도메인이 바꾼 값을 옮긴다 — 커밋 때 UPDATE된다. 순위(display_order)는 수정이 바꾸지 않는다
         RecordCardJpaEntity card = entityManager.find(RecordCardJpaEntity.class, recordCard.getRecordCardId().value());
         if (card == null) {
             throw new IllegalStateException("고칠 카드가 없습니다 — 잠근 뒤 다시 읽은 카드로 불러야 합니다");

@@ -4,12 +4,13 @@ import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.recordcard.command.retrymusic.RetryRecordCardMusicCommand;
 import com.runiverse.running_service.application.recordcard.command.retrymusic.RetryRecordCardMusicHandler;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardNotFoundException;
-import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
+import com.runiverse.running_service.application.recordcard.port.out.LoadOwnRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRunningSummaryPort;
 import com.runiverse.running_service.application.recordcard.port.out.RecordCardMusicRequest;
 import com.runiverse.running_service.application.recordcard.port.out.RecordCardMusicRequest.RunningSummary;
 import com.runiverse.running_service.application.recordcard.port.out.RequestRecordCardMusicPort;
 import com.runiverse.running_service.application.recordcard.port.out.SaveRecordCardMusicPort;
+import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.recordcard.RecordCard;
 import com.runiverse.running_service.domain.recordcard.RecordCardImage;
 import com.runiverse.running_service.domain.recordcard.vo.MusicStatus;
@@ -53,7 +54,7 @@ class RetryRecordCardMusicHandlerTest {
             LocalDateTime.of(2026, 11, 3, 7, 10), 61, new BigDecimal("15.0"), null);
 
     @Mock
-    private LoadRecordCardForUpdatePort loadRecordCardForUpdatePort;
+    private LoadOwnRecordCardForUpdatePort loadOwnRecordCardForUpdatePort;
     @Mock
     private SaveRecordCardMusicPort saveRecordCardMusicPort;
     @Mock
@@ -65,7 +66,7 @@ class RetryRecordCardMusicHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new RetryRecordCardMusicHandler(loadRecordCardForUpdatePort, saveRecordCardMusicPort,
+        handler = new RetryRecordCardMusicHandler(loadOwnRecordCardForUpdatePort, saveRecordCardMusicPort,
                 loadRunningSummaryPort, requestRecordCardMusicPort);
     }
 
@@ -74,7 +75,8 @@ class RetryRecordCardMusicHandlerTest {
     void retriesAll() {
         // given — 기본곡·a는 완료, b만 실패
         RecordCard card = card(OWNER_ID, MusicStatus.COMPLETED, MusicStatus.FAILED);
-        when(loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(CARD_ID))).thenReturn(Optional.of(card));
+        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
+                .thenReturn(Optional.of(card));
         when(loadRunningSummaryPort.load(card.getRunningRecordId())).thenReturn(Optional.of(SUMMARY));
 
         // when
@@ -99,7 +101,8 @@ class RetryRecordCardMusicHandlerTest {
     void nothingFailed() {
         // given
         RecordCard card = card(OWNER_ID, MusicStatus.COMPLETED, MusicStatus.GENERATING);
-        when(loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(CARD_ID))).thenReturn(Optional.of(card));
+        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
+                .thenReturn(Optional.of(card));
 
         // when
         handler.handle(new RetryRecordCardMusicCommand(OWNER_ID, CARD_ID));
@@ -113,7 +116,8 @@ class RetryRecordCardMusicHandlerTest {
     @DisplayName("없는 카드(지운 카드 포함)는 404이고 아무것도 쓰지 않는다")
     void notFound() {
         // given
-        when(loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(CARD_ID))).thenReturn(Optional.empty());
+        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
+                .thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> handler.handle(new RetryRecordCardMusicCommand(OWNER_ID, CARD_ID))).isInstanceOf(RecordCardNotFoundException.class);
@@ -121,16 +125,16 @@ class RetryRecordCardMusicHandlerTest {
     }
 
     @Test
-    @DisplayName("남의 카드는 실패한 음악이 있어도 404이고 되돌리지 않는다")
+    @DisplayName("남의 카드는 요청한 사람 ID로 찾아 404이고 아무것도 쓰지 않는다 — 주인 확인은 잠그기 전 조회가 한다")
     void othersCard() {
         // given
-        RecordCard card = card(UuidCreator.getTimeOrderedEpoch(), MusicStatus.FAILED, MusicStatus.FAILED);
-        when(loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(CARD_ID))).thenReturn(Optional.of(card));
+        UUID stranger = UuidCreator.getTimeOrderedEpoch();
+        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(stranger)))
+                .thenReturn(Optional.empty());
 
         // when & then
-        assertThatThrownBy(() -> handler.handle(new RetryRecordCardMusicCommand(OWNER_ID, CARD_ID))).isInstanceOf(RecordCardNotFoundException.class);
+        assertThatThrownBy(() -> handler.handle(new RetryRecordCardMusicCommand(stranger, CARD_ID))).isInstanceOf(RecordCardNotFoundException.class);
         verifyNoInteractions(saveRecordCardMusicPort, requestRecordCardMusicPort);
-        assertThat(card.getImages()).extracting(RecordCardImage::getMusicStatus).containsOnly(MusicStatus.FAILED);
     }
 
     @Test
@@ -138,7 +142,8 @@ class RetryRecordCardMusicHandlerTest {
     void missingSummary() {
         // given
         RecordCard card = card(OWNER_ID, MusicStatus.FAILED, MusicStatus.FAILED);
-        when(loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(CARD_ID))).thenReturn(Optional.of(card));
+        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
+                .thenReturn(Optional.of(card));
         when(loadRunningSummaryPort.load(card.getRunningRecordId())).thenReturn(Optional.empty());
 
         // when & then

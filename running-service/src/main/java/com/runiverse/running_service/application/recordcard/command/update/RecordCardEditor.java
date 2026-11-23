@@ -4,7 +4,7 @@ import com.runiverse.running_service.application.recordcard.exception.InvalidRec
 import com.runiverse.running_service.application.recordcard.exception.RecordCardNotFoundException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardThumbnailOutOfRangeException;
 import com.runiverse.running_service.application.recordcard.port.out.LoadLastRecordCardHistoryPort;
-import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
+import com.runiverse.running_service.application.recordcard.port.out.LoadOwnRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRunningSummaryPort;
 import com.runiverse.running_service.application.recordcard.port.out.RecordCardMusicRequest;
 import com.runiverse.running_service.application.recordcard.port.out.RecordCardSnapshotReason;
@@ -30,14 +30,14 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 // 수정 한 벌을 카드에 반영한다 — 9-3 바로 반영(applyNow)과 9-2 수정 확정(자기 트랜잭션에서 lockOwnCard·apply)이 같이 쓴다.
-// 기록 행 잠금 → 내 카드 확인 → 도메인에서 수정 계산 → 바뀌었으면 이력 → 저장 → 음악 재료가 바뀌었으면 요청(아웃박스).
+// 내 카드 확인 → 기록 행 잠금 → 도메인에서 수정 계산 → 바뀌었으면 이력 → 저장 → 음악 재료가 바뀌었으면 요청(아웃박스).
 // 다시 만들 음악은 도메인(RecordCard.Edit)이 정한다 — 여기서 사진을 고르지 않는다
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class RecordCardEditor {
 
-    private final LoadRecordCardForUpdatePort loadRecordCardForUpdatePort;
+    private final LoadOwnRecordCardForUpdatePort loadOwnRecordCardForUpdatePort;
     private final SnapshotRecordCardPort snapshotRecordCardPort;
     private final UpdateRecordCardPort updateRecordCardPort;
     private final LoadRunningSummaryPort loadRunningSummaryPort;
@@ -75,10 +75,11 @@ public class RecordCardEditor {
         return loadLastRecordCardHistoryPort.loadLastId(card.getRecordCardId());
     }
 
-    // 기록 행을 잠그고 내 카드를 읽는다 — 없거나(지운 카드 포함) 남의 카드면 404. 남긴다는 사진이 이 카드 것인지도 본다(400)
+    // 내 카드면 기록 행을 잠그고 읽는다 — 없거나(지운 카드 포함) 남의 카드면 잠그지 않고 404.
+    // 남긴다는 사진이 이 카드 것인지도 본다(400)
     public RecordCard lockOwnCard(UUID userId, UUID recordCardId, List<ImageSlot> slots) {
-        RecordCard card = loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(recordCardId))
-                .filter(found -> found.getUserId().equals(new UserId(userId)))
+        RecordCard card = loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(recordCardId),
+                        new UserId(userId))
                 .orElseThrow(RecordCardNotFoundException::new);
         requireKeptImagesInCard(card, slots);
         return card;
