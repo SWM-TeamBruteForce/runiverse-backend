@@ -5,7 +5,7 @@ import com.runiverse.running_service.application.recordcard.command.delete.Delet
 import com.runiverse.running_service.application.recordcard.command.delete.DeleteRecordCardHandler;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardNotFoundException;
 import com.runiverse.running_service.application.recordcard.port.out.DeleteRecordCardPort;
-import com.runiverse.running_service.application.recordcard.port.out.LoadOwnRecordCardForUpdatePort;
+import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.RecordCardSnapshotReason;
 import com.runiverse.running_service.application.recordcard.port.out.SnapshotRecordCardPort;
 import com.runiverse.running_service.domain.common.vo.UserId;
@@ -39,7 +39,7 @@ class DeleteRecordCardHandlerTest {
     private static final UUID OWNER_ID = UuidCreator.getTimeOrderedEpoch();
 
     @Mock
-    private LoadOwnRecordCardForUpdatePort loadOwnRecordCardForUpdatePort;
+    private LoadRecordCardForUpdatePort loadRecordCardForUpdatePort;
     @Mock
     private SnapshotRecordCardPort snapshotRecordCardPort;
     @Mock
@@ -49,7 +49,7 @@ class DeleteRecordCardHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new DeleteRecordCardHandler(loadOwnRecordCardForUpdatePort, snapshotRecordCardPort,
+        handler = new DeleteRecordCardHandler(loadRecordCardForUpdatePort, snapshotRecordCardPort,
                 deleteRecordCardPort);
     }
 
@@ -58,15 +58,15 @@ class DeleteRecordCardHandlerTest {
     void snapshotsThenDeletes() {
         // given
         RecordCard card = card(OWNER_ID);
-        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
+        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
                 .thenReturn(Optional.of(card));
 
         // when
         handler.handle(new DeleteRecordCardCommand(OWNER_ID, CARD_ID));
 
         // then
-        InOrder order = inOrder(loadOwnRecordCardForUpdatePort, snapshotRecordCardPort, deleteRecordCardPort);
-        order.verify(loadOwnRecordCardForUpdatePort)
+        InOrder order = inOrder(loadRecordCardForUpdatePort, snapshotRecordCardPort, deleteRecordCardPort);
+        order.verify(loadRecordCardForUpdatePort)
                 .loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID));
         order.verify(snapshotRecordCardPort).snapshot(new RecordCardId(CARD_ID), RecordCardSnapshotReason.DELETE);
         order.verify(deleteRecordCardPort).delete(new RecordCardId(CARD_ID));
@@ -76,7 +76,7 @@ class DeleteRecordCardHandlerTest {
     @DisplayName("없는 카드(이미 지운 카드 포함)는 404이고 이력·삭제를 하지 않는다")
     void notFound() {
         // given
-        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
+        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
                 .thenReturn(Optional.empty());
 
         // when & then
@@ -90,7 +90,7 @@ class DeleteRecordCardHandlerTest {
     void othersCard() {
         // given
         UUID stranger = UuidCreator.getTimeOrderedEpoch();
-        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(stranger)))
+        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(stranger)))
                 .thenReturn(Optional.empty());
 
         // when & then

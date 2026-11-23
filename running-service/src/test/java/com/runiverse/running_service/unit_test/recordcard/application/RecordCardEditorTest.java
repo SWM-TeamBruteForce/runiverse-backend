@@ -7,7 +7,7 @@ import com.runiverse.running_service.application.recordcard.exception.InvalidRec
 import com.runiverse.running_service.application.recordcard.exception.RecordCardNotFoundException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardThumbnailOutOfRangeException;
 import com.runiverse.running_service.application.recordcard.port.out.LoadLastRecordCardHistoryPort;
-import com.runiverse.running_service.application.recordcard.port.out.LoadOwnRecordCardForUpdatePort;
+import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRunningSummaryPort;
 import com.runiverse.running_service.application.recordcard.port.out.RecordCardMusicRequest;
 import com.runiverse.running_service.application.recordcard.port.out.RecordCardMusicRequest.Photo;
@@ -61,7 +61,7 @@ class RecordCardEditorTest {
             LocalDateTime.of(2026, 10, 19, 6, 30), 61, new BigDecimal("15.0"), 22);
 
     @Mock
-    private LoadOwnRecordCardForUpdatePort loadOwnRecordCardForUpdatePort;
+    private LoadRecordCardForUpdatePort loadRecordCardForUpdatePort;
     @Mock
     private SnapshotRecordCardPort snapshotRecordCardPort;
     @Mock
@@ -77,7 +77,7 @@ class RecordCardEditorTest {
 
     @BeforeEach
     void setUp() {
-        editor = new RecordCardEditor(loadOwnRecordCardForUpdatePort, snapshotRecordCardPort, updateRecordCardPort,
+        editor = new RecordCardEditor(loadRecordCardForUpdatePort, snapshotRecordCardPort, updateRecordCardPort,
                 loadRunningSummaryPort, requestRecordCardMusicPort, loadLastRecordCardHistoryPort);
     }
 
@@ -85,7 +85,7 @@ class RecordCardEditorTest {
     @DisplayName("없는 카드는 404이고 아무것도 쓰지 않는다")
     void notFound() {
         // given
-        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
+        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
                 .thenReturn(Optional.empty());
 
         // when & then
@@ -99,7 +99,7 @@ class RecordCardEditorTest {
     void othersCard() {
         // given
         UUID stranger = UuidCreator.getTimeOrderedEpoch();
-        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(stranger)))
+        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(stranger)))
                 .thenReturn(Optional.empty());
 
         // when & then
@@ -225,7 +225,7 @@ class RecordCardEditorTest {
                         RecordCardImage.restore(IMAGE_B, "record-cards/b.jpg", null, "audio/b.wav",
                                 MusicStatus.COMPLETED, 1)))
                 .build();
-        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
+        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
                 .thenReturn(Optional.of(card));
     }
 

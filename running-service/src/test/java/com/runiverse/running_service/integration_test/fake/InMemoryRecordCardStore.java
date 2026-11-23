@@ -6,7 +6,6 @@ import com.runiverse.running_service.application.recordcard.port.out.ExistsOwnRu
 import com.runiverse.running_service.application.recordcard.port.out.FindRecordCardIdByRunningRecordPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadLastRecordCardHistoryPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadMaxDisplayOrderPort;
-import com.runiverse.running_service.application.recordcard.port.out.LoadOwnRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardDetailPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRunningSummaryPort;
@@ -40,8 +39,8 @@ import java.util.UUID;
 // 잠금은 흉내 내지 않는다(한 스레드라 줄 설 일이 없다)
 public class InMemoryRecordCardStore implements ExistsOwnRunningRecordPort, LockOwnRunningRecordPort,
         FindRecordCardIdByRunningRecordPort, LoadMaxDisplayOrderPort, CreateRecordCardPort, LoadRunningSummaryPort,
-        LoadRecordCardDetailPort, LoadRecordCardForUpdatePort, LoadOwnRecordCardForUpdatePort, SnapshotRecordCardPort,
-        DeleteRecordCardPort, UpdateRecordCardPort, LoadLastRecordCardHistoryPort, SaveRecordCardMusicPort {
+        LoadRecordCardDetailPort, LoadRecordCardForUpdatePort, SnapshotRecordCardPort, DeleteRecordCardPort,
+        UpdateRecordCardPort, LoadLastRecordCardHistoryPort, SaveRecordCardMusicPort {
 
     // 기록마다 같은 수치를 돌려준다 — 요약 값 자체는 어댑터 단위 테스트와 E2E가 본다
     public static final RunningSummary SUMMARY = new RunningSummary(5000, 1800, 360, 168,

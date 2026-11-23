@@ -4,7 +4,7 @@ import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.recordcard.command.retrymusic.RetryRecordCardMusicCommand;
 import com.runiverse.running_service.application.recordcard.command.retrymusic.RetryRecordCardMusicHandler;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardNotFoundException;
-import com.runiverse.running_service.application.recordcard.port.out.LoadOwnRecordCardForUpdatePort;
+import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRunningSummaryPort;
 import com.runiverse.running_service.application.recordcard.port.out.RecordCardMusicRequest;
 import com.runiverse.running_service.application.recordcard.port.out.RecordCardMusicRequest.RunningSummary;
@@ -54,7 +54,7 @@ class RetryRecordCardMusicHandlerTest {
             LocalDateTime.of(2026, 11, 3, 7, 10), 61, new BigDecimal("15.0"), null);
 
     @Mock
-    private LoadOwnRecordCardForUpdatePort loadOwnRecordCardForUpdatePort;
+    private LoadRecordCardForUpdatePort loadRecordCardForUpdatePort;
     @Mock
     private SaveRecordCardMusicPort saveRecordCardMusicPort;
     @Mock
@@ -66,7 +66,7 @@ class RetryRecordCardMusicHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new RetryRecordCardMusicHandler(loadOwnRecordCardForUpdatePort, saveRecordCardMusicPort,
+        handler = new RetryRecordCardMusicHandler(loadRecordCardForUpdatePort, saveRecordCardMusicPort,
                 loadRunningSummaryPort, requestRecordCardMusicPort);
     }
 
@@ -75,7 +75,7 @@ class RetryRecordCardMusicHandlerTest {
     void retriesFailedOnly() {
         // given — 기본곡·a는 완료, b만 실패
         RecordCard card = card(OWNER_ID, MusicStatus.COMPLETED, MusicStatus.FAILED);
-        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
+        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
                 .thenReturn(Optional.of(card));
         when(loadRunningSummaryPort.load(card.getRunningRecordId())).thenReturn(Optional.of(SUMMARY));
 
@@ -102,7 +102,7 @@ class RetryRecordCardMusicHandlerTest {
     void nothingFailed() {
         // given
         RecordCard card = card(OWNER_ID, MusicStatus.COMPLETED, MusicStatus.GENERATING);
-        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
+        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
                 .thenReturn(Optional.of(card));
 
         // when
@@ -117,7 +117,7 @@ class RetryRecordCardMusicHandlerTest {
     @DisplayName("없는 카드(지운 카드 포함)는 404이고 아무것도 쓰지 않는다")
     void notFound() {
         // given
-        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
+        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
                 .thenReturn(Optional.empty());
 
         // when & then
@@ -130,7 +130,7 @@ class RetryRecordCardMusicHandlerTest {
     void othersCard() {
         // given
         UUID stranger = UuidCreator.getTimeOrderedEpoch();
-        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(stranger)))
+        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(stranger)))
                 .thenReturn(Optional.empty());
 
         // when & then
@@ -143,7 +143,7 @@ class RetryRecordCardMusicHandlerTest {
     void missingSummary() {
         // given
         RecordCard card = card(OWNER_ID, MusicStatus.FAILED, MusicStatus.FAILED);
-        when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
+        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
                 .thenReturn(Optional.of(card));
         when(loadRunningSummaryPort.load(card.getRunningRecordId())).thenReturn(Optional.empty());
 

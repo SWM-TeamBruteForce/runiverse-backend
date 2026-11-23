@@ -5,7 +5,6 @@ import com.runiverse.running_service.application.recordcard.port.out.DeleteRecor
 import com.runiverse.running_service.application.recordcard.port.out.FindRecordCardIdByRunningRecordPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadLastRecordCardHistoryPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadMaxDisplayOrderPort;
-import com.runiverse.running_service.application.recordcard.port.out.LoadOwnRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardDetailPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardSummariesPort;
@@ -46,9 +45,9 @@ import java.util.stream.Collectors;
 @Component
 @RequiredArgsConstructor
 public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRecordPort, LoadMaxDisplayOrderPort,
-        CreateRecordCardPort, LoadRecordCardForUpdatePort, LoadOwnRecordCardForUpdatePort, SaveRecordCardMusicPort,
-        LoadRecordCardDetailPort, SnapshotRecordCardPort, DeleteRecordCardPort, UpdateRecordCardPort,
-        LoadLastRecordCardHistoryPort, LoadRecordCardSummariesPort {
+        CreateRecordCardPort, LoadRecordCardForUpdatePort, SaveRecordCardMusicPort, LoadRecordCardDetailPort,
+        SnapshotRecordCardPort, DeleteRecordCardPort, UpdateRecordCardPort, LoadLastRecordCardHistoryPort,
+        LoadRecordCardSummariesPort {
 
     private static final String UK_RUNNING_RECORD = "uk_record_card_running_record";
     private static final String UK_USER_DISPLAY_ORDER = "uk_record_card_user_display_order";
