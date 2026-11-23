@@ -86,7 +86,7 @@ class DeleteRecordCardHandlerTest {
     }
 
     @Test
-    @DisplayName("남의 카드는 요청한 사람 ID로 찾아 없는 카드와 같은 404다 — 주인 확인은 잠그기 전 조회가 한다")
+    @DisplayName("남의 카드는 요청한 사람 ID로 찾아 없는 카드와 같은 404다")
     void othersCard() {
         // given
         UUID stranger = UuidCreator.getTimeOrderedEpoch();

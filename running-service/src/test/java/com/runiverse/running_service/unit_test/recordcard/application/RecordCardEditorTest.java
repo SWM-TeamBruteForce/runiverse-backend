@@ -95,7 +95,7 @@ class RecordCardEditorTest {
     }
 
     @Test
-    @DisplayName("남의 카드는 요청한 사람 ID로 찾아 없는 카드와 같은 404다 — 주인 확인은 잠그기 전 조회가 한다")
+    @DisplayName("남의 카드는 요청한 사람 ID로 찾아 없는 카드와 같은 404다")
     void othersCard() {
         // given
         UUID stranger = UuidCreator.getTimeOrderedEpoch();
@@ -122,7 +122,7 @@ class RecordCardEditorTest {
     }
 
     @Test
-    @DisplayName("사진 목록 없이 보낸 썸네일 위치가 지금 사진 수 밖이면 400 RECORD_CARD_THUMBNAIL_OUT_OF_RANGE이고 아무것도 쓰지 않는다")
+    @DisplayName("사진 목록 없이 보낸 썸네일 위치가 지금 사진 수 밖이면 400 INVALID_REQUEST이고 아무것도 쓰지 않는다")
     void thumbnailOutOfRangeWithoutSlots() {
         // given -> 사진 두 장인 카드
         givenCard();
