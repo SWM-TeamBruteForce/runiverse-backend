@@ -2573,7 +2573,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 |---|---|---|---|
 | `recordCard` | Object | X | 기록 카드 요약. 카드가 없으면 null |
 | `recordCard.recordCardId` | String | O | 기록 카드 ID(UUID) — 탭하면 8-1로 상세, 작성 화면에서는 9-3 수정으로 간다 |
-| `recordCard.thumbnailUrl` | String | X | 대표 사진의 **작은 버전(썸네일)** URL(presigned GET, 8-1과 같은 유효 시간) — 10-3과 같다. **사진이 없는 카드는 null** |
+| `recordCard.thumbnailUrl` | String | X | 대표 사진의 **작은 버전(썸네일)** URL(presigned GET, 8-1과 같은 유효 시간) — 10-3과 같다. 만료되면 7-1을 다시 조회한다. **사진이 없는 카드는 null** |
 | `recordCard.routeArt` | Number[][][] | X | **사진이 없는 카드만** 선 아트를 싣는다 — 8-1 「경로 선 아트」와 같은 규칙이고 **점은 최대 50개**다(달력 칸이 작다). 사진이 있으면 null. 경로가 없으면 빈 배열 |
 
   - **내 기록이라 공개 범위와 상관없이 카드를 싣는다** — `PRIVATE` 카드도 실린다
@@ -2696,7 +2696,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | `*.musicUrl` | String | X | 음악 URL. **`COMPLETED`일 때만 값이 있고** 나머지는 null |
 | `companions` | Array | O | **같이 뛴 사람** — 카드가 붙은 러닝을 함께 출발한 참가자(6-1 `players`와 같은 기준) 중 작성자를 뺀 사람. 솔로 러닝이면 빈 배열 |
 | `companions[]` | Object | O | `userId`·`nickname`·`profileImageUrl`(사진이 없으면 null) — 작성자(`author`)와 같은 모양 |
-| `createdAt` · `updatedAt` | String | O | 카드 생성·수정 시각 |
+| `createdAt` · `updatedAt` | String | O | 카드를 만든 시각 · 카드 행(`record_cards`)이 마지막으로 바뀐 시각 — 회고 글·활동유형·공개 범위·썸네일·기본곡(상태·key)이 바뀌면 바뀌고, 사진 설명·순서만 고치면 그대로다 |
 
 - **음악은 카드를 만든 직후 `GENERATING`이다** — AI가 만드는 데 시간이 걸린다. 클라는 `GENERATING`이면 생성 중으로 표시하고, 다시 보려면 8-1을 다시 조회한다. 완료를 밀어 주는 통지는 아직 없다 — **[이후]** 앱 스트림(`/app/stream`)으로 완료 이벤트를 보낼 수 있다
 - **`FAILED`면 그 장은 음악 없이 보여준다** — 작성자는 9-6으로 실패한 음악을 다시 만들 수 있다
@@ -3418,6 +3418,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
   | 9-6 음악 다시 만들기 | `FAILED`인 것만 — 실패한 사진, 기본곡은 `FAILED`일 때만 | 실패한 사진 |
 
   - 끝난 기본곡은 9-3·9-6 모두 되돌리지 않는다(9-6은 `FAILED`인 기본곡만 되돌린다) — AI 서버가 요청마다 기본곡을 다시 만들어 보내고, 받는 쪽은 끝난 기본곡에도 그 결과(성공·실패)로 덮어쓴다(9-3)
+  - **음악이 만들어지는 중에 같은 사진을 다시 고치면 먼저 처리한 결과가 남는다** — 사진 음악은 `GENERATING`일 때만 바꿔 뒤 요청의 결과는 건너뛴다. 먼저 온 결과가 실패면 뒤가 성공해도 `FAILED`로 남아 다시 만들기(9-6)로 푼다. 그사이 활동유형까지 바꿨으면(key 경로에 활동유형이 들어가 경로가 다르다) 옛 활동유형으로 만든 곡이 `COMPLETED`로 남는다 — 다시 만들기 대상이 아니고, 설명을 다시 고치면 새로 만든다
   - 9-6은 사진을 다시 올리지 않아 확정 단계가 없다. 9-3은 새 사진을 올리므로 9-2 확정을 거친다
 
 - **요청 이벤트는 아웃박스 + CDC로 발행한다** — running-service는 카드 저장과 같은 트랜잭션에서 아웃박스 테이블에 쓰고, Debezium(Outbox Event Router)이 커밋된 행을 요청 토픽에 발행한다. 쓰는 규칙은 [msa/outbox-inbox.md](msa/outbox-inbox.md), 발행 경로는 [msa/cdc.md](msa/cdc.md)
@@ -3563,7 +3564,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
 | `recordCardId` | String | O | 기록 카드 ID(UUID) |
-| `thumbnailUrl` | String | X | 대표 사진의 **작은 버전(썸네일)** URL(presigned GET, 8-1과 같은 유효 시간) — key는 대표 사진 원본 key의 `thumbnail/` 아래(9-1). 기본은 첫 사진, 작성자가 고르면 그 사진. **사진이 없는 카드는 null** — 클라가 기본 썸네일을 그린다 |
+| `thumbnailUrl` | String | X | 대표 사진의 **작은 버전(썸네일)** URL(presigned GET, 8-1과 같은 유효 시간) — key는 대표 사진 원본 key의 `thumbnail/` 아래(9-1). 기본은 첫 사진, 작성자가 고르면 그 사진. 만료되면 10-3을 다시 조회한다. **사진이 없는 카드는 null** — 클라가 기본 썸네일을 그린다 |
 | `imageCount` | Integer | O | 사진 장수(0~5) |
 | `startedAt` | String | O | 카드가 붙은 러닝의 시작 시각 |
 | `totalDistanceMeters` | Integer | O | 그 러닝의 총 이동 거리(m) |
