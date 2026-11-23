@@ -124,7 +124,7 @@ public class RecordCardController {
         return ResponseEntity.ok(CreateRecordCardDraftResponse.from(result));
     }
 
-    // 9-2 — 본문 없이 초안 ID만 받는다. 카드가 생기므로 201, 같은 초안으로 다시 불러도 같은 카드 ID다
+    // 9-2 — 본문 없이 초안 ID만 받는다. 작성·수정 확정 모두 201이고, 같은 초안으로 다시 불러도 같은 카드 ID다
     @PostMapping("drafts/{recordCardDraftId}/complete")
     public ResponseEntity<CompleteRecordCardDraftResponse> completeDraft(
             @AuthenticationPrincipal Jwt jwt,
