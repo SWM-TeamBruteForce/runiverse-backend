@@ -17,6 +17,7 @@ public final class LogTag {
             "notification", "[알림]",
             "app", "[앱]",
             "device", "[기기]",
+            "recordcard", "[기록 카드]",
             RequestDomain.COMMON, "[공통]"
     );
 

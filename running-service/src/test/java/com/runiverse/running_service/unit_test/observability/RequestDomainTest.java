@@ -7,6 +7,7 @@ import com.runiverse.running_service.presentation.common.exception.GlobalExcepti
 import com.runiverse.running_service.presentation.device.controller.DeviceController;
 import com.runiverse.running_service.presentation.match.controller.MatchRoomController;
 import com.runiverse.running_service.presentation.notification.controller.UserNotificationController;
+import com.runiverse.running_service.presentation.recordcard.controller.RecordCardController;
 import com.runiverse.running_service.presentation.relationship.controller.RelationshipController;
 import com.runiverse.running_service.presentation.running.controller.RunningRoomController;
 import com.runiverse.running_service.presentation.user.controller.UserController;
@@ -36,7 +37,8 @@ class RequestDomainTest {
                 Arguments.of(RunningRoomController.class, "running"),
                 Arguments.of(UserNotificationController.class, "notification"),
                 Arguments.of(AppController.class, "app"),
-                Arguments.of(DeviceController.class, "device")
+                Arguments.of(DeviceController.class, "device"),
+                Arguments.of(RecordCardController.class, "recordcard")
         );
     }
 

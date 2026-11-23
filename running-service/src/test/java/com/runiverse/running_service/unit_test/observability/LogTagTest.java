@@ -7,6 +7,7 @@ import com.runiverse.running_service.presentation.common.exception.GlobalExcepti
 import com.runiverse.running_service.presentation.device.controller.DeviceController;
 import com.runiverse.running_service.presentation.match.controller.MatchRoomController;
 import com.runiverse.running_service.presentation.notification.controller.UserNotificationController;
+import com.runiverse.running_service.presentation.recordcard.controller.RecordCardController;
 import com.runiverse.running_service.presentation.relationship.controller.RelationshipController;
 import com.runiverse.running_service.presentation.running.controller.RunningRoomController;
 import com.runiverse.running_service.presentation.user.controller.UserController;
@@ -36,7 +37,8 @@ public class LogTagTest {
                 Arguments.of(RunningRoomController.class, "[러닝]"),
                 Arguments.of(UserNotificationController.class, "[알림]"),
                 Arguments.of(AppController.class, "[앱]"),
-                Arguments.of(DeviceController.class, "[기기]")
+                Arguments.of(DeviceController.class, "[기기]"),
+                Arguments.of(RecordCardController.class, "[기록 카드]")
         );
     }
 
