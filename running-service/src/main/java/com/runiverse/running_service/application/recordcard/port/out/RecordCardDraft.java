@@ -85,7 +85,7 @@ public record RecordCardDraft(
             boolean merged,             // 조각을 합쳤는지 — 다른 사진 때문에 확정이 실패해 다시 부를 때 다시 합치지 않는다
             long thumbnailFileSizeBytes // 작은 버전(썸네일) 크기 — 확정 때 실물과 대조한다. key는 원본 key에서 계산한다
                                         // (RecordCardStorageKeys.thumbnailKeyOf), 형식은 원본과 같다.
-                                        // 이 값이 없던 초안은 읽기부터 실패한다(Jackson 3 FAIL_ON_NULL_FOR_PRIMITIVES, 9-2가 500) —
+                                        // 이 값이 없던 초안은 읽기부터 실패한다(Jackson 3 FAIL_ON_NULL_FOR_PRIMITIVES, 확정이 500) —
                                         // 초안은 30분이면 사라져 옮기지 않는다
     ) {
 
