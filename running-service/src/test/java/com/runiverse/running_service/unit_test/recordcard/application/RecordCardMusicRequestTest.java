@@ -153,9 +153,9 @@ class RecordCardMusicRequestTest {
     }
 
     @Test
-    @DisplayName("다시 만들기 요청은 기본곡과 카드 사진 전부를 카드 순서대로 싣는다")
-    void forRetryCarriesAllPhotos() {
-        // given — 사진 음악 하나가 실패한 카드를 다시 만든다
+    @DisplayName("다시 만들기 요청은 실패해서 되돌린 사진만 싣는다 — 완료된 사진은 싣지 않는다")
+    void forRetryCarriesFailedPhotosOnly() {
+        // given — 첫 사진은 완료, 둘째 사진만 실패한 카드를 다시 만든다
         RecordCard card = card(List.of(
                 new ImageDraft(IMAGE_ID_1, "record-cards/u/c/1/first.jpg", "출발선"),
                 new ImageDraft(IMAGE_ID_2, "record-cards/u/c/2/second.png", null)));
@@ -170,25 +170,32 @@ class RecordCardMusicRequestTest {
         // then
         assertThat(request.recordCardId()).isEqualTo(CARD_ID);
         assertThat(request.memo()).isEqualTo("한강 한 바퀴");
-        assertThat(request.photos()).containsExactly(
-                new Photo(IMAGE_ID_1, "record-cards/u/c/1/first.jpg", "출발선"),
-                new Photo(IMAGE_ID_2, "record-cards/u/c/2/second.png", null));
+        assertThat(request.photos()).containsExactly(new Photo(IMAGE_ID_2, "record-cards/u/c/2/second.png", null));
     }
 
     @Test
-    @DisplayName("되돌리지 않은 카드(끝난 음악이 섞임)로는 다시 만들기 요청을 만들 수 없다")
-    void forRetryRejectsFinishedMusic() {
-        // given — 기본곡은 완료, 사진은 생성 중
-        RecordCard baseDone = card(List.of(new ImageDraft(IMAGE_ID_1, "k1", null)));
-        baseDone.completeBaseMusic(MusicStatus.COMPLETED, "audio/base.wav");
-        // given — 기본곡은 생성 중, 사진은 실패
-        RecordCard photoFailed = card(List.of(new ImageDraft(IMAGE_ID_1, "k1", null)));
-        photoFailed.completeImageMusic(IMAGE_ID_1, MusicStatus.FAILED, null);
+    @DisplayName("기본곡만 실패했으면 사진 없이 기본곡만 요청한다")
+    void forRetryBaseOnly() {
+        // given
+        RecordCard card = card(List.of(new ImageDraft(IMAGE_ID_1, "k1", null)));
+        card.completeImageMusic(IMAGE_ID_1, MusicStatus.COMPLETED, "audio/1.wav");
+        card.completeBaseMusic(MusicStatus.FAILED, null);
+        card.retryMusic();
 
         // when & then
-        assertThatThrownBy(() -> RecordCardMusicRequest.forRetry(baseDone, SUMMARY))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> RecordCardMusicRequest.forRetry(photoFailed, SUMMARY))
+        assertThat(RecordCardMusicRequest.forRetry(card, SUMMARY).photos()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("되돌린 음악이 하나도 없으면(기본곡·사진 모두 끝남) 다시 만들기 요청을 만들 수 없다")
+    void forRetryRejectsNothingToRegenerate() {
+        // given
+        RecordCard done = card(List.of(new ImageDraft(IMAGE_ID_1, "k1", null)));
+        done.completeBaseMusic(MusicStatus.COMPLETED, "audio/base.wav");
+        done.completeImageMusic(IMAGE_ID_1, MusicStatus.COMPLETED, "audio/1.wav");
+
+        // when & then
+        assertThatThrownBy(() -> RecordCardMusicRequest.forRetry(done, SUMMARY))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

@@ -98,7 +98,7 @@ public class RecordCardController {
         return ResponseEntity.noContent().build();
     }
 
-    // 9-6 — 204, 본문 없음. 실패한 음악이 있으면 카드의 음악 전체를 다시 요청하고, 없으면 아무것도 하지 않는다.
+    // 9-6 — 204, 본문 없음. 실패한 음악만 다시 요청하고(완료된 음악은 그대로), 실패가 없으면 아무것도 하지 않는다.
     // 음악은 AI가 나중에 만든다 — 카드는 8-1로 다시 읽는다
     @PostMapping("{recordCardId}/retry")
     public ResponseEntity<Void> retry(

@@ -876,9 +876,9 @@ class RecordCardTest {
     class RetryMusic {
 
         @Test
-        @DisplayName("사진 음악 하나만 실패해도 기본곡과 사진 전부를 key 없이 생성 중으로 되돌린다")
-        void photoFailedRestartsAll() {
-            // given — 기본곡·a·c는 완료, b만 실패
+        @DisplayName("실패한 사진만 key 없이 생성 중으로 되돌리고, 완료된 기본곡·사진은 key까지 그대로 둔다 — 수정 요청만 실패한 경우")
+        void restartsFailedPhotoOnly() {
+            // given — 기본곡·a·c는 완료, 수정으로 넣은 b만 실패
             RecordCard card = restored(List.of(
                     storedImage(1, "a", 0),
                     RecordCardImage.restore(id(2), imageKey("b"), null, null, MusicStatus.FAILED, 1),
@@ -889,19 +889,37 @@ class RecordCardTest {
 
             // then
             assertThat(restarted).isTrue();
-            assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.GENERATING);
-            assertThat(card.getBaseMusicKey()).isEmpty();
-            assertThat(card.getImages()).allSatisfy(image -> {
-                assertThat(image.getMusicStatus()).isEqualTo(MusicStatus.GENERATING);
-                assertThat(image.getMusicKey()).isEmpty();
-            });
+            assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.COMPLETED);
+            assertThat(card.getBaseMusicKey()).contains(new MusicKey(BASE_MUSIC_KEY));
+            assertThat(card.getImages()).extracting(RecordCardImage::getMusicStatus)
+                    .containsExactly(MusicStatus.COMPLETED, MusicStatus.GENERATING, MusicStatus.COMPLETED);
+            assertThat(card.getImages().get(0).getMusicKey()).contains(new MusicKey(musicKey("a")));
+            assertThat(card.getImages().get(1).getMusicKey()).isEmpty();
+            assertThat(card.getImages().get(2).getMusicKey()).contains(new MusicKey(musicKey("c")));
         }
 
         @Test
-        @DisplayName("기본곡만 실패해도 사진 음악까지 전부 다시 만든다")
-        void baseFailedRestartsAll() {
-            // given
+        @DisplayName("기본곡이 실패했으면 기본곡도 key 없이 생성 중으로 되돌린다 — 완료·생성 중인 사진은 그대로")
+        void restartsFailedBase() {
+            // given — a 완료, b 실패, c 생성 중
             RecordCard card = restoredWithThreeImages();
+            card.completeBaseMusic(MusicStatus.FAILED, null);
+
+            // when & then
+            assertThat(card.retryMusic()).isTrue();
+            assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.GENERATING);
+            assertThat(card.getBaseMusicKey()).isEmpty();
+            assertThat(card.getImages()).extracting(RecordCardImage::getMusicStatus)
+                    .containsExactly(MusicStatus.COMPLETED, MusicStatus.GENERATING, MusicStatus.GENERATING);
+        }
+
+        @Test
+        @DisplayName("처음 만든 카드가 통째로 실패했으면 전부 실패라 전부 되돌린다")
+        void allFailed() {
+            // given
+            RecordCard card = restored(List.of(
+                    RecordCardImage.restore(id(1), imageKey("a"), null, null, MusicStatus.FAILED, 0),
+                    RecordCardImage.restore(id(2), imageKey("b"), null, null, MusicStatus.FAILED, 1)), imageKey("a"));
             card.completeBaseMusic(MusicStatus.FAILED, null);
 
             // when & then

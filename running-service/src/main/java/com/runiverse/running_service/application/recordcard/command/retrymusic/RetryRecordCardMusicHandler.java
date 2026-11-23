@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
-// 9-6 음악 다시 만들기 — 내 카드 확인 → 기록 행 잠금 → 도메인이 되돌림 → 음악 상태 저장 → 요청(아웃박스).
+// 9-6 음악 다시 만들기 — 내 카드 확인 → 기록 행 잠금 → 도메인이 실패한 음악만 되돌림 → 음악 상태 저장 → 요청(아웃박스).
 // 한 트랜잭션이라 상태와 요청이 함께 커밋된다. 카드 내용이 바뀌지 않아 이력을 남기지 않는다 —
 // 그래서 진행 중인 수정 초안의 확정(9-2)이 409를 받지 않는다. 돌려주는 값은 없다 — 카드는 8-1로 다시 읽는다
 @Slf4j
@@ -46,12 +46,13 @@ public class RetryRecordCardMusicHandler implements RetryRecordCardMusicUsecase 
             return;
         }
 
-        // 3. 음악 상태만 쓰고 같은 트랜잭션에서 요청을 아웃박스에 쓴다 — 사진은 카드 전부다
+        // 3. 음악 상태만 쓰고 같은 트랜잭션에서 요청을 아웃박스에 쓴다 — 사진은 실패해서 되돌린 것만 싣는다
         saveRecordCardMusicPort.saveMusic(card);
         RecordCardMusicRequest.RunningSummary summary = loadRunningSummaryPort.load(card.getRunningRecordId())
                 .orElseThrow(() -> new IllegalStateException("카드가 붙은 기록의 수치가 없습니다"));
-        requestRecordCardMusicPort.request(RecordCardMusicRequest.forRetry(card, summary));
-        log.info("[기록 카드] 음악 다시 만들기 요청 성공 - recordCardId={}, imageCount={}",
-                recordCardId, card.getImages().size());
+        RecordCardMusicRequest request = RecordCardMusicRequest.forRetry(card, summary);
+        requestRecordCardMusicPort.request(request);
+        log.info("[기록 카드] 음악 다시 만들기 요청 성공 - recordCardId={}, regeneratedImageCount={}",
+                recordCardId, request.photos().size());
     }
 }

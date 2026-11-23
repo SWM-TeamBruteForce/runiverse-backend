@@ -71,8 +71,8 @@ class RetryRecordCardMusicHandlerTest {
     }
 
     @Test
-    @DisplayName("실패한 음악이 있으면 카드 음악 전체를 생성 중으로 저장한 뒤 사진 전부를 실어 요청한다")
-    void retriesAll() {
+    @DisplayName("실패한 사진만 생성 중으로 저장한 뒤 그 사진만 실어 요청한다 — 완료된 기본곡·사진은 그대로")
+    void retriesFailedOnly() {
         // given — 기본곡·a는 완료, b만 실패
         RecordCard card = card(OWNER_ID, MusicStatus.COMPLETED, MusicStatus.FAILED);
         when(loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
@@ -88,12 +88,13 @@ class RetryRecordCardMusicHandlerTest {
         ArgumentCaptor<RecordCardMusicRequest> captor = ArgumentCaptor.forClass(RecordCardMusicRequest.class);
         order.verify(requestRecordCardMusicPort).request(captor.capture());
 
-        assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.GENERATING);
-        assertThat(card.getImages()).extracting(RecordCardImage::getMusicStatus).containsOnly(MusicStatus.GENERATING);
+        assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.COMPLETED);
+        assertThat(card.getImages()).extracting(RecordCardImage::getMusicStatus)
+                .containsExactly(MusicStatus.COMPLETED, MusicStatus.GENERATING);
         assertThat(captor.getValue().recordCardId()).isEqualTo(CARD_ID);
         assertThat(captor.getValue().runningSummary()).isSameAs(SUMMARY);
         assertThat(captor.getValue().photos()).extracting(RecordCardMusicRequest.Photo::recordCardImageId)
-                .containsExactly(IMAGE_A, IMAGE_B);
+                .containsExactly(IMAGE_B);
     }
 
     @Test

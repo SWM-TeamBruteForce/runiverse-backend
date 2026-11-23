@@ -98,24 +98,22 @@ class RetryRecordCardMusicIntegrationTest {
     }
 
     @Test
-    @DisplayName("실패한 음악이 있으면 카드 음악 전체를 key 없이 생성 중으로 저장하고, 사진 전부를 실은 요청 한 건을 보낸다")
-    void retriesAll() {
+    @DisplayName("실패한 사진만 key 없이 생성 중으로 저장하고 그 사진만 실은 요청 한 건을 보낸다 — 완료된 기본곡·사진은 key까지 그대로")
+    void retriesFailedOnly() {
         // when
         retryHandler.handle(new RetryRecordCardMusicCommand(owner, cardId));
 
         // then
         RecordCard card = card();
-        assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.GENERATING);
-        assertThat(card.getBaseMusicKey()).isEmpty();
-        assertThat(card.getImages()).allSatisfy(image -> {
-            assertThat(image.getMusicStatus()).isEqualTo(MusicStatus.GENERATING);
-            assertThat(image.getMusicKey()).isEmpty();
-        });
+        assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.COMPLETED);
+        assertThat(card.getBaseMusicKey()).map(key -> key.value()).contains("audio/base.wav");
+        assertThat(card.getImages()).extracting(RecordCardImage::getMusicStatus)
+                .containsExactly(MusicStatus.COMPLETED, MusicStatus.GENERATING);
+        assertThat(card.getImages().get(0).getMusicKey()).map(key -> key.value()).contains("audio/a.wav");
+        assertThat(card.getImages().get(1).getMusicKey()).isEmpty();
         assertThat(musicRequests.requests()).singleElement().satisfies(request -> {
             assertThat(request.recordCardId()).isEqualTo(cardId);
-            assertThat(request.photos()).containsExactly(
-                    new Photo(A, "record-cards/u/c/a/a.jpg", "노을"),
-                    new Photo(B, "record-cards/u/c/b/b.jpg", null));
+            assertThat(request.photos()).containsExactly(new Photo(B, "record-cards/u/c/b/b.jpg", null));
         });
         assertThat(recordCardStore.snapshots()).isEmpty();
         assertThat(recordCardStore.updateCount()).isZero();

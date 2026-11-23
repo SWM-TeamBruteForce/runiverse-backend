@@ -651,7 +651,7 @@ class RecordCardE2eTest extends E2eTestSupport {
     }
 
     @Test
-    @DisplayName("음악 다시 만들기(9-6) — 204. 실패한 음악이 있으면 카드 음악 전체를 생성 중으로 되돌리고 사진 전부를 요청한다. 없으면 아무것도 하지 않는다")
+    @DisplayName("음악 다시 만들기(9-6) — 204. 실패한 음악만 생성 중으로 되돌리고 그것만 요청한다(완료된 곡은 그대로). 없으면 아무것도 하지 않는다")
     @SuppressWarnings("unchecked")
     void retryMusic() {
         // given - 사진 두 장 카드. E2E는 AI가 없어 음악 결과를 DB에 직접 넣는다(기본곡·첫 사진 완료, 둘째 사진 실패)
@@ -694,17 +694,17 @@ class RecordCardE2eTest extends E2eTestSupport {
         // when
         Response retried = post(retryPath, Map.of(), owner.accessToken());
 
-        // then - 204 본문 없음. 다시 읽은 상세(8-1)와 DB 모두 음악이 key 없이 전부 GENERATING이다
+        // then - 204 본문 없음. 실패한 둘째 사진만 key 없이 GENERATING이고, 완료된 기본곡·첫 사진은 key까지 그대로다
         assertThat(retried.status()).isEqualTo(204);
         Response detail = get("/record-cards/" + recordCardId, owner.accessToken());
-        assertThat(((Map<String, Object>) detail.body().get("baseMusic")).get("status")).isEqualTo("GENERATING");
+        assertThat(((Map<String, Object>) detail.body().get("baseMusic")).get("status")).isEqualTo("COMPLETED");
         assertThat((List<Map<String, Object>>) detail.body().get("images"))
                 .extracting(image -> ((Map<String, Object>) image.get("music")).get("status"))
-                .containsExactly("GENERATING", "GENERATING");
+                .containsExactly("COMPLETED", "GENERATING");
         assertThat(querySql(musicStates.formatted(recordCardId))).containsExactly(
-                "base|GENERATING|-", "image|GENERATING|-", "image|GENERATING|-");
-        // 사진 전부를 실은 요청이 한 건 더 나가고, 이력은 남기지 않는다
-        assertThat(querySql(outboxPhotos.formatted(recordCardId))).containsExactly("2", "2");
+                "base|COMPLETED|audio/base.wav", "image|COMPLETED|audio/1.wav", "image|GENERATING|-");
+        // 실패한 사진 한 장만 실은 요청이 한 건 더 나가고, 이력은 남기지 않는다
+        assertThat(querySql(outboxPhotos.formatted(recordCardId))).containsExactly("2", "1");
         assertThat(querySql("SELECT count(*) FROM record_card_histories WHERE record_card_id = '%s'"
                 .formatted(recordCardId))).containsExactly("0");
 
@@ -713,7 +713,7 @@ class RecordCardE2eTest extends E2eTestSupport {
 
         // then - 같은 204이고 요청은 늘지 않는다
         assertThat(again.status()).isEqualTo(204);
-        assertThat(querySql(outboxPhotos.formatted(recordCardId))).containsExactly("2", "2");
+        assertThat(querySql(outboxPhotos.formatted(recordCardId))).containsExactly("2", "1");
     }
 
     @Test

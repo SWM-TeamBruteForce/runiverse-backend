@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 // AI 서버에 보낼 음악 생성 요청 — 보내는 형식(필드 이름·시간대)은 어댑터가 정한다.
-// 작성 확정(9-2)·다시 만들기(9-6)는 기본곡 + 카드 사진 전부를 요청한다
+// 작성 확정(9-2)은 기본곡 + 카드 사진 전부, 수정(9-3)·다시 만들기(9-6)는 다시 만들 사진만 요청한다
 public record RecordCardMusicRequest(
         UUID userId,
         UUID recordCardId,
@@ -78,15 +78,24 @@ public record RecordCardMusicRequest(
                 edit.imagesToRegenerate().stream().map(RecordCardMusicRequest::photoOf).toList());
     }
 
-    // 다시 만들기(9-6)가 보내는 요청 — 카드의 음악 전체(기본곡 + 사진 전부)를 다시 만든다.
-    // 전부 생성 중이어야 한다 — RecordCard.retryMusic이 되돌린 뒤에만 만들 수 있다. 끝난 음악이 섞여 있으면 순서가 틀린 것이다
+    // 다시 만들기(9-6)가 보내는 요청 — 생성 중인 사진(RecordCard.retryMusic이 되돌린 실패한 사진)만 싣는다.
+    // 완료된 사진은 싣지 않는다 — 다시 만들면 잘 만든 곡이 바뀐다. 기본곡은 싣지 않아도 AI 서버가 요청마다 만든다.
+    // 되돌린 음악이 하나도 없으면(기본곡도 사진도 생성 중이 아니면) 순서가 틀린 것이다
     public static RecordCardMusicRequest forRetry(RecordCard recordCard, RunningSummary runningSummary) {
-        boolean allGenerating = recordCard.getBaseMusicStatus().isGenerating()
-                && recordCard.getImages().stream().allMatch(image -> image.getMusicStatus().isGenerating());
-        if (!allGenerating) {
-            throw new IllegalArgumentException("다시 만들기는 카드의 음악이 전부 생성 중일 때만 요청할 수 있다");
+        List<Photo> photos = recordCard.getImages().stream()
+                .filter(image -> image.getMusicStatus().isGenerating())
+                .map(RecordCardMusicRequest::photoOf)
+                .toList();
+        if (!recordCard.getBaseMusicStatus().isGenerating() && photos.isEmpty()) {
+            throw new IllegalArgumentException("다시 만들 음악이 없는데 다시 만들기 요청을 만들 수 없다");
         }
-        return of(recordCard, runningSummary);
+        return new RecordCardMusicRequest(
+                recordCard.getUserId().value(),
+                recordCard.getRecordCardId().value(),
+                recordCard.getMemo().value(),
+                recordCard.getActivityType(),
+                runningSummary,
+                photos);
     }
 
     private static Photo photoOf(RecordCardImage image) {
