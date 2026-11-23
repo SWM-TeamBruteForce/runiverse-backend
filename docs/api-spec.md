@@ -2698,7 +2698,7 @@ data: {"runningRoomId":125,"status":"MATCHED", ...}
 | `*.musicUrl` | String | X | 음악 URL. **`COMPLETED`일 때만 값이 있고** 나머지는 null |
 | `companions` | Array | O | **같이 뛴 사람** — 카드가 붙은 러닝을 함께 출발한 참가자(6-1 `players`와 같은 기준) 중 작성자를 뺀 사람. 솔로 러닝이면 빈 배열 |
 | `companions[]` | Object | O | `userId`·`nickname`·`profileImageUrl`(사진이 없으면 null) — 작성자(`author`)와 같은 모양 |
-| `createdAt` · `updatedAt` | String | O | 카드를 만든 시각 · 카드 행(`record_cards`)이 마지막으로 바뀐 시각 — 회고 글·활동유형·공개 범위·썸네일·기본곡(상태·key)이 바뀌면 바뀌고, 사진 설명·순서만 고치면 그대로다 |
+| `createdAt` · `updatedAt` | String | O | 카드를 만든 시각 · 카드 행(`record_cards`)이 마지막으로 바뀐 시각 — 회고 글·활동유형·공개 범위·썸네일·기본곡(상태·key)이 바뀌면 바뀌고, 사진만 바뀌면(썸네일이 그대로인 더하기·빼기, 설명·순서, 사진 음악 결과) 그대로다 |
 
 - **음악은 카드를 만든 직후 `GENERATING`이다** — AI가 만드는 데 시간이 걸린다. 클라는 `GENERATING`이면 생성 중으로 표시하고, 다시 보려면 8-1을 다시 조회한다. 완료를 밀어 주는 통지는 아직 없다 — **[이후]** 앱 스트림(`/app/stream`)으로 완료 이벤트를 보낼 수 있다
 - **`FAILED`면 그 장은 음악 없이 보여준다** — 작성자는 9-6으로 실패한 음악을 다시 만들 수 있다
