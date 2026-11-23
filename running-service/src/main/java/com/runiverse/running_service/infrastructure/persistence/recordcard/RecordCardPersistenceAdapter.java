@@ -212,7 +212,6 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
         }
     }
 
-    // 카드의 사진을 캐러셀 순서대로 — uk_record_card_image_sort_order(record_card_id, sort_order)를 탄다
     @Override
     public Optional<RecordCardDetail> loadDetail(RecordCardId recordCardId) {
         // 1. 카드와 붙은 기록을 한 번에 읽는다 — PK로 한 행이다. 조회라 잠그지 않는다
@@ -388,6 +387,7 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
         return map;
     }
 
+    // 카드의 사진을 캐러셀 순서대로 — uk_record_card_image_sort_order(record_card_id, sort_order)를 탄다
     private List<RecordCardImageJpaEntity> loadImageEntities(UUID recordCardId) {
         return entityManager.createQuery("""
                         SELECT image
