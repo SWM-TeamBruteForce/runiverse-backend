@@ -717,10 +717,10 @@ class RecordCardE2eTest extends E2eTestSupport {
     }
 
     @Test
-    @DisplayName("기록 목록(7-1) — 기록마다 붙은 카드 요약을 싣는다: 사진 있는 카드는 썸네일 URL, 사진 없는 카드는 선 아트(50점 이하), 카드 없는 기록은 null")
+    @DisplayName("기록 목록(7-1) — 기록마다 붙은 카드 요약을 싣는다: 활동 유형과 함께 사진 있는 카드는 썸네일 URL, 사진 없는 카드는 선 아트(50점 이하), 카드 없는 기록은 null")
     @SuppressWarnings("unchecked")
     void runningRecordsCarryCardSummary() {
-        // given - 같은 날 세 번 뛰고, 첫째는 사진 카드, 둘째는 사진 없는 카드, 셋째는 카드 없음. 첫째는 비공개다
+        // given - 같은 날 세 번 뛰고, 첫째는 사진 카드(RACE), 둘째는 사진 없는 카드(DAILY), 셋째는 카드 없음. 첫째는 비공개다
         TestUser owner = signUpAndOnboard();
         long photoRecordId = finishSoloRun(owner);
         long lineRecordId = finishSoloRun(owner);
@@ -728,6 +728,7 @@ class RecordCardE2eTest extends E2eTestSupport {
         Map<String, Object> photoRequest = new HashMap<>(draftRequest(photoRecordId, List.of(
                 image("image/jpeg", SMALL_IMAGE_BYTES, "first.jpg", "출발선")), 0));
         photoRequest.put("visibility", "PRIVATE");
+        photoRequest.put("activityType", "RACE");
         Response photoDraft = post("/record-cards", photoRequest, owner.accessToken());
         uploadPhoto((String) photoDraft.objects("uploads").get(0).get("imageKey"), "image/jpeg",
                 SMALL_IMAGE_BYTES);
@@ -747,11 +748,13 @@ class RecordCardE2eTest extends E2eTestSupport {
 
         Map<String, Object> photoCard = (Map<String, Object>) items.get(0).get("recordCard");
         assertThat(photoCard.get("recordCardId")).isEqualTo(photoCardId);
+        assertThat(photoCard.get("activityType")).isEqualTo("RACE");
         assertThat((String) photoCard.get("thumbnailUrl")).startsWith("http").contains("/thumbnail/");
         assertThat(photoCard).containsEntry("routeArt", null);
 
         Map<String, Object> lineCard = (Map<String, Object>) items.get(1).get("recordCard");
         assertThat(lineCard.get("recordCardId")).isEqualTo(lineCardId);
+        assertThat(lineCard.get("activityType")).isEqualTo("DAILY");
         assertThat(lineCard).containsEntry("thumbnailUrl", null);
         List<List<List<Number>>> routeArt = (List<List<List<Number>>>) lineCard.get("routeArt");
         assertThat(routeArt).isNotEmpty();

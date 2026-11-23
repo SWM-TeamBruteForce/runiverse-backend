@@ -201,7 +201,7 @@ public class RunningRecordPersistenceAdapter implements CreateRunningRecordPort,
                              WHERE session.room = record.room
                                AND player.status IN :startedStatuses),
                             record.startAt, record.totalDistance, record.totalDuration, record.avgPace,
-                            record.totalElevationGain, card.recordCardId, card.thumbnailImageKey)
+                            record.totalElevationGain, card.recordCardId, card.thumbnailImageKey, card.activityType)
                         FROM RunningRecordJpaEntity record
                         LEFT JOIN RecordCardJpaEntity card ON card.runningRecord = record
                         WHERE record.userId = :userId
