@@ -89,7 +89,7 @@ public class CompleteRecordCardMusicHandler implements CompleteRecordCardMusicUs
         MusicStatus before = recordCard.getBaseMusicStatus();
         boolean changed = recordCard.completeBaseMusic(command.result(), command.baseMusicKey());
         if (!changed) {
-            log.warn("[기록 카드] 기본곡 반영 건너뜀: 같은 결과 - recordCardId={}, eventId={}, "
+            log.info("[기록 카드] 기본곡 반영 건너뜀: 같은 결과 - recordCardId={}, eventId={}, "
                             + "currentStatus={}, result={}",
                     command.recordCardId(), command.eventId(), before, command.result());
         }
