@@ -51,8 +51,8 @@ class UpdateRecordCardRequestValidationTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"", "   "})
-    @DisplayName("회고 글은 보내면 비어 있을 수 없다")
+    @ValueSource(strings = {"", "   ", "\u3000"})
+    @DisplayName("회고 글은 보내면 비어 있을 수 없다 — 전각 공백만 있어도 비어 있다")
     void rejectsBlankMemo(String memo) {
         assertThat(messages(new UpdateRecordCardRequest(memo, null, null, null, null)))
                 .containsExactly("회고 글은 비어 있을 수 없습니다.");

@@ -15,8 +15,7 @@ import java.util.UUID;
 
 // 9-3 — 부분 수정이다. 보내지 않은 필드는 그대로 둔다. images는 수정 뒤 사진 전체(순서대로) — 생략하면 사진·설명은 그대로다
 public record UpdateRecordCardRequest(
-        // 지울 수 없다 — 보내면 공백만 있는 값은 400
-        @Pattern(regexp = "(?s).*\\S.*", message = "회고 글은 비어 있을 수 없습니다.")
+        // 지울 수 없다 — 보내면 공백만 있는 값은 400(isMemoNotBlank)
         @Size(max = 1000, message = "회고 글은 1000자 이하여야 합니다.")
         String memo,
 
@@ -72,6 +71,12 @@ public record UpdateRecordCardRequest(
         public boolean isThumbnailGivenForNewImage() {
             return recordCardImageId != null || thumbnailFileSizeBytes != null;
         }
+    }
+
+    // 회고 글 VO와 같은 isBlank로 본다 — 정규식 \S는 ASCII 공백만 알아 전각 공백만 있는 값을 통과시킨다
+    @AssertTrue(message = "회고 글은 비어 있을 수 없습니다.")
+    public boolean isMemoNotBlank() {
+        return memo == null || !memo.isBlank();
     }
 
     @AssertTrue(message = "같은 사진을 두 번 넣을 수 없습니다.")
