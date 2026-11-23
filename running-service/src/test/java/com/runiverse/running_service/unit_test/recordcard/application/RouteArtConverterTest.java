@@ -96,7 +96,7 @@ class RouteArtConverterTest {
     }
 
     @Test
-    @DisplayName("점이 200개를 넘으면 조각 크기에 비례해 200개 이하로 줄이고, 조각마다 첫·끝 점은 남긴다")
+    @DisplayName("점이 200개를 넘으면 조각 크기에 비례해 200개로 줄이고, 조각마다 첫·끝 점은 남긴다")
     void reducesToMaxPoints() {
         // given — 300점 + 100점
         String first = encode(line(37.50, 300));
@@ -108,7 +108,7 @@ class RouteArtConverterTest {
 
         // then
         assertThat(art.get(0)).hasSize(149);
-        assertThat(art.get(1)).hasSize(50);
+        assertThat(art.get(1)).hasSize(51);
         assertThat(art.get(0).getFirst()).isEqualTo(full.get(0).getFirst());
         assertThat(art.get(0).getLast()).isEqualTo(full.get(0).getLast());
         assertThat(art.get(1).getFirst()).isEqualTo(full.get(1).getFirst());
@@ -128,7 +128,7 @@ class RouteArtConverterTest {
 
         // then
         assertThat(art.get(0)).hasSize(36);
-        assertThat(art.get(1)).hasSize(13);
+        assertThat(art.get(1)).hasSize(14);
         assertThat(art.stream().mapToInt(List::size).sum()).isLessThanOrEqualTo(50);
         assertThat(art.get(0).getFirst()).isEqualTo(full.get(0).getFirst());
         assertThat(art.get(1).getLast()).isEqualTo(full.get(1).getLast());
@@ -168,6 +168,29 @@ class RouteArtConverterTest {
         assertThat(art.stream().mapToInt(List::size).sum()).isLessThanOrEqualTo(50);
         assertThat(art.getFirst()).hasSize(30);
         assertThat(art.subList(1, art.size())).allSatisfy(segment -> assertThat(segment).hasSize(2));
+    }
+
+    @Test
+    @DisplayName("조각마다 나눈 몫의 끝수를 버리지 않는다 — 짧은 왕복 조각이 많아도 상한을 다 써 반환점을 남긴다")
+    void keepsTurnaroundsOfShortRoundTrips() {
+        // given — 3점 왕복 조각 10개 + 5점 왕복 조각 10개(80점), 조각마다 첫 점과 끝 점이 같다
+        List<String> polylines = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            polylines.add(encode(roundTrip(37.60 + i * 0.01, 3)));
+        }
+        for (int i = 0; i < 10; i++) {
+            polylines.add(encode(roundTrip(37.80 + i * 0.01, 5)));
+        }
+
+        // when
+        List<List<Point>> art = RouteArtConverter.convert(polylines, 50);
+
+        // then — 첫·끝만 남은 왕복 조각은 점 하나로 보인다
+        assertThat(art).hasSize(20);
+        assertThat(art.stream().mapToInt(List::size).sum()).isEqualTo(50);
+        assertThat(art.stream()
+                .filter(segment -> segment.stream().anyMatch(point -> !point.equals(segment.getFirst())))
+                .count()).isEqualTo(10L);
     }
 
     @Test
@@ -238,6 +261,15 @@ class RouteArtConverterTest {
         List<RoutePoint> points = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             points.add(new RoutePoint(startLatitude + i * 0.0001, 127.00 + i * 0.00005));
+        }
+        return points;
+    }
+
+    // 북쪽으로 갔다가 같은 자리로 돌아오는 count개 점 — 첫 점과 끝 점이 같다
+    private static List<RoutePoint> roundTrip(double startLatitude, int count) {
+        List<RoutePoint> points = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            points.add(new RoutePoint(startLatitude + Math.min(i, count - 1 - i) * 0.0001, 127.00));
         }
         return points;
     }

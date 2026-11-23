@@ -80,6 +80,7 @@ public final class RouteArtConverter {
     }
 
     // 점이 상한을 넘으면 조각마다 첫·끝 점(시작·도착·끊긴 곳)을 먼저 남기고, 남은 몫을 조각의 나머지 점 수에 비례해 나눈다.
+    // 몫은 앞 조각부터 누적해 내림한다 — 조각마다 버린 끝수가 다음 조각으로 넘어가 남은 몫을 다 쓴다.
     // 조각이 아주 많아 첫·끝만으로도 상한을 넘으면 첫·끝만 남긴다
     private static List<List<RoutePoint>> reduce(List<List<RoutePoint>> segments, int maxPoints) {
         int total = segments.stream().mapToInt(List::size).sum();
@@ -90,10 +91,14 @@ public final class RouteArtConverter {
         int spare = Math.max(maxPoints - ends, 0);
         int middles = total - ends;
         List<List<RoutePoint>> reduced = new ArrayList<>(segments.size());
+        long counted = 0;
+        int given = 0;
         for (List<RoutePoint> segment : segments) {
             int keep = ends(segment);
-            int budget = spare == 0 ? keep : keep + (segment.size() - keep) * spare / middles;
-            reduced.add(sample(segment, budget));
+            counted += segment.size() - keep;
+            int upTo = spare == 0 ? 0 : (int) (counted * spare / middles);
+            reduced.add(sample(segment, keep + upTo - given));
+            given = upTo;
         }
         return reduced;
     }
