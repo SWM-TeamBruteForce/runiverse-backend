@@ -96,7 +96,7 @@ class RouteArtConverterTest {
     }
 
     @Test
-    @DisplayName("점이 200개를 넘으면 조각 크기에 비례해 200개로 줄이고, 조각마다 첫·끝 점은 남긴다")
+    @DisplayName("점이 200개를 넘으면 조각 크기에 비례해 200개 이하로 줄이고, 조각마다 첫·끝 점은 남긴다")
     void reducesToMaxPoints() {
         // given — 300점 + 100점
         String first = encode(line(37.50, 300));
@@ -107,7 +107,7 @@ class RouteArtConverterTest {
         List<List<Point>> art = RouteArtConverter.convert(List.of(first, second));
 
         // then
-        assertThat(art.get(0)).hasSize(150);
+        assertThat(art.get(0)).hasSize(149);
         assertThat(art.get(1)).hasSize(50);
         assertThat(art.get(0).getFirst()).isEqualTo(full.get(0).getFirst());
         assertThat(art.get(0).getLast()).isEqualTo(full.get(0).getLast());
@@ -127,11 +127,47 @@ class RouteArtConverterTest {
         List<List<Point>> art = RouteArtConverter.convert(List.of(first, second), 50);
 
         // then
-        assertThat(art.get(0)).hasSize(37);
-        assertThat(art.get(1)).hasSize(12);
+        assertThat(art.get(0)).hasSize(36);
+        assertThat(art.get(1)).hasSize(13);
         assertThat(art.stream().mapToInt(List::size).sum()).isLessThanOrEqualTo(50);
         assertThat(art.get(0).getFirst()).isEqualTo(full.get(0).getFirst());
         assertThat(art.get(1).getLast()).isEqualTo(full.get(1).getLast());
+    }
+
+    @Test
+    @DisplayName("짧은 조각이 많이 섞여도 200개를 넘지 않는다 — 짧은 조각의 첫·끝을 먼저 남기고 나머지를 긴 조각이 쓴다")
+    void mixedSegmentsStayWithinMaxPoints() {
+        // given — 1000점 + 2점짜리 조각 50개(1100점)
+        List<String> polylines = new ArrayList<>(List.of(encode(line(37.50, 1000))));
+        for (int i = 0; i < 50; i++) {
+            polylines.add(encode(line(37.60 + i * 0.001, 2)));
+        }
+
+        // when
+        List<List<Point>> art = RouteArtConverter.convert(polylines);
+
+        // then
+        assertThat(art.stream().mapToInt(List::size).sum()).isLessThanOrEqualTo(200);
+        assertThat(art.getFirst()).hasSize(100);
+        assertThat(art.subList(1, art.size())).allSatisfy(segment -> assertThat(segment).hasSize(2));
+    }
+
+    @Test
+    @DisplayName("짧은 조각이 섞여도 달력 칸은 50개를 넘지 않는다")
+    void mixedSegmentsStayWithinGivenLimit() {
+        // given — 1000점 + 2점짜리 조각 10개(1020점)
+        List<String> polylines = new ArrayList<>(List.of(encode(line(37.50, 1000))));
+        for (int i = 0; i < 10; i++) {
+            polylines.add(encode(line(37.60 + i * 0.001, 2)));
+        }
+
+        // when
+        List<List<Point>> art = RouteArtConverter.convert(polylines, 50);
+
+        // then
+        assertThat(art.stream().mapToInt(List::size).sum()).isLessThanOrEqualTo(50);
+        assertThat(art.getFirst()).hasSize(30);
+        assertThat(art.subList(1, art.size())).allSatisfy(segment -> assertThat(segment).hasSize(2));
     }
 
     @Test

@@ -79,19 +79,28 @@ public final class RouteArtConverter {
         return art;
     }
 
-    // 점이 상한을 넘으면 조각마다 점 수에 비례해 고르게 남긴다 — 조각의 첫·끝 점(시작·도착·끊긴 곳)은 늘 남긴다.
+    // 점이 상한을 넘으면 조각마다 첫·끝 점(시작·도착·끊긴 곳)을 먼저 남기고, 남은 몫을 조각의 나머지 점 수에 비례해 나눈다.
     // 조각이 아주 많아 첫·끝만으로도 상한을 넘으면 첫·끝만 남긴다
     private static List<List<RoutePoint>> reduce(List<List<RoutePoint>> segments, int maxPoints) {
         int total = segments.stream().mapToInt(List::size).sum();
         if (total <= maxPoints) {
             return segments;
         }
+        int ends = segments.stream().mapToInt(RouteArtConverter::ends).sum();
+        int spare = Math.max(maxPoints - ends, 0);
+        int middles = total - ends;
         List<List<RoutePoint>> reduced = new ArrayList<>(segments.size());
         for (List<RoutePoint> segment : segments) {
-            int budget = Math.max(Math.min(segment.size(), 2), segment.size() * maxPoints / total);
+            int keep = ends(segment);
+            int budget = spare == 0 ? keep : keep + (segment.size() - keep) * spare / middles;
             reduced.add(sample(segment, budget));
         }
         return reduced;
+    }
+
+    // 조각에서 늘 남기는 점 수 — 첫·끝 둘(점이 하나뿐인 조각은 하나)
+    private static int ends(List<RoutePoint> segment) {
+        return Math.min(segment.size(), 2);
     }
 
     // 첫 점부터 끝 점까지 같은 간격으로 budget개를 고른다
