@@ -30,7 +30,7 @@ public class DeleteRecordCardHandler implements DeleteRecordCardUsecase {
     public void handle(DeleteRecordCardCommand command) {
         RecordCardId recordCardId = new RecordCardId(command.recordCardId());
 
-        // 1. 내 카드면 기록 행을 잠그고 읽는다 — 카드 쓰기(작성·수정·삭제·음악 완료)는 모두 이 잠금으로 줄을 선다.
+        // 1. 내 카드면 기록 행을 잠그고 읽는다 — 카드 쓰기(작성·수정·삭제·다시 만들기·음악 완료)는 모두 이 잠금으로 줄을 선다.
         //    없거나(이미 지운 카드 포함) 남의 카드면 잠그지 않고 404 — 남의 카드가 있는지 드러내지 않는다
         RecordCard recordCard = loadOwnRecordCardForUpdatePort.loadOwnedForUpdate(recordCardId,
                         new UserId(command.userId()))

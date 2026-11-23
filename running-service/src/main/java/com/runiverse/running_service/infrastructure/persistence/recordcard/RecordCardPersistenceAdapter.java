@@ -161,7 +161,7 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
     }
 
     private Optional<RecordCard> lockAndLoad(RecordCardId recordCardId, Long runningRecordId) {
-        // 2. 기록 행 하나만 잠근다 — 카드 쓰기(작성·수정·삭제·음악 완료)는 모두 이 행으로 줄을 선다. 카드 행은 잠그지 않는다
+        // 2. 기록 행 하나만 잠근다 — 카드 쓰기(작성·수정·삭제·다시 만들기·음악 완료)는 모두 이 행으로 줄을 선다. 카드 행은 잠그지 않는다
         entityManager.createQuery("""
                         SELECT record.runningRecordId
                         FROM RunningRecordJpaEntity record
