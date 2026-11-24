@@ -1,6 +1,5 @@
 package com.runiverse.running_service.unit_test.infrastructure.persistence.recordcard;
 
-import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.recordcard.RecordCard;
 import com.runiverse.running_service.domain.recordcard.RecordCardImage;
 import com.runiverse.running_service.domain.recordcard.vo.MusicKey;
@@ -41,12 +40,11 @@ import static org.mockito.Mockito.verify;
 // EntityManager를 목으로 대체하므로 잠그는 순서·매핑·바꾸는 컬럼만 검증한다 —
 // JPQL과 FOR UPDATE가 실제 DB에서 도는지는 E2E·test 서버가 확인한다
 @ExtendWith(MockitoExtension.class)
-@DisplayName("기록 카드 잠금 조회·음악 저장 어댑터 단위 테스트")
+@DisplayName("기록 카드 음악 완료용 잠금·저장 어댑터 단위 테스트")
 class RecordCardMusicUpdateTest {
 
     private static final UUID CARD_ID = UUID.fromString("01a1ee0f-4fee-7741-a7b1-7eeb86bb369f");
     private static final UUID USER_ID = UUID.fromString("01a1e874-91e8-73b4-9680-d7f377cbd009");
-    private static final UUID STRANGER_ID = UUID.fromString("01a1e874-91e8-73b4-9680-d7f377cbd00a");
     private static final UUID IMAGE_A = UUID.fromString("01a1ee0f-4fee-7d58-a7b2-925ef4d37f36");
     private static final UUID IMAGE_B = UUID.fromString("01a1ee0f-5029-7488-9b2d-c7b5d4580997");
     private static final long RECORD_ID = 55L;
@@ -122,46 +120,6 @@ class RecordCardMusicUpdateTest {
 
         // when & then
         assertThat(adapter.loadForUpdate(new RecordCardId(CARD_ID))).isEmpty();
-    }
-
-    @Test
-    @DisplayName("주인 확인 조회는 남의 카드면 기록 ID를 못 찾아, 기록 행을 잠그지 않고 비어 있다")
-    void ownedEmptyWithoutLockForOthersCard() {
-        // given -> 주인 조건에 걸려 결과가 없다
-        givenRecordIdOfCard(List.of());
-
-        // when
-        Optional<RecordCard> loaded = adapter.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(STRANGER_ID));
-
-        // then
-        assertThat(loaded).isEmpty();
-        verify(entityManager).createQuery(contains("AND card.userId = :userId"), eq(Long.class));
-        verify(recordIdQuery).setParameter("userId", STRANGER_ID);
-        verify(entityManager, never()).createQuery(contains("FROM RunningRecordJpaEntity"), eq(Long.class));
-        verify(entityManager, never()).find(eq(RecordCardJpaEntity.class), any());
-    }
-
-    @Test
-    @DisplayName("주인 확인 조회는 내 카드면 기록 행을 FOR UPDATE로 잠근 뒤 카드를 읽는다")
-    void ownedLocksRecordThenLoads() {
-        // given
-        RecordCardJpaEntity card = cardEntity(MusicStatus.COMPLETED, "audio/base.wav");
-        givenRecordIdOfCard(List.of(RECORD_ID));
-        givenLock();
-        given(entityManager.find(RecordCardJpaEntity.class, CARD_ID)).willReturn(card);
-        givenImages(List.of(imageEntity(IMAGE_A, card, IMAGE_KEY_A, MusicStatus.COMPLETED, "audio/a.wav", 0, null)));
-
-        // when
-        RecordCard loaded = adapter.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(USER_ID)).orElseThrow();
-
-        // then
-        verify(recordIdQuery).setParameter("userId", USER_ID);
-        InOrder order = inOrder(lockQuery, entityManager);
-        order.verify(lockQuery).setLockMode(LockModeType.PESSIMISTIC_WRITE);
-        order.verify(lockQuery).getResultList();
-        order.verify(entityManager).find(RecordCardJpaEntity.class, CARD_ID);
-        assertThat(loaded.getUserId()).isEqualTo(new UserId(USER_ID));
-        assertThat(loaded.getRunningRecordId().value()).isEqualTo(RECORD_ID);
     }
 
     @Test

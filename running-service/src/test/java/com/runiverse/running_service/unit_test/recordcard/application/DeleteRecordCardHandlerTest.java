@@ -5,6 +5,7 @@ import com.runiverse.running_service.application.recordcard.command.delete.Delet
 import com.runiverse.running_service.application.recordcard.command.delete.DeleteRecordCardHandler;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardNotFoundException;
 import com.runiverse.running_service.application.recordcard.port.out.DeleteRecordCardPort;
+import com.runiverse.running_service.application.recordcard.port.out.ExistsOwnRecordCardPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.RecordCardSnapshotReason;
 import com.runiverse.running_service.application.recordcard.port.out.SnapshotRecordCardPort;
@@ -39,6 +40,8 @@ class DeleteRecordCardHandlerTest {
     private static final UUID OWNER_ID = UuidCreator.getTimeOrderedEpoch();
 
     @Mock
+    private ExistsOwnRecordCardPort existsOwnRecordCardPort;
+    @Mock
     private LoadRecordCardForUpdatePort loadRecordCardForUpdatePort;
     @Mock
     private SnapshotRecordCardPort snapshotRecordCardPort;
@@ -49,8 +52,8 @@ class DeleteRecordCardHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new DeleteRecordCardHandler(loadRecordCardForUpdatePort, snapshotRecordCardPort,
-                deleteRecordCardPort);
+        handler = new DeleteRecordCardHandler(existsOwnRecordCardPort, loadRecordCardForUpdatePort,
+                snapshotRecordCardPort, deleteRecordCardPort);
     }
 
     @Test
@@ -58,16 +61,17 @@ class DeleteRecordCardHandlerTest {
     void snapshotsThenDeletes() {
         // given
         RecordCard card = card(OWNER_ID);
-        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
-                .thenReturn(Optional.of(card));
+        when(existsOwnRecordCardPort.existsOwnedBy(new RecordCardId(CARD_ID), new UserId(OWNER_ID))).thenReturn(true);
+        when(loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(CARD_ID))).thenReturn(Optional.of(card));
 
         // when
         handler.handle(new DeleteRecordCardCommand(OWNER_ID, CARD_ID));
 
         // then
-        InOrder order = inOrder(loadRecordCardForUpdatePort, snapshotRecordCardPort, deleteRecordCardPort);
-        order.verify(loadRecordCardForUpdatePort)
-                .loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID));
+        InOrder order = inOrder(existsOwnRecordCardPort, loadRecordCardForUpdatePort, snapshotRecordCardPort,
+                deleteRecordCardPort);
+        order.verify(existsOwnRecordCardPort).existsOwnedBy(new RecordCardId(CARD_ID), new UserId(OWNER_ID));
+        order.verify(loadRecordCardForUpdatePort).loadForUpdate(new RecordCardId(CARD_ID));
         order.verify(snapshotRecordCardPort).snapshot(new RecordCardId(CARD_ID), RecordCardSnapshotReason.DELETE);
         order.verify(deleteRecordCardPort).delete(new RecordCardId(CARD_ID));
     }
@@ -76,8 +80,7 @@ class DeleteRecordCardHandlerTest {
     @DisplayName("없는 카드(이미 지운 카드 포함)는 404이고 이력·삭제를 하지 않는다")
     void notFound() {
         // given
-        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
-                .thenReturn(Optional.empty());
+        when(existsOwnRecordCardPort.existsOwnedBy(new RecordCardId(CARD_ID), new UserId(OWNER_ID))).thenReturn(false);
 
         // when & then
         assertThatThrownBy(() -> handler.handle(new DeleteRecordCardCommand(OWNER_ID, CARD_ID)))
@@ -86,17 +89,29 @@ class DeleteRecordCardHandlerTest {
     }
 
     @Test
-    @DisplayName("남의 카드는 요청한 사람 ID로 찾아 없는 카드와 같은 404다")
+    @DisplayName("주인 확인 뒤 잠그는 사이 지워진 카드도 404이고 이력·삭제를 하지 않는다")
+    void deletedAfterCheck() {
+        // given
+        when(existsOwnRecordCardPort.existsOwnedBy(new RecordCardId(CARD_ID), new UserId(OWNER_ID))).thenReturn(true);
+        when(loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(CARD_ID))).thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> handler.handle(new DeleteRecordCardCommand(OWNER_ID, CARD_ID)))
+                .isInstanceOf(RecordCardNotFoundException.class);
+        verifyNoInteractions(snapshotRecordCardPort, deleteRecordCardPort);
+    }
+
+    @Test
+    @DisplayName("남의 카드는 기록 행을 잠그지 않고 없는 카드와 같은 404다")
     void othersCard() {
         // given
         UUID stranger = UuidCreator.getTimeOrderedEpoch();
-        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(stranger)))
-                .thenReturn(Optional.empty());
+        when(existsOwnRecordCardPort.existsOwnedBy(new RecordCardId(CARD_ID), new UserId(stranger))).thenReturn(false);
 
         // when & then
         assertThatThrownBy(() -> handler.handle(new DeleteRecordCardCommand(stranger, CARD_ID)))
                 .isInstanceOf(RecordCardNotFoundException.class);
-        verifyNoInteractions(snapshotRecordCardPort, deleteRecordCardPort);
+        verifyNoInteractions(loadRecordCardForUpdatePort, snapshotRecordCardPort, deleteRecordCardPort);
     }
 
     private static RecordCard card(UUID ownerId) {

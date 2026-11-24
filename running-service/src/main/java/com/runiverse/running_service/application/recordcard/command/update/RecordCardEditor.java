@@ -3,6 +3,7 @@ package com.runiverse.running_service.application.recordcard.command.update;
 import com.runiverse.running_service.application.recordcard.exception.InvalidRecordCardImageException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardNotFoundException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardThumbnailOutOfRangeException;
+import com.runiverse.running_service.application.recordcard.port.out.ExistsOwnRecordCardPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadLastRecordCardHistoryPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRunningSummaryPort;
@@ -37,6 +38,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class RecordCardEditor {
 
+    private final ExistsOwnRecordCardPort existsOwnRecordCardPort;
     private final LoadRecordCardForUpdatePort loadRecordCardForUpdatePort;
     private final SnapshotRecordCardPort snapshotRecordCardPort;
     private final UpdateRecordCardPort updateRecordCardPort;
@@ -78,8 +80,10 @@ public class RecordCardEditor {
     // 내 카드면 기록 행을 잠그고 읽는다 — 없거나(지운 카드 포함) 남의 카드면 잠그지 않고 404.
     // 남긴다는 사진이 이 카드 것인지도 본다(400)
     public RecordCard lockOwnCard(UUID userId, UUID recordCardId, List<ImageSlot> slots) {
-        RecordCard card = loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(recordCardId),
-                        new UserId(userId))
+        if (!existsOwnRecordCardPort.existsOwnedBy(new RecordCardId(recordCardId), new UserId(userId))) {
+            throw new RecordCardNotFoundException();
+        }
+        RecordCard card = loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(recordCardId))
                 .orElseThrow(RecordCardNotFoundException::new);
         requireKeptImagesInCard(card, slots);
         return card;

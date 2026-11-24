@@ -3,6 +3,7 @@ package com.runiverse.running_service.application.recordcard.command.delete;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardNotFoundException;
 import com.runiverse.running_service.application.recordcard.port.in.DeleteRecordCardUsecase;
 import com.runiverse.running_service.application.recordcard.port.out.DeleteRecordCardPort;
+import com.runiverse.running_service.application.recordcard.port.out.ExistsOwnRecordCardPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.RecordCardSnapshotReason;
 import com.runiverse.running_service.application.recordcard.port.out.SnapshotRecordCardPort;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class DeleteRecordCardHandler implements DeleteRecordCardUsecase {
 
+    private final ExistsOwnRecordCardPort existsOwnRecordCardPort;
     private final LoadRecordCardForUpdatePort loadRecordCardForUpdatePort;
     private final SnapshotRecordCardPort snapshotRecordCardPort;
     private final DeleteRecordCardPort deleteRecordCardPort;
@@ -32,8 +34,10 @@ public class DeleteRecordCardHandler implements DeleteRecordCardUsecase {
 
         // 1. 내 카드면 기록 행을 잠그고 읽는다 — 카드 쓰기(작성·수정·삭제·다시 만들기·음악 완료)는 모두 이 잠금으로 줄을 선다.
         //    없거나(이미 지운 카드 포함) 남의 카드면 잠그지 않고 404 — 남의 카드가 있는지 드러내지 않는다
-        RecordCard recordCard = loadRecordCardForUpdatePort.loadOwnedForUpdate(recordCardId,
-                        new UserId(command.userId()))
+        if (!existsOwnRecordCardPort.existsOwnedBy(recordCardId, new UserId(command.userId()))) {
+            throw new RecordCardNotFoundException();
+        }
+        RecordCard recordCard = loadRecordCardForUpdatePort.loadForUpdate(recordCardId)
                 .orElseThrow(RecordCardNotFoundException::new);
 
         // 2. 지우기 직전 모습을 남긴다 — 신고·분쟁 대응용. 삭제가 실패하면 함께 롤백된다

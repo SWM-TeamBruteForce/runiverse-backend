@@ -75,9 +75,9 @@ class RetryRecordCardMusicIntegrationTest {
         RecordCardDraftProperties properties = new RecordCardDraftProperties(Duration.ofMinutes(30),
                 DataSize.ofMegabytes(100), DataSize.ofMegabytes(1), DataSize.ofMegabytes(10), Duration.ofSeconds(30));
         retryHandler = new RetryRecordCardMusicHandler(recordCardStore, recordCardStore, recordCardStore,
-                musicRequests);
+                recordCardStore, musicRequests);
         RecordCardEditor editor = new RecordCardEditor(recordCardStore, recordCardStore, recordCardStore,
-                recordCardStore, musicRequests, recordCardStore);
+                recordCardStore, recordCardStore, musicRequests, recordCardStore);
         updateHandler = new UpdateRecordCardHandler(properties, editor,
                 new RecordCardUploadIssuer(properties, new FakeImageIdGenerator(), new FakeUploadUrlGenerator(),
                         new FakeMultipartUploadStarter()),

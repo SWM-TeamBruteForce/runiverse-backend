@@ -6,6 +6,7 @@ import com.runiverse.running_service.application.recordcard.command.update.Recor
 import com.runiverse.running_service.application.recordcard.exception.InvalidRecordCardImageException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardNotFoundException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardThumbnailOutOfRangeException;
+import com.runiverse.running_service.application.recordcard.port.out.ExistsOwnRecordCardPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadLastRecordCardHistoryPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRunningSummaryPort;
@@ -61,6 +62,8 @@ class RecordCardEditorTest {
             LocalDateTime.of(2026, 10, 19, 6, 30), 61, new BigDecimal("15.0"), 22);
 
     @Mock
+    private ExistsOwnRecordCardPort existsOwnRecordCardPort;
+    @Mock
     private LoadRecordCardForUpdatePort loadRecordCardForUpdatePort;
     @Mock
     private SnapshotRecordCardPort snapshotRecordCardPort;
@@ -77,16 +80,16 @@ class RecordCardEditorTest {
 
     @BeforeEach
     void setUp() {
-        editor = new RecordCardEditor(loadRecordCardForUpdatePort, snapshotRecordCardPort, updateRecordCardPort,
-                loadRunningSummaryPort, requestRecordCardMusicPort, loadLastRecordCardHistoryPort);
+        editor = new RecordCardEditor(existsOwnRecordCardPort, loadRecordCardForUpdatePort, snapshotRecordCardPort,
+                updateRecordCardPort, loadRunningSummaryPort, requestRecordCardMusicPort,
+                loadLastRecordCardHistoryPort);
     }
 
     @Test
     @DisplayName("없는 카드는 404이고 아무것도 쓰지 않는다")
     void notFound() {
         // given
-        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
-                .thenReturn(Optional.empty());
+        when(existsOwnRecordCardPort.existsOwnedBy(new RecordCardId(CARD_ID), new UserId(OWNER_ID))).thenReturn(false);
 
         // when & then
         assertThatThrownBy(() -> editor.applyNow(OWNER_ID, CARD_ID, memo("새 회고")))
@@ -95,17 +98,30 @@ class RecordCardEditorTest {
     }
 
     @Test
-    @DisplayName("남의 카드는 요청한 사람 ID로 찾아 없는 카드와 같은 404다")
+    @DisplayName("주인 확인 뒤 잠그는 사이 지워진 카드도 404이고 아무것도 쓰지 않는다")
+    void deletedAfterCheck() {
+        // given
+        when(existsOwnRecordCardPort.existsOwnedBy(new RecordCardId(CARD_ID), new UserId(OWNER_ID))).thenReturn(true);
+        when(loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(CARD_ID))).thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> editor.applyNow(OWNER_ID, CARD_ID, memo("새 회고")))
+                .isInstanceOf(RecordCardNotFoundException.class);
+        verifyNoInteractions(snapshotRecordCardPort, updateRecordCardPort, requestRecordCardMusicPort);
+    }
+
+    @Test
+    @DisplayName("남의 카드는 기록 행을 잠그지 않고 없는 카드와 같은 404다")
     void othersCard() {
         // given
         UUID stranger = UuidCreator.getTimeOrderedEpoch();
-        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(stranger)))
-                .thenReturn(Optional.empty());
+        when(existsOwnRecordCardPort.existsOwnedBy(new RecordCardId(CARD_ID), new UserId(stranger))).thenReturn(false);
 
         // when & then
         assertThatThrownBy(() -> editor.applyNow(stranger, CARD_ID, memo("새 회고")))
                 .isInstanceOf(RecordCardNotFoundException.class);
-        verifyNoInteractions(snapshotRecordCardPort, updateRecordCardPort, requestRecordCardMusicPort);
+        verifyNoInteractions(loadRecordCardForUpdatePort, snapshotRecordCardPort, updateRecordCardPort,
+                requestRecordCardMusicPort);
     }
 
     @Test
@@ -225,8 +241,8 @@ class RecordCardEditorTest {
                         RecordCardImage.restore(IMAGE_B, "record-cards/b.jpg", null, "audio/b.wav",
                                 MusicStatus.COMPLETED, 1)))
                 .build();
-        when(loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(CARD_ID), new UserId(OWNER_ID)))
-                .thenReturn(Optional.of(card));
+        when(existsOwnRecordCardPort.existsOwnedBy(new RecordCardId(CARD_ID), new UserId(OWNER_ID))).thenReturn(true);
+        when(loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(CARD_ID))).thenReturn(Optional.of(card));
     }
 
     private static Changes memo(String memo) {

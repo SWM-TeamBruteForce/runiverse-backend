@@ -79,7 +79,7 @@ class CompleteRecordCardDraftIntegrationTest {
                 new RecordCardDraftSaver(recordCardStore, recordCardStore, recordCardStore, recordCardStore,
                         recordCardStore, musicRequests),
                 new RecordCardEditDraftSaver(new RecordCardEditor(recordCardStore, recordCardStore, recordCardStore,
-                        recordCardStore, musicRequests, recordCardStore)));
+                        recordCardStore, recordCardStore, musicRequests, recordCardStore)));
         recordCardStore.addRecord(RECORD_ID, userId);
     }
 

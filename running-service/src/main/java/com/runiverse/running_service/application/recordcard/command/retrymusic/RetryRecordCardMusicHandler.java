@@ -2,6 +2,7 @@ package com.runiverse.running_service.application.recordcard.command.retrymusic;
 
 import com.runiverse.running_service.application.recordcard.exception.RecordCardNotFoundException;
 import com.runiverse.running_service.application.recordcard.port.in.RetryRecordCardMusicUsecase;
+import com.runiverse.running_service.application.recordcard.port.out.ExistsOwnRecordCardPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRunningSummaryPort;
 import com.runiverse.running_service.application.recordcard.port.out.RecordCardMusicRequest;
@@ -25,6 +26,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class RetryRecordCardMusicHandler implements RetryRecordCardMusicUsecase {
 
+    private final ExistsOwnRecordCardPort existsOwnRecordCardPort;
     private final LoadRecordCardForUpdatePort loadRecordCardForUpdatePort;
     private final SaveRecordCardMusicPort saveRecordCardMusicPort;
     private final LoadRunningSummaryPort loadRunningSummaryPort;
@@ -36,8 +38,10 @@ public class RetryRecordCardMusicHandler implements RetryRecordCardMusicUsecase 
         UUID recordCardId = command.recordCardId();
 
         // 1. 내 카드면 기록 행을 잠그고 읽는다 — 없거나(지운 카드 포함) 남의 카드면 잠그지 않고 404
-        RecordCard card = loadRecordCardForUpdatePort.loadOwnedForUpdate(new RecordCardId(recordCardId),
-                        new UserId(command.userId()))
+        if (!existsOwnRecordCardPort.existsOwnedBy(new RecordCardId(recordCardId), new UserId(command.userId()))) {
+            throw new RecordCardNotFoundException();
+        }
+        RecordCard card = loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(recordCardId))
                 .orElseThrow(RecordCardNotFoundException::new);
 
         // 2. 실패한 음악이 없으면 아무것도 하지 않는다 — 응답은 같은 204다
