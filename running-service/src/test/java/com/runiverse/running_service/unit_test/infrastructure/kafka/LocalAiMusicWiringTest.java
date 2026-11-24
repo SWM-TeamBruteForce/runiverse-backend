@@ -54,7 +54,7 @@ class LocalAiMusicWiringTest {
             // 로컬 개발 — 설정을 주지 않아도(기본 true) 켜진다
             "local, false, dev,  -,     true",
             "local, false, dev,  true,  true",
-            // E2E — local 프로필이지만 설정으로 끈다
+            // 로컬 개발이어도 설정으로 끈다 — E2E가 .env.test에서 끄는 값이다
             "local, false, dev,  false, false",
             // 빈 값은 꺼짐으로 읽힌다 — .env에 값 없이 키만 두면 꺼진다(.env.example 주석의 근거)
             "local, false, dev,  '',    false",
