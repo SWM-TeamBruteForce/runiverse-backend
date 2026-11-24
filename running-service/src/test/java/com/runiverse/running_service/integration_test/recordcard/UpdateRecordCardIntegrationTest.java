@@ -72,7 +72,7 @@ class UpdateRecordCardIntegrationTest {
         RecordCardDraftProperties properties = new RecordCardDraftProperties(Duration.ofMinutes(30),
                 DataSize.ofMegabytes(100), DataSize.ofMegabytes(1), DataSize.ofMegabytes(10), Duration.ofSeconds(30));
         RecordCardEditor editor = new RecordCardEditor(recordCardStore, recordCardStore, recordCardStore,
-                recordCardStore, musicRequests, recordCardStore);
+                recordCardStore, recordCardStore, musicRequests, recordCardStore);
         updateHandler = new UpdateRecordCardHandler(properties, editor,
                 new RecordCardUploadIssuer(properties, new FakeImageIdGenerator(), new FakeUploadUrlGenerator(),
                         multipartUploads),

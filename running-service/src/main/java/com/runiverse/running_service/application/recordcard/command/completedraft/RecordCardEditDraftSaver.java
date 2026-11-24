@@ -34,7 +34,7 @@ public class RecordCardEditDraftSaver {
         EditPlan plan = Objects.requireNonNull(draft.editPlan(), "수정 초안에는 수정 계획이 있어야 한다");
         List<ImageSlot> slots = toSlots(plan, draft.images());
 
-        // 1. 기록 행을 잠그고 내 카드를 읽는다 — 지웠거나 남의 카드면 404
+        // 1. 내 카드면 기록 행을 잠그고 읽는다 — 지웠거나 남의 카드면 잠그지 않고 404
         RecordCard card = recordCardEditor.lockOwnCard(draft.userId(), draft.recordCardId(), null);
 
         // 2. 이미 이 초안을 반영했으면 끝난 것이다 — 커밋 뒤 확정 표시 전에 끊긴 재시도. 새 사진 ID는 초안마다 새로 정해 겹치지 않는다

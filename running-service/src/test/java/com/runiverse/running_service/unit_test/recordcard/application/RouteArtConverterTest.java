@@ -107,8 +107,8 @@ class RouteArtConverterTest {
         List<List<Point>> art = RouteArtConverter.convert(List.of(first, second));
 
         // then
-        assertThat(art.get(0)).hasSize(150);
-        assertThat(art.get(1)).hasSize(50);
+        assertThat(art.get(0)).hasSize(149);
+        assertThat(art.get(1)).hasSize(51);
         assertThat(art.get(0).getFirst()).isEqualTo(full.get(0).getFirst());
         assertThat(art.get(0).getLast()).isEqualTo(full.get(0).getLast());
         assertThat(art.get(1).getFirst()).isEqualTo(full.get(1).getFirst());
@@ -127,11 +127,70 @@ class RouteArtConverterTest {
         List<List<Point>> art = RouteArtConverter.convert(List.of(first, second), 50);
 
         // then
-        assertThat(art.get(0)).hasSize(37);
-        assertThat(art.get(1)).hasSize(12);
+        assertThat(art.get(0)).hasSize(36);
+        assertThat(art.get(1)).hasSize(14);
         assertThat(art.stream().mapToInt(List::size).sum()).isLessThanOrEqualTo(50);
         assertThat(art.get(0).getFirst()).isEqualTo(full.get(0).getFirst());
         assertThat(art.get(1).getLast()).isEqualTo(full.get(1).getLast());
+    }
+
+    @Test
+    @DisplayName("짧은 조각이 많이 섞여도 200개를 넘지 않는다 — 짧은 조각의 첫·끝을 먼저 남기고 나머지를 긴 조각이 쓴다")
+    void mixedSegmentsStayWithinMaxPoints() {
+        // given — 1000점 + 2점짜리 조각 50개(1100점)
+        List<String> polylines = new ArrayList<>(List.of(encode(line(37.50, 1000))));
+        for (int i = 0; i < 50; i++) {
+            polylines.add(encode(line(37.60 + i * 0.001, 2)));
+        }
+
+        // when
+        List<List<Point>> art = RouteArtConverter.convert(polylines);
+
+        // then
+        assertThat(art.stream().mapToInt(List::size).sum()).isLessThanOrEqualTo(200);
+        assertThat(art.getFirst()).hasSize(100);
+        assertThat(art.subList(1, art.size())).allSatisfy(segment -> assertThat(segment).hasSize(2));
+    }
+
+    @Test
+    @DisplayName("짧은 조각이 섞여도 달력 칸은 50개를 넘지 않는다")
+    void mixedSegmentsStayWithinGivenLimit() {
+        // given — 1000점 + 2점짜리 조각 10개(1020점)
+        List<String> polylines = new ArrayList<>(List.of(encode(line(37.50, 1000))));
+        for (int i = 0; i < 10; i++) {
+            polylines.add(encode(line(37.60 + i * 0.001, 2)));
+        }
+
+        // when
+        List<List<Point>> art = RouteArtConverter.convert(polylines, 50);
+
+        // then
+        assertThat(art.stream().mapToInt(List::size).sum()).isLessThanOrEqualTo(50);
+        assertThat(art.getFirst()).hasSize(30);
+        assertThat(art.subList(1, art.size())).allSatisfy(segment -> assertThat(segment).hasSize(2));
+    }
+
+    @Test
+    @DisplayName("조각마다 나눈 몫의 끝수를 버리지 않는다 — 짧은 왕복 조각이 많아도 상한을 다 써 반환점을 남긴다")
+    void keepsTurnaroundsOfShortRoundTrips() {
+        // given — 3점 왕복 조각 10개 + 5점 왕복 조각 10개(80점), 조각마다 첫 점과 끝 점이 같다
+        List<String> polylines = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            polylines.add(encode(roundTrip(37.60 + i * 0.01, 3)));
+        }
+        for (int i = 0; i < 10; i++) {
+            polylines.add(encode(roundTrip(37.80 + i * 0.01, 5)));
+        }
+
+        // when
+        List<List<Point>> art = RouteArtConverter.convert(polylines, 50);
+
+        // then — 첫·끝만 남은 왕복 조각은 점 하나로 보인다
+        assertThat(art).hasSize(20);
+        assertThat(art.stream().mapToInt(List::size).sum()).isEqualTo(50);
+        assertThat(art.stream()
+                .filter(segment -> segment.stream().anyMatch(point -> !point.equals(segment.getFirst())))
+                .count()).isEqualTo(10L);
     }
 
     @Test
@@ -202,6 +261,15 @@ class RouteArtConverterTest {
         List<RoutePoint> points = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             points.add(new RoutePoint(startLatitude + i * 0.0001, 127.00 + i * 0.00005));
+        }
+        return points;
+    }
+
+    // 북쪽으로 갔다가 같은 자리로 돌아오는 count개 점 — 첫 점과 끝 점이 같다
+    private static List<RoutePoint> roundTrip(double startLatitude, int count) {
+        List<RoutePoint> points = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            points.add(new RoutePoint(startLatitude + Math.min(i, count - 1 - i) * 0.0001, 127.00));
         }
         return points;
     }

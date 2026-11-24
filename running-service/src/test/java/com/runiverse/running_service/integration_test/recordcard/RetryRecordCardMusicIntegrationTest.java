@@ -5,6 +5,9 @@ import com.runiverse.running_service.application.recordcard.command.completedraf
 import com.runiverse.running_service.application.recordcard.command.completedraft.CompleteRecordCardDraftHandler;
 import com.runiverse.running_service.application.recordcard.command.completedraft.RecordCardDraftSaver;
 import com.runiverse.running_service.application.recordcard.command.completedraft.RecordCardEditDraftSaver;
+import com.runiverse.running_service.application.recordcard.command.completemusic.CompleteRecordCardMusicCommand;
+import com.runiverse.running_service.application.recordcard.command.completemusic.CompleteRecordCardMusicCommand.PhotoMusic;
+import com.runiverse.running_service.application.recordcard.command.completemusic.CompleteRecordCardMusicHandler;
 import com.runiverse.running_service.application.recordcard.command.createdraft.CreateRecordCardDraftResult.Upload;
 import com.runiverse.running_service.application.recordcard.command.retrymusic.RetryRecordCardMusicCommand;
 import com.runiverse.running_service.application.recordcard.command.retrymusic.RetryRecordCardMusicHandler;
@@ -19,6 +22,7 @@ import com.runiverse.running_service.application.recordcard.port.out.RecordCardM
 import com.runiverse.running_service.domain.recordcard.RecordCard;
 import com.runiverse.running_service.domain.recordcard.RecordCardImage;
 import com.runiverse.running_service.domain.recordcard.vo.DisplayOrder;
+import com.runiverse.running_service.domain.recordcard.vo.MusicKey;
 import com.runiverse.running_service.domain.recordcard.vo.MusicStatus;
 import com.runiverse.running_service.domain.recordcard.vo.RecordCardActivityType;
 import com.runiverse.running_service.domain.recordcard.vo.RecordCardVisibility;
@@ -71,9 +75,9 @@ class RetryRecordCardMusicIntegrationTest {
         RecordCardDraftProperties properties = new RecordCardDraftProperties(Duration.ofMinutes(30),
                 DataSize.ofMegabytes(100), DataSize.ofMegabytes(1), DataSize.ofMegabytes(10), Duration.ofSeconds(30));
         retryHandler = new RetryRecordCardMusicHandler(recordCardStore, recordCardStore, recordCardStore,
-                musicRequests);
+                recordCardStore, musicRequests);
         RecordCardEditor editor = new RecordCardEditor(recordCardStore, recordCardStore, recordCardStore,
-                recordCardStore, musicRequests, recordCardStore);
+                recordCardStore, recordCardStore, musicRequests, recordCardStore);
         updateHandler = new UpdateRecordCardHandler(properties, editor,
                 new RecordCardUploadIssuer(properties, new FakeImageIdGenerator(), new FakeUploadUrlGenerator(),
                         new FakeMultipartUploadStarter()),
@@ -144,7 +148,7 @@ class RetryRecordCardMusicIntegrationTest {
     }
 
     @Test
-    @DisplayName("수정 초안을 만든 뒤 다시 만들기를 해도 이력이 없어 초안 확정은 409가 아니라 반영된다")
+    @DisplayName("수정 초안을 만든 뒤 다시 만들기를 해도 이력이 없어 초안 확정은 409가 아니라 반영된다 — 그사이 끝난 음악도 덮지 않는다")
     void retryDoesNotConflictWithPendingEdit() {
         // given — 새 사진이 든 수정 초안
         UpdateRecordCardResult draft = updateHandler.handle(new UpdateRecordCardCommand(owner, cardId, null, null,
@@ -152,18 +156,27 @@ class RetryRecordCardMusicIntegrationTest {
                         new UpdateRecordCardCommand.Image(B, null, null, null, null, null),
                         new UpdateRecordCardCommand.Image(null, "image/jpeg", 1_000L, 100L, "n.jpg", "결승선")), null));
         Upload upload = draft.draft().uploads().getFirst();
+        CompleteRecordCardMusicHandler completeMusicHandler = new CompleteRecordCardMusicHandler(
+                (topic, eventId, aggregateId, payload) -> true, recordCardStore, recordCardStore);
 
-        // when — 그사이 다시 만들기, 그다음 올리고 확정
+        // when — 그사이 다시 만들기와 그 결과(B 성공), 그다음 올리고 확정
         retryHandler.handle(new RetryRecordCardMusicCommand(owner, cardId));
+        completeMusicHandler.handle(new CompleteRecordCardMusicCommand("test.record-card.music.generated",
+                UuidCreator.getTimeOrderedEpoch().toString(), cardId, MusicStatus.COMPLETED, "audio/base.wav",
+                List.of(new PhotoMusic(B, "audio/b.wav")), null, null, "{}"));
         objectStore.putObject(upload.imageKey(), 1_000L, "image/jpeg");
         objectStore.putObject(thumbnailKeyOf(upload.imageKey()), 100L, "image/jpeg");
         UUID confirmed = completeHandler.handle(
                 new CompleteRecordCardDraftCommand(owner, draft.draft().recordCardDraftId())).recordCardId();
 
-        // then
+        // then — 남긴 A·B는 확정 직전 음악 그대로이고, 새 사진만 생성 중이다
         assertThat(confirmed).isEqualTo(cardId);
         assertThat(card().getImages()).extracting(image -> image.getRecordCardImageId().value())
                 .containsExactly(A, B, upload.recordCardImageId());
+        assertThat(card().getImages()).extracting(RecordCardImage::getMusicStatus)
+                .containsExactly(MusicStatus.COMPLETED, MusicStatus.COMPLETED, MusicStatus.GENERATING);
+        assertThat(card().getImages()).extracting(image -> image.getMusicKey().map(MusicKey::value).orElse(null))
+                .containsExactly("audio/a.wav", "audio/b.wav", null);
         assertThat(musicRequests.requests()).hasSize(2);
     }
 

@@ -27,7 +27,7 @@ import java.util.Map;
 import java.util.UUID;
 
 // 카드가 바뀌기 직전 모습 — 수정·삭제마다 한 줄. 한 번 쓰고 고치지 않는다(created_at = 스냅샷을 찍은 시각).
-// 카드를 하드 삭제해도 남아야 해서 record_card_id·user_id·running_record_id에 FK를 걸지 않는다(erd record_card_histories)
+// 카드를 하드 삭제해도 남아야 해서 record_card_id·user_id·running_record_id에 FK를 걸지 않는다
 @Getter
 @Entity
 @Table(

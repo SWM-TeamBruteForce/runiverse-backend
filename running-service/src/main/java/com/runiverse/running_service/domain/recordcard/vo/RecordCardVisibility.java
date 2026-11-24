@@ -18,7 +18,7 @@ public enum RecordCardVisibility {
         this.required = required;
     }
 
-    // 이 공개 범위의 카드를 그 관계 등급의 사람이 볼 수 있는가 — 볼 수 없으면 조회는 404로 숨긴다(api-spec 8-1)
+    // 이 공개 범위의 카드를 그 관계 등급의 사람이 볼 수 있는가 — 볼 수 없으면 조회는 404로 숨긴다
     public boolean isVisibleTo(RelationLevel level) {
         return level.isAtLeast(required);
     }

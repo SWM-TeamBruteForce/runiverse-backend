@@ -27,7 +27,7 @@ import java.util.UUID;
 @Table(
         name = "record_card_images",
         // 한 카드에서 같은 자리에 사진 두 장이 오지 않는다 — 커밋 때 검사한다(deferrable).
-        // 수정 때 순서를 맞바꾸거나 빼고 같은 자리에 넣으면 flush 중간에 값이 겹치기 때문이다(erd record_card_images).
+        // 수정 때 순서를 맞바꾸거나 빼고 같은 자리에 넣으면 flush 중간에 값이 겹치기 때문이다.
         // 앞 열이 record_card_id라 카드 사진 조회(8-1·10-3 장수)와 카드 삭제 CASCADE의 인덱스를 겸한다
         uniqueConstraints = @UniqueConstraint(name = "uk_record_card_image_sort_order",
                 columnNames = {"record_card_id", "sort_order"}, options = "deferrable initially deferred")

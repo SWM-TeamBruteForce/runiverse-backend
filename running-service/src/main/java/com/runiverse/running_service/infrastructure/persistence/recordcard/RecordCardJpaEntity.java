@@ -30,7 +30,7 @@ import java.util.UUID;
 @Table(
         name = "record_cards",
         uniqueConstraints = {
-                // 기록과 1:1 — 카드 쓰기(작성·수정·삭제)는 모두 running_records 행을 먼저 잠가 줄 세운다.
+                // 기록과 1:1 — 카드 쓰기(작성·수정·삭제·다시 만들기·음악 완료)는 모두 running_records 행을 먼저 잠가 줄 세운다.
                 // 처음 만들 때는 잠글 카드 행이 없고 초안마다 카드 ID가 달라서다. 이 제약은 잠금이 빠졌을 때의 마지막 안전장치다
                 @UniqueConstraint(name = "uk_record_card_running_record", columnNames = "running_record_id"),
                 // 작성자별 순위가 겹치지 않는다 — 다른 기록 둘로 동시에 만들어 최댓값을 같이 읽으면 하나가 걸린다.

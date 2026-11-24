@@ -5,6 +5,8 @@ import com.runiverse.running_service.application.recordcard.command.update.Recor
 import com.runiverse.running_service.application.recordcard.command.update.RecordCardEditor.Changes;
 import com.runiverse.running_service.application.recordcard.exception.InvalidRecordCardImageException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardNotFoundException;
+import com.runiverse.running_service.application.recordcard.exception.RecordCardThumbnailOutOfRangeException;
+import com.runiverse.running_service.application.recordcard.port.out.ExistsOwnRecordCardPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadLastRecordCardHistoryPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardForUpdatePort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRunningSummaryPort;
@@ -16,6 +18,7 @@ import com.runiverse.running_service.application.recordcard.port.out.RequestReco
 import com.runiverse.running_service.application.recordcard.port.out.SnapshotRecordCardPort;
 import com.runiverse.running_service.application.recordcard.port.out.UpdateRecordCardPort;
 import com.runiverse.running_service.domain.common.vo.RunningRecordId;
+import com.runiverse.running_service.domain.common.vo.UserId;
 import com.runiverse.running_service.domain.recordcard.RecordCard;
 import com.runiverse.running_service.domain.recordcard.RecordCard.ImageSlot;
 import com.runiverse.running_service.domain.recordcard.RecordCardImage;
@@ -59,6 +62,8 @@ class RecordCardEditorTest {
             LocalDateTime.of(2026, 10, 19, 6, 30), 61, new BigDecimal("15.0"), 22);
 
     @Mock
+    private ExistsOwnRecordCardPort existsOwnRecordCardPort;
+    @Mock
     private LoadRecordCardForUpdatePort loadRecordCardForUpdatePort;
     @Mock
     private SnapshotRecordCardPort snapshotRecordCardPort;
@@ -75,14 +80,28 @@ class RecordCardEditorTest {
 
     @BeforeEach
     void setUp() {
-        editor = new RecordCardEditor(loadRecordCardForUpdatePort, snapshotRecordCardPort, updateRecordCardPort,
-                loadRunningSummaryPort, requestRecordCardMusicPort, loadLastRecordCardHistoryPort);
+        editor = new RecordCardEditor(existsOwnRecordCardPort, loadRecordCardForUpdatePort, snapshotRecordCardPort,
+                updateRecordCardPort, loadRunningSummaryPort, requestRecordCardMusicPort,
+                loadLastRecordCardHistoryPort);
     }
 
     @Test
     @DisplayName("없는 카드는 404이고 아무것도 쓰지 않는다")
     void notFound() {
         // given
+        when(existsOwnRecordCardPort.existsOwnedBy(new RecordCardId(CARD_ID), new UserId(OWNER_ID))).thenReturn(false);
+
+        // when & then
+        assertThatThrownBy(() -> editor.applyNow(OWNER_ID, CARD_ID, memo("새 회고")))
+                .isInstanceOf(RecordCardNotFoundException.class);
+        verifyNoInteractions(snapshotRecordCardPort, updateRecordCardPort, requestRecordCardMusicPort);
+    }
+
+    @Test
+    @DisplayName("주인 확인 뒤 잠그는 사이 지워진 카드도 404이고 아무것도 쓰지 않는다")
+    void deletedAfterCheck() {
+        // given
+        when(existsOwnRecordCardPort.existsOwnedBy(new RecordCardId(CARD_ID), new UserId(OWNER_ID))).thenReturn(true);
         when(loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(CARD_ID))).thenReturn(Optional.empty());
 
         // when & then
@@ -92,15 +111,17 @@ class RecordCardEditorTest {
     }
 
     @Test
-    @DisplayName("남의 카드는 없는 카드와 같은 404다")
+    @DisplayName("남의 카드는 기록 행을 잠그지 않고 없는 카드와 같은 404다")
     void othersCard() {
         // given
-        givenCard();
+        UUID stranger = UuidCreator.getTimeOrderedEpoch();
+        when(existsOwnRecordCardPort.existsOwnedBy(new RecordCardId(CARD_ID), new UserId(stranger))).thenReturn(false);
 
         // when & then
-        assertThatThrownBy(() -> editor.applyNow(UuidCreator.getTimeOrderedEpoch(), CARD_ID, memo("새 회고")))
+        assertThatThrownBy(() -> editor.applyNow(stranger, CARD_ID, memo("새 회고")))
                 .isInstanceOf(RecordCardNotFoundException.class);
-        verifyNoInteractions(snapshotRecordCardPort, updateRecordCardPort, requestRecordCardMusicPort);
+        verifyNoInteractions(loadRecordCardForUpdatePort, snapshotRecordCardPort, updateRecordCardPort,
+                requestRecordCardMusicPort);
     }
 
     @Test
@@ -113,6 +134,18 @@ class RecordCardEditorTest {
         assertThatThrownBy(() -> editor.applyNow(OWNER_ID, CARD_ID, slots(
                 List.of(new ImageSlot.Keep(UuidCreator.getTimeOrderedEpoch(), null)))))
                 .isInstanceOf(InvalidRecordCardImageException.class);
+        verifyNoInteractions(snapshotRecordCardPort, updateRecordCardPort, requestRecordCardMusicPort);
+    }
+
+    @Test
+    @DisplayName("사진 목록 없이 보낸 썸네일 위치가 지금 사진 수 밖이면 400 INVALID_REQUEST이고 아무것도 쓰지 않는다")
+    void thumbnailOutOfRangeWithoutSlots() {
+        // given -> 사진 두 장인 카드
+        givenCard();
+
+        // when & then
+        assertThatThrownBy(() -> editor.applyNow(OWNER_ID, CARD_ID, new Changes(null, null, null, null, 2)))
+                .isInstanceOf(RecordCardThumbnailOutOfRangeException.class);
         verifyNoInteractions(snapshotRecordCardPort, updateRecordCardPort, requestRecordCardMusicPort);
     }
 
@@ -208,6 +241,7 @@ class RecordCardEditorTest {
                         RecordCardImage.restore(IMAGE_B, "record-cards/b.jpg", null, "audio/b.wav",
                                 MusicStatus.COMPLETED, 1)))
                 .build();
+        when(existsOwnRecordCardPort.existsOwnedBy(new RecordCardId(CARD_ID), new UserId(OWNER_ID))).thenReturn(true);
         when(loadRecordCardForUpdatePort.loadForUpdate(new RecordCardId(CARD_ID))).thenReturn(Optional.of(card));
     }
 

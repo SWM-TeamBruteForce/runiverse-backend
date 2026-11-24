@@ -17,6 +17,7 @@ import com.runiverse.running_service.application.recordcard.exception.RecordCard
 import com.runiverse.running_service.application.recordcard.exception.RecordCardDraftNotFoundException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardImageNotUploadedException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardNotFoundException;
+import com.runiverse.running_service.application.recordcard.exception.RecordCardThumbnailOutOfRangeException;
 import com.runiverse.running_service.application.recordcard.port.in.CompleteRecordCardDraftUsecase;
 import com.runiverse.running_service.application.recordcard.port.in.CreateRecordCardDraftUsecase;
 import com.runiverse.running_service.application.recordcard.port.in.DeleteRecordCardUsecase;
@@ -530,6 +531,26 @@ class RecordCardControllerTest {
         assertThat(result.getResponse().getStatus()).isEqualTo(400);
         assertThat(body(result)).containsEntry("message", "같은 사진을 두 번 넣을 수 없습니다.");
         verifyNoInteractions(updateRecordCardUsecase);
+    }
+
+    @Test
+    @DisplayName("사진 목록 없이 보낸 썸네일 위치가 범위 밖이라 유스케이스가 거절하면 400으로 내려 준다")
+    void updateThumbnailOutOfRangeIs400() throws Exception {
+        // given -> 지금 사진 수는 유스케이스만 알아 DTO가 아니라 유스케이스가 거절한다
+        given(updateRecordCardUsecase.handle(any())).willThrow(new RecordCardThumbnailOutOfRangeException());
+
+        // when
+        MvcResult result = mockMvc.perform(patch("/record-cards/{id}", DRAFT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"thumbnailIndex":2}
+                                """))
+                .andReturn();
+
+        // then
+        assertThat(result.getResponse().getStatus()).isEqualTo(400);
+        assertThat(body(result)).containsEntry("code", "INVALID_REQUEST")
+                .containsEntry("message", "썸네일 위치가 사진 범위를 벗어났습니다.");
     }
 
     private static GetRecordCardDetailResult detailResult(UUID cardId) {

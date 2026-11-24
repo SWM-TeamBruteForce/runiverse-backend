@@ -89,7 +89,7 @@ public class CompleteRecordCardMusicHandler implements CompleteRecordCardMusicUs
         MusicStatus before = recordCard.getBaseMusicStatus();
         boolean changed = recordCard.completeBaseMusic(command.result(), command.baseMusicKey());
         if (!changed) {
-            log.warn("[기록 카드] 기본곡 반영 건너뜀: 같은 결과 - recordCardId={}, eventId={}, "
+            log.info("[기록 카드] 기본곡 반영 건너뜀: 같은 결과 - recordCardId={}, eventId={}, "
                             + "currentStatus={}, result={}",
                     command.recordCardId(), command.eventId(), before, command.result());
         }
@@ -100,7 +100,7 @@ public class CompleteRecordCardMusicHandler implements CompleteRecordCardMusicUs
                                     PhotoMusic photoMusic, CompleteRecordCardMusicCommand command) {
         RecordCardImage image = imagesById.get(photoMusic.recordCardImageId());
         if (image == null) {
-            // 수정에서 뺀 사진의 늦은 결과 — 사진 행은 작성 확정만 만든다
+            // 수정에서 뺀 사진의 늦은 결과 — 사진 행은 음악 요청과 같은 트랜잭션에서 만들어 결과보다 늦게 생길 수 없다
             log.warn("[기록 카드] 사진 음악 반영 건너뜀: 사진 없음 - recordCardId={}, recordCardImageId={}, eventId={}",
                     command.recordCardId(), photoMusic.recordCardImageId(), command.eventId());
             return false;

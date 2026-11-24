@@ -2,6 +2,7 @@ package com.runiverse.running_service.infrastructure.persistence.recordcard;
 
 import com.runiverse.running_service.application.recordcard.port.out.CreateRecordCardPort;
 import com.runiverse.running_service.application.recordcard.port.out.DeleteRecordCardPort;
+import com.runiverse.running_service.application.recordcard.port.out.ExistsOwnRecordCardPort;
 import com.runiverse.running_service.application.recordcard.port.out.FindRecordCardIdByRunningRecordPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadLastRecordCardHistoryPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadMaxDisplayOrderPort;
@@ -47,7 +48,7 @@ import java.util.stream.Collectors;
 public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRecordPort, LoadMaxDisplayOrderPort,
         CreateRecordCardPort, LoadRecordCardForUpdatePort, SaveRecordCardMusicPort, LoadRecordCardDetailPort,
         SnapshotRecordCardPort, DeleteRecordCardPort, UpdateRecordCardPort, LoadLastRecordCardHistoryPort,
-        LoadRecordCardSummariesPort {
+        LoadRecordCardSummariesPort, ExistsOwnRecordCardPort {
 
     private static final String UK_RUNNING_RECORD = "uk_record_card_running_record";
     private static final String UK_USER_DISPLAY_ORDER = "uk_record_card_user_display_order";
@@ -123,6 +124,20 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
     }
 
     @Override
+    public boolean existsOwnedBy(RecordCardId recordCardId, UserId userId) {
+        // PK로 한 행만 본다 — 잠그지 않는다
+        return entityManager.createQuery("""
+                        SELECT COUNT(card)
+                        FROM RecordCardJpaEntity card
+                        WHERE card.recordCardId = :recordCardId
+                          AND card.userId = :userId
+                        """, Long.class)
+                .setParameter("recordCardId", recordCardId.value())
+                .setParameter("userId", userId.value())
+                .getSingleResult() > 0;
+    }
+
+    @Override
     public Optional<RecordCard> loadForUpdate(RecordCardId recordCardId) {
         // 1. 카드가 붙은 기록 ID만 읽는다 — 카드 엔티티는 잠근 뒤에 읽는다(그 사이 수정된 최신 값을 보려고)
         Optional<Long> runningRecordId = entityManager.createQuery("""
@@ -137,7 +152,7 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
             return Optional.empty();
         }
 
-        // 2. 기록 행 하나만 잠근다 — 카드 쓰기(작성·수정·삭제·음악 완료)는 모두 이 행으로 줄을 선다. 카드 행은 잠그지 않는다
+        // 2. 기록 행 하나만 잠근다 — 카드 쓰기(작성·수정·삭제·다시 만들기·음악 완료)는 모두 이 행으로 줄을 선다. 카드 행은 잠그지 않는다
         entityManager.createQuery("""
                         SELECT record.runningRecordId
                         FROM RunningRecordJpaEntity record
@@ -188,7 +203,6 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
         }
     }
 
-    // 카드의 사진을 캐러셀 순서대로 — uk_record_card_image_sort_order(record_card_id, sort_order)를 탄다
     @Override
     public Optional<RecordCardDetail> loadDetail(RecordCardId recordCardId) {
         // 1. 카드와 붙은 기록을 한 번에 읽는다 — PK로 한 행이다. 조회라 잠그지 않는다
@@ -276,7 +290,7 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
 
     @Override
     public void snapshot(RecordCardId recordCardId, RecordCardSnapshotReason reason) {
-        // 엔티티의 지금 값을 남긴다 — loadForUpdate가 읽은 카드·사진이 이 트랜잭션에 있어 다시 SELECT하지 않는다.
+        // 엔티티의 지금 값을 남긴다 — loadForUpdate가 읽은 카드가 이 트랜잭션에 있어 다시 SELECT하지 않는다.
         // 수정 저장(update)보다 먼저 불러 엔티티가 아직 바뀌기 전이다
         RecordCardJpaEntity card = entityManager.find(RecordCardJpaEntity.class, recordCardId.value());
         if (card == null) {
@@ -352,7 +366,7 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
         entityManager.remove(card);
     }
 
-    // 이력의 사진 한 장 — 키 이름은 erd에 적은 저장 약속이다. 값이 없어도 키를 빼지 않는다(LinkedHashMap은 null을 담는다)
+    // 이력의 사진 한 장 — 키 이름은 images 칸의 저장 약속이라 바꾸지 않는다. 값이 없어도 키를 빼지 않는다(LinkedHashMap은 null을 담는다)
     private static Map<String, Object> historyImage(RecordCardImageJpaEntity image) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("recordCardImageId", image.getRecordCardImageId().toString());
@@ -364,6 +378,7 @@ public class RecordCardPersistenceAdapter implements FindRecordCardIdByRunningRe
         return map;
     }
 
+    // 카드의 사진을 캐러셀 순서대로 — uk_record_card_image_sort_order(record_card_id, sort_order)를 탄다
     private List<RecordCardImageJpaEntity> loadImageEntities(UUID recordCardId) {
         return entityManager.createQuery("""
                         SELECT image

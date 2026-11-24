@@ -36,7 +36,7 @@ class DeleteRecordCardIntegrationTest {
     void setUp() {
         owner = UuidCreator.getTimeOrderedEpoch();
         recordCardStore = new InMemoryRecordCardStore();
-        handler = new DeleteRecordCardHandler(recordCardStore, recordCardStore, recordCardStore);
+        handler = new DeleteRecordCardHandler(recordCardStore, recordCardStore, recordCardStore, recordCardStore);
         recordCardStore.addRecord(RECORD_ID, owner);
     }
 

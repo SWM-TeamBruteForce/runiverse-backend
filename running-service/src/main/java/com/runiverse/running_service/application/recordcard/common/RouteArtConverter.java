@@ -6,7 +6,7 @@ import com.runiverse.running_service.application.running.port.out.RoutePoint;
 import java.util.ArrayList;
 import java.util.List;
 
-// 기록의 구간 경로를 카드용 선 아트로 바꾼다 — 실제 위치를 지우고 모양만 남긴다(api-spec 8-1 「경로 선 아트」).
+// 기록의 구간 경로를 카드용 선 아트로 바꾼다 — 실제 위치를 지우고 모양만 남긴다.
 // 카드는 남에게도 보이므로 위경도를 싣지 않는다. 보는 사람이 본인이어도 같다 — 본인의 실제 경로는 6-1이 준다
 public final class RouteArtConverter {
 
@@ -79,19 +79,33 @@ public final class RouteArtConverter {
         return art;
     }
 
-    // 점이 상한을 넘으면 조각마다 점 수에 비례해 고르게 남긴다 — 조각의 첫·끝 점(시작·도착·끊긴 곳)은 늘 남긴다.
+    // 점이 상한을 넘으면 조각마다 첫·끝 점(시작·도착·끊긴 곳)을 먼저 남기고, 남은 몫을 조각의 나머지 점 수에 비례해 나눈다.
+    // 몫은 앞 조각부터 누적해 내림한다 — 조각마다 버린 끝수가 다음 조각으로 넘어가 남은 몫을 다 쓴다.
     // 조각이 아주 많아 첫·끝만으로도 상한을 넘으면 첫·끝만 남긴다
     private static List<List<RoutePoint>> reduce(List<List<RoutePoint>> segments, int maxPoints) {
         int total = segments.stream().mapToInt(List::size).sum();
         if (total <= maxPoints) {
             return segments;
         }
+        int ends = segments.stream().mapToInt(RouteArtConverter::ends).sum();
+        int spare = Math.max(maxPoints - ends, 0);
+        int middles = total - ends;
         List<List<RoutePoint>> reduced = new ArrayList<>(segments.size());
+        long counted = 0;
+        int given = 0;
         for (List<RoutePoint> segment : segments) {
-            int budget = Math.max(Math.min(segment.size(), 2), segment.size() * maxPoints / total);
-            reduced.add(sample(segment, budget));
+            int keep = ends(segment);
+            counted += segment.size() - keep;
+            int upTo = spare == 0 ? 0 : (int) (counted * spare / middles);
+            reduced.add(sample(segment, keep + upTo - given));
+            given = upTo;
         }
         return reduced;
+    }
+
+    // 조각에서 늘 남기는 점 수 — 첫·끝 둘(점이 하나뿐인 조각은 하나)
+    private static int ends(List<RoutePoint> segment) {
+        return Math.min(segment.size(), 2);
     }
 
     // 첫 점부터 끝 점까지 같은 간격으로 budget개를 고른다
