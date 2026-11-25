@@ -16,6 +16,8 @@ public record RecordCardDraftProperties(
         @NotNull Duration ttl,
         // 사진 한 장의 최대 크기 — 넘으면 9-1이 400으로 거절한다. 응답 문구는 이 값으로 만든다
         @NotNull DataSize maxImageSize,
+        // 사진마다 함께 올리는 작은 버전(썸네일)의 최대 크기 — 늘 한 번에 올리므로 조각 크기보다 작아야 한다
+        @NotNull DataSize maxThumbnailSize,
         // 이 크기 이하는 URL 하나로 한 번에 올리고, 넘으면 이 크기씩 조각으로 나눠 올린다 — 마지막 조각만 이보다 작다
         @NotNull DataSize partSize,
         // 같은 초안의 확정을 하나만 처리하는 잠금의 유효 시간 — 확정 처리(S3 확인·합치기, DB 저장)보다 길어야 한다.
@@ -43,6 +45,14 @@ public record RecordCardDraftProperties(
     @AssertTrue(message = "조각 크기는 S3 최소 조각 크기(5MB) 이상이어야 한다")
     public boolean isPartSizeAtLeastS3Minimum() {
         return partSize == null || partSize.compareTo(S3_MIN_PART_SIZE) >= 0;
+    }
+
+    @AssertTrue(message = "썸네일 최대 크기는 0보다 크고 조각 크기 이하여야 한다")
+    public boolean isMaxThumbnailSizeWithinPartSize() {
+        if (maxThumbnailSize == null || partSize == null) {
+            return true;
+        }
+        return maxThumbnailSize.toBytes() > 0 && maxThumbnailSize.compareTo(partSize) <= 0;
     }
 
     @AssertTrue(message = "최대 크기를 조각 크기로 나눈 조각 수가 S3 상한(10,000)을 넘는다")

@@ -2,6 +2,7 @@ package com.runiverse.running_service.infrastructure.storage;
 
 import com.runiverse.running_service.application.common.port.out.UploadedImage;
 import com.runiverse.running_service.application.recordcard.port.out.CompleteMultipartUploadPort;
+import com.runiverse.running_service.application.recordcard.port.out.GenerateRecordCardViewUrlPort;
 import com.runiverse.running_service.application.recordcard.port.out.GenerateRecordCardUploadUrlPort;
 import com.runiverse.running_service.application.recordcard.port.out.LoadRecordCardImagePort;
 import com.runiverse.running_service.application.recordcard.port.out.MultipartUpload;
@@ -10,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CompletedPart;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.NoSuchUploadException;
@@ -24,11 +26,12 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
-// 기록 카드 사진·음악 버킷 — 프로필·배경 사진(user-assets)과 버킷을 나눠 AI 서버 권한·수명 주기 규칙을 따로 둔다
+// 기록 카드 사진 버킷 — 프로필·배경 사진(user-assets)과 버킷을 나눠 AI 서버 권한·수명 주기 규칙을 따로 둔다.
+// 음악은 AI 서버가 올리는 음악 버킷이다 — 이 어댑터는 그 버킷에 보기 URL만 서명한다(쓰지 않는다)
 @Component
 @RequiredArgsConstructor
 public class RecordCardS3Adapter implements GenerateRecordCardUploadUrlPort, StartMultipartUploadPort,
-        LoadRecordCardImagePort, CompleteMultipartUploadPort {
+        LoadRecordCardImagePort, CompleteMultipartUploadPort, GenerateRecordCardViewUrlPort {
 
     private final S3Presigner s3Presigner;
     private final S3Properties properties;
@@ -128,5 +131,28 @@ public class RecordCardS3Adapter implements GenerateRecordCardUploadUrlPort, Sta
             // 이미 합쳤거나(합침 표시 전에 끊긴 재시도) 수명 주기 규칙이 지웠다 — 어느 쪽인지는 HEAD가 가른다
             return MultipartCompletion.UPLOAD_NOT_FOUND;
         }
+    }
+
+    @Override
+    public String imageUrl(String imageKey) {
+        return viewUrl(properties.recordCardBucket(), imageKey);
+    }
+
+    @Override
+    public String musicUrl(String musicKey) {
+        return viewUrl(properties.musicBucket(), musicKey);
+    }
+
+    // 서명만 한다 — S3를 부르지 않아 객체가 없어도 URL은 나온다(열면 404). 유효 시간은 다른 보기 URL과 같다
+    private String viewUrl(String bucket, String key) {
+        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .build();
+        return s3Presigner.presignGetObject(builder -> builder
+                        .signatureDuration(properties.viewUrlTtl())
+                        .getObjectRequest(getObjectRequest))
+                .url()
+                .toString();
     }
 }

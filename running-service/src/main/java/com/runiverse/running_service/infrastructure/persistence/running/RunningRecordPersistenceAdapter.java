@@ -9,6 +9,7 @@ import com.runiverse.running_service.application.running.port.out.ExistsRunningR
 import com.runiverse.running_service.application.running.port.out.LoadMyRunningRecordsPort;
 import com.runiverse.running_service.application.running.port.out.LoadRecentRunningPacesPort;
 import com.runiverse.running_service.application.running.port.out.LoadRecordedRoutesPort;
+import com.runiverse.running_service.application.running.port.out.LoadSegmentPolylinesPort;
 import com.runiverse.running_service.application.running.port.out.RecentRunningPace;
 import com.runiverse.running_service.application.running.port.out.RecordedRoute;
 import com.runiverse.running_service.application.running.port.out.RecordedSplitTime;
@@ -41,7 +42,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class RunningRecordPersistenceAdapter implements CreateRunningRecordPort, ExistsRunningRecordPort,
         LoadRecentRunningPacesPort, LoadMyRunningRecordsPort, LoadRecordedRoutesPort, ExistsOwnRunningRecordPort,
-        LockOwnRunningRecordPort, LoadRunningSummaryPort {
+        LockOwnRunningRecordPort, LoadRunningSummaryPort, LoadSegmentPolylinesPort {
 
     // 방당 수천 행이라 영속성 컨텍스트를 비워가며 넣는다.
     // hibernate.jdbc.batch_size와 맞춰야 실제로 묶여 나간다
@@ -188,7 +189,8 @@ public class RunningRecordPersistenceAdapter implements CreateRunningRecordPort,
     @Override
     public List<RunningRecordRow> loadByPeriod(UserId userId, LocalDateTime startInclusive,
                                                LocalDateTime endExclusive) {
-        // 숨긴 방의 기록은 목록에서도 뺀다 — 결과 조회가 그 방을 없는 방으로 본다
+        // 숨긴 방의 기록은 목록에서도 뺀다 — 결과 조회가 그 방을 없는 방으로 본다.
+        // 붙은 기록 카드를 함께 읽는다 — 기록 하나에 카드는 많아야 하나라(uk_record_card_running_record) 행이 늘지 않는다
         return entityManager.createQuery("""
                         SELECT NEW com.runiverse.running_service.application.running.port.out.RunningRecordRow(
                             record.runningRecordId, record.room.runningRoomId, record.room.type,
@@ -199,8 +201,9 @@ public class RunningRecordPersistenceAdapter implements CreateRunningRecordPort,
                              WHERE session.room = record.room
                                AND player.status IN :startedStatuses),
                             record.startAt, record.totalDistance, record.totalDuration, record.avgPace,
-                            record.totalElevationGain)
+                            record.totalElevationGain, card.recordCardId, card.thumbnailImageKey, card.activityType)
                         FROM RunningRecordJpaEntity record
+                        LEFT JOIN RecordCardJpaEntity card ON card.runningRecord = record
                         WHERE record.userId = :userId
                           AND record.room.deletedAt IS NULL
                           AND record.startAt >= :startInclusive
@@ -216,7 +219,8 @@ public class RunningRecordPersistenceAdapter implements CreateRunningRecordPort,
 
     // 기록마다 조각 polyline을 번호순으로 모은다 — 기록마다 따로 부르면 기록 수만큼 쿼리가 나간다.
     // uk_running_segment_record_number(running_record_id, segment_number)가 조회와 정렬을 맡는다
-    private Map<Long, List<String>> loadSegmentPolylines(Collection<Long> recordIds) {
+    @Override
+    public Map<Long, List<String>> loadSegmentPolylines(Collection<Long> recordIds) {
         return entityManager.createQuery("""
                         SELECT segment.record.runningRecordId AS recordId,
                             segment.routePolyline AS routePolyline

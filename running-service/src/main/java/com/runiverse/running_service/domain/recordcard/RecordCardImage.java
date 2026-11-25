@@ -58,9 +58,16 @@ public class RecordCardImage {
         this.sortOrder = sortOrder;
     }
 
-    // 설명만 바꾼다 — 음악은 옛 설명으로 만든 그대로 둔다. null이면 설명을 지운다
+    // 설명만 바꾼다. null이면 설명을 지운다 — 음악을 다시 만들지는 카드(RecordCard.edit)가 정한다
     void changeCaption(RecordCardImageCaption caption) {
         this.caption = caption;
+    }
+
+    // 음악을 다시 만든다 — 재료(설명)가 바뀐 사진(9-3)·다시 만들기(9-6).
+    // 옛 key를 버리고 생성 중으로 되돌린다(완료 알림은 GENERATING에만 반영된다)
+    void restartMusic() {
+        this.musicStatus = MusicStatus.GENERATING;
+        this.musicKey = null;
     }
 
     // 생성 완료 알림 — COMPLETED면 AI가 올린 key를 함께 받는다. 이미 끝난 음악에 온 알림(중복 전달)은 무시하고 false

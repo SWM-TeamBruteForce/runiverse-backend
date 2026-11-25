@@ -65,10 +65,10 @@ class RecordCardVoTest {
     class Memo {
 
         @Test
-        @DisplayName("500자까지 받는다")
+        @DisplayName("1000자까지 받는다")
         void acceptMaxLength() {
             // given
-            String value = "가".repeat(500);
+            String value = "가".repeat(1000);
 
             // when
             RecordCardMemo memo = new RecordCardMemo(value);
@@ -78,10 +78,10 @@ class RecordCardVoTest {
         }
 
         @Test
-        @DisplayName("500자를 넘으면 거부한다")
+        @DisplayName("1000자를 넘으면 거부한다")
         void rejectTooLong() {
             // when & then
-            assertThatThrownBy(() -> new RecordCardMemo("가".repeat(501)))
+            assertThatThrownBy(() -> new RecordCardMemo("가".repeat(1001)))
                     .isInstanceOf(RecordCardMemoTooLongException.class);
         }
 

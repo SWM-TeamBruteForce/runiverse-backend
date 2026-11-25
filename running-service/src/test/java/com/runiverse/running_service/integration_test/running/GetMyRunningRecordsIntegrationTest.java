@@ -25,6 +25,7 @@ import com.runiverse.running_service.domain.running.record.RunningRecord;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
 import com.runiverse.running_service.infrastructure.metrics.running.RunningMetricAdapter;
 import com.runiverse.running_service.integration_test.IntegrationTestSupport;
+import com.runiverse.running_service.integration_test.fake.FakeRecordCardViewUrlGenerator;
 import com.runiverse.running_service.integration_test.fake.InMemoryRunningRecordListStore;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +38,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static com.runiverse.running_service.support.TrackFilterFixtures.DEFAULT_PROPERTIES;
@@ -136,7 +138,9 @@ public class GetMyRunningRecordsIntegrationTest extends IntegrationTestSupport {
         );
         finishRunningHandler = new FinishRunningHandler(runningFinisher);
         handler = new GetMyRunningRecordsHandler(
-                new InMemoryRunningRecordListStore(runningStore, runningRecordStore)  // LoadMyRunningRecordsPort
+                new InMemoryRunningRecordListStore(runningStore, runningRecordStore), // LoadMyRunningRecordsPort
+                recordIds -> Map.of(),                                                  // LoadSegmentPolylinesPort
+                new FakeRecordCardViewUrlGenerator()                                    // GenerateRecordCardViewUrlPort
         );
     }
 

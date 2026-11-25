@@ -6,6 +6,7 @@ import com.runiverse.running_service.application.recordcard.command.createdraft.
 import com.runiverse.running_service.application.recordcard.command.createdraft.CreateRecordCardDraftResult;
 import com.runiverse.running_service.application.recordcard.command.createdraft.CreateRecordCardDraftResult.Upload;
 import com.runiverse.running_service.application.recordcard.common.RecordCardDraftProperties;
+import com.runiverse.running_service.application.recordcard.common.RecordCardUploadIssuer;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardAlreadyExistsException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardImageTooLargeException;
 import com.runiverse.running_service.application.recordcard.exception.RunningRecordNotFoundException;
@@ -27,6 +28,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
+import static com.runiverse.running_service.application.recordcard.common.RecordCardStorageKeys.thumbnailKeyOf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -57,16 +59,15 @@ class CreateRecordCardDraftIntegrationTest {
         imageIds = new FakeImageIdGenerator();
         uploadUrls = new FakeUploadUrlGenerator();
         multipartUploads = new FakeMultipartUploadStarter();
+        RecordCardDraftProperties properties = new RecordCardDraftProperties(TTL, DataSize.ofMegabytes(100), DataSize.ofMegabytes(1),
+                DataSize.ofMegabytes(10), Duration.ofSeconds(30));
         handler = new CreateRecordCardDraftHandler(
-                new RecordCardDraftProperties(TTL, DataSize.ofMegabytes(100), DataSize.ofMegabytes(10),
-                        Duration.ofSeconds(30)),
+                properties,
                 recordCardStore,    // ExistsOwnRunningRecordPort
                 recordCardStore,    // FindRecordCardIdByRunningRecordPort
                 draftIds,           // GenerateRecordCardDraftIdPort
                 cardIds,            // GenerateRecordCardIdPort
-                imageIds,           // GenerateImageIdPort
-                uploadUrls,         // GenerateUploadUrlPort
-                multipartUploads,   // StartMultipartUploadPort
+                new RecordCardUploadIssuer(properties, imageIds, uploadUrls, multipartUploads),
                 draftStore          // SaveRecordCardDraftPort
         );
         recordCardStore.addRecord(RECORD_ID, userId);
@@ -77,8 +78,8 @@ class CreateRecordCardDraftIntegrationTest {
     void createDraftWithSingleAndMultipart() {
         // when
         CreateRecordCardDraftResult result = handler.handle(command(List.of(
-                new CreateRecordCardDraftCommand.Image("image/jpeg", 204_800L, "IMG_2034.jpg", "노을"),
-                new CreateRecordCardDraftCommand.Image("image/png", TEN_MB * 2 + 1, "한강 야경.png", null)), null));
+                new CreateRecordCardDraftCommand.Image("image/jpeg", 204_800L, 100L, "IMG_2034.jpg", "노을"),
+                new CreateRecordCardDraftCommand.Image("image/png", TEN_MB * 2 + 1, 100L, "한강 야경.png", null)), null));
 
         // then
         UUID cardId = cardIds.idAt(1);
@@ -87,7 +88,8 @@ class CreateRecordCardDraftIntegrationTest {
         assertThat(result.recordCardDraftId()).isEqualTo(draftIds.idAt(1));
         assertThat(result.uploads()).hasSize(2);
         assertThat(result.uploads().get(0)).isEqualTo(
-                new Upload.Single(imageIds(1), smallKey, uploadUrls.urlOf(smallKey)));
+                new Upload.Single(imageIds(1), smallKey, uploadUrls.urlOf(smallKey),
+                        new Upload.Thumbnail(thumbnailKeyOf(smallKey), uploadUrls.urlOf(thumbnailKeyOf(smallKey)))));
         Upload.Multipart large = (Upload.Multipart) result.uploads().get(1);
         assertThat(large.recordCardImageId()).isEqualTo(imageIds(2));
         assertThat(large.imageKey()).isEqualTo(largeKey);
@@ -100,9 +102,9 @@ class CreateRecordCardDraftIntegrationTest {
         assertThat(draft.thumbnailIndex()).isZero();
         assertThat(draft.images()).containsExactly(
                 new DraftImage(imageIds(1), smallKey, "image/jpeg", 204_800L, "노을", UploadType.SINGLE,
-                        null, null, false),
+                        null, null, false, 100L),
                 new DraftImage(imageIds(2), largeKey, "image/png", TEN_MB * 2 + 1, null, UploadType.MULTIPART,
-                        multipartUploads.uploadIdOf(largeKey), 3, false));
+                        multipartUploads.uploadIdOf(largeKey), 3, false, 100L));
     }
 
     @Test
@@ -152,8 +154,8 @@ class CreateRecordCardDraftIntegrationTest {
     void rejectTooLarge() {
         // when & then
         assertThatThrownBy(() -> handler.handle(command(List.of(
-                new CreateRecordCardDraftCommand.Image("image/png", TEN_MB * 2, "big.png", null),
-                new CreateRecordCardDraftCommand.Image("image/png", TEN_MB * 10 + 1, "huge.png", null)), null)))
+                new CreateRecordCardDraftCommand.Image("image/png", TEN_MB * 2, 100L, "big.png", null),
+                new CreateRecordCardDraftCommand.Image("image/png", TEN_MB * 10 + 1, 100L, "huge.png", null)), null)))
                 .isInstanceOf(RecordCardImageTooLargeException.class);
         assertThat(multipartUploads.started()).isEmpty();
         assertThat(draftStore.isEmpty()).isTrue();
@@ -171,6 +173,6 @@ class CreateRecordCardDraftIntegrationTest {
 
     private CreateRecordCardDraftCommand commandFor(long recordId) {
         return new CreateRecordCardDraftCommand(userId, recordId, "TRAVEL", "바람이 좋았다", "PUBLIC",
-                List.of(new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, "a.jpg", null)), null);
+                List.of(new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, 100L, "a.jpg", null)), null);
     }
 }

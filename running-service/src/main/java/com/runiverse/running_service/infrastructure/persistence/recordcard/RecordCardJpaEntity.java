@@ -30,7 +30,7 @@ import java.util.UUID;
 @Table(
         name = "record_cards",
         uniqueConstraints = {
-                // 기록과 1:1 — 카드 쓰기(작성·수정·삭제)는 모두 running_records 행을 먼저 잠가 줄 세운다.
+                // 기록과 1:1 — 카드 쓰기(작성·수정·삭제·다시 만들기·음악 완료)는 모두 running_records 행을 먼저 잠가 줄 세운다.
                 // 처음 만들 때는 잠글 카드 행이 없고 초안마다 카드 ID가 달라서다. 이 제약은 잠금이 빠졌을 때의 마지막 안전장치다
                 @UniqueConstraint(name = "uk_record_card_running_record", columnNames = "running_record_id"),
                 // 작성자별 순위가 겹치지 않는다 — 다른 기록 둘로 동시에 만들어 최댓값을 같이 읽으면 하나가 걸린다.
@@ -44,7 +44,7 @@ import java.util.UUID;
 @Check(name = "ck_record_card_base_music_key",
         constraints = "(base_music_status = 'COMPLETED') = (base_music_key is not null)")
 @Check(name = "ck_record_card_activity_type", constraints = "activity_type in ('DAILY', 'TRAVEL', 'RACE')")
-@Check(name = "ck_record_card_memo_length", constraints = "char_length(memo) between 1 and 500")
+@Check(name = "ck_record_card_memo_length", constraints = "char_length(memo) between 1 and 1000")
 @Check(name = "ck_record_card_display_order", constraints = "display_order >= 1")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class RecordCardJpaEntity extends BaseTimeEntity {

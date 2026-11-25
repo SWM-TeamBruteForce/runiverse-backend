@@ -43,8 +43,8 @@
 
 ### 언제 쓰는가
 
-- **이벤트를 만든 저장과 같은 트랜잭션에서 쓴다** — 포트는 `@Transactional` 메서드 안에서 부른다. S3 확인처럼 트랜잭션 밖에서 도는 단계에서 부르지 않는다. 지금은 `RecordCardDraftSaver.save()`다.
-- **실제로 새로 저장했을 때만 쓴다** — 재시도·이미 처리된 요청·409로 끝나는 경로는 쓰지 않는다. 9-2는 카드 저장 결과가 `CREATED`일 때만 부르고, 확정된 초안을 다시 부른 재시도는 저장 전에 돌아가 이벤트를 다시 쓰지 않는다.
+- **이벤트를 만든 저장과 같은 트랜잭션에서 쓴다** — 포트는 `@Transactional` 메서드 안에서 부른다. S3 확인처럼 트랜잭션 밖에서 도는 단계에서 부르지 않는다. 지금은 `RecordCardDraftSaver.save()`(작성 확정)·`RecordCardEditor.apply()`(수정)·`RetryRecordCardMusicHandler.handle()`(다시 만들기)다.
+- **실제로 새로 저장했을 때만 쓴다** — 재시도·이미 처리된 요청·409로 끝나는 경로는 쓰지 않는다. 9-2는 카드 저장 결과가 `CREATED`일 때만 부르고, 확정된 초안을 다시 부른 재시도는 저장 전에 돌아가 이벤트를 다시 쓰지 않는다. 수정은 음악 재료가 바뀌었을 때만, 다시 만들기는 `FAILED`인 음악이 있을 때만 쓴다.
   - 이 규칙이 앱 쪽 중복을 막는다. 이벤트 ID는 막지 못한다 — 다시 쓰면 새 ID를 가진 다른 이벤트가 된다.
 - **앱은 Kafka로 직접 보내지 않는다** — 커밋 뒤 직접 발행도, 아웃박스와 직접 발행을 함께 쓰는 것도 하지 않는다. running-service에는 Kafka 프로듀서가 없다.
 
@@ -85,7 +85,7 @@ AI 서버로 가는 요청 이벤트의 inbox는 **AI 서버가 맡는다.** run
   | | 막는 것 | 예 |
   |---|---|---|
   | inbox | 같은 **이벤트**를 두 번 처리하는 것 | 같은 완료 이벤트가 두 번 왔다 |
-  | 상태 규칙 (`GENERATING`인 행만 바꾼다) | 같은 **음악**의 상태가 두 번 바뀌는 것 | 다른 이벤트가 이미 끝난 음악을 다시 가리킨다 |
+  | 상태 규칙 (사진 음악은 `GENERATING`인 행만, 기본곡은 끝난 곡도 결과대로 바꾼다) | 같은 **음악**의 상태가 두 번 바뀌는 것 | 다른 이벤트가 이미 끝난 음악을 다시 가리킨다 — 기본곡은 수정 요청의 결과라 성공·실패 모두 받는다(api-spec 9-3) |
 
 - **대상 행이 없으면 그 결과만 건너뛰고 로그를 남긴다** — 이미 지운 카드·수정에서 뺀 사진의 늦은 완료다. 오류로 보고 재시도하지 않는다.
 
@@ -129,19 +129,20 @@ E2E는 `KAFKA_CONSUMER_ENABLED=false`라 리스너가 뜨지 않는다. 새 환�
 
 | 확인 | 로컬 앱 → 개발 클러스터 | test | prod |
 |---|---|---|---|
-| 접속 — TLS·SCRAM, 그룹 가입, 파티션 배정 | ✅ | 배포 뒤 확인 | 배포 뒤 확인 |
+| 접속 — TLS·SCRAM, 그룹 가입, 파티션 배정 | ✅ | ✅ 배포된 앱 | ✅ 배포된 앱 |
 | 성공 이벤트 → 기본곡·사진 음악 `COMPLETED` + key, inbox 행 1줄, 컨슈머 지연 0 | ✅ | | |
 | 같은 이벤트를 다시 보냄 → inbox에서 걸러 UPDATE 없음 | ✅ | | |
 | 헤더 `id` 없는 이벤트 → ERROR를 남기고 건너뜀 | ✅ | | |
-| 이미 끝난 음악에 늦은 `FAILED` → 덮어쓰지 않음 | ✅ | | |
+| 이미 끝난 **사진** 음악에 늦은 `FAILED` → 덮어쓰지 않음 (기본곡은 11-23부터 결과대로 바꾼다) | ✅ | | |
 | `GENERATING`인 음악에 `FAILED` → `FAILED` | ✅ | | |
 | 앱 서버 → 브로커 `9092` (보안 그룹) | — | ✅ | ✅ |
 | 앱 서버가 접속 값·CA 인증서 파라미터를 읽고 복호화한다 (IAM·KMS) | — | ✅ | ✅ |
-| 토픽 `READ` `DESCRIBE`·그룹 `READ` 권한 | ✅ | 배포 뒤 확인(파티션 배정) | ✅ |
-| `inbox_events`와 앱 계정 권한 | ✅ | 배포 뒤 확인(기동할 때 생성) | ✅ |
-| CA 인증서가 컨테이너에 읽기 전용으로 마운트된다 | — | 배포 뒤 확인 | ✅ 시작 템플릿 버전 8로 띄운 새 인스턴스 |
+| 토픽 `READ` `DESCRIBE`·그룹 `READ` 권한 | ✅ | ✅ 파티션 배정 | ✅ |
+| `inbox_events`와 앱 계정 권한 | ✅ | ✅ 기동할 때 생성 | ✅ |
+| CA 인증서가 컨테이너에 읽기 전용으로 마운트된다 | — | ✅ 배포 워크플로 | ✅ 시작 템플릿 버전 8 — 배포로 뜬 새 인스턴스 |
 | AI 서버가 보낸 완료 이벤트(헤더 `id` = `inference_id`)가 반영된다 | — | AI 서버 반영 뒤 | AI 서버 반영 뒤 |
 
+- **11-23 실제 왕복(로컬 앱 → test DB·test 토픽)** — 9-2 → 아웃박스 → Debezium → AI 서버 수신까지 됐다(AI가 카드 ID·사진 ID를 그대로 돌려보냈다). AI의 완료 이벤트는 헤더 이름이 `id`가 아니라 `inference_id`여서 받는 쪽이 「헤더 id 없음」으로 건너뛰는 상태이고, AI 음악 엔드포인트가 없어 결과도 `FAILED`(`INVOKE`)였다. 두 가지를 AI 쪽에 전했다 — 고쳐지면 위 표 마지막 줄을 같은 방법으로 확인한다.
 - 로컬 검증에 쓴 메시지는 확인 뒤 `kafka-delete-records`로 지웠다([kafka.md](kafka.md) 「지금 설정 때문에 지켜야 할 것」).
 
 ### 정하지 않은 것
@@ -154,8 +155,24 @@ E2E는 `KAFKA_CONSUMER_ENABLED=false`라 리스너가 뜨지 않는다. 새 환�
 
 | 토픽 (`{env}.` 생략) | 방향 | 쓰는 곳 | 코드 | 받는 쪽 중복 거르기 |
 |---|---|---|---|---|
-| `record-card.music.requested` | running-service → AI | 9-2 작성 확정 (9-3 수정은 그 PR에서 더한다) | `RecordCardDraftSaver` → `RequestRecordCardMusicPort` → `RecordCardMusicOutboxAdapter` | AI 서버 inbox — 헤더 `id` (제안, AI 서버와 확인 전) |
-| `record-card.music.generated` | AI → running-service | AI 서버가 음악을 만든 뒤 | `RecordCardMusicGeneratedListener` → `CompleteRecordCardMusicUsecase` → `CompleteRecordCardMusicHandler`(`RecordInboxEventPort` → `InboxEventAdapter`) | running-service inbox — 헤더 `id`(= `inference_id`) + 상태 규칙 |
+| `record-card.music.requested` | running-service → AI | 9-2 작성 확정, 9-3 수정(바로 반영·9-2 수정 확정), 9-6 다시 만들기 | `RecordCardDraftSaver`·`RecordCardEditor`·`RetryRecordCardMusicHandler` → `RequestRecordCardMusicPort` → `RecordCardMusicOutboxAdapter` | AI 서버 inbox — 헤더 `id` (제안, AI 서버와 확인 전) |
+| `record-card.music.generated` | AI → running-service | AI 서버가 음악을 만든 뒤 | `RecordCardMusicGeneratedListener` → `RecordCardMusicGeneratedMessageMapper`(검사·Command 변환) → `CompleteRecordCardMusicUsecase` → `CompleteRecordCardMusicHandler`(`RecordInboxEventPort` → `InboxEventAdapter`) | running-service inbox — 헤더 `id`(= `inference_id`) + 상태 규칙 |
+
+## 로컬 가짜 AI (음악 완료)
+
+로컬은 Debezium·Kafka·AI 서버가 없어 음악이 계속 `GENERATING`이다. 그 자리만 가짜로 바꾼다 — 포트·usecase·Handler·도메인은 그대로다.
+
+```
+9-2 → LocalAiMusicAdapter(@Primary) ─┬→ RecordCardMusicOutboxAdapter (outbox는 운영과 같이 쓴다)
+                                      └→ 커밋 뒤 5초 → 성공 완료 메시지(9-5 형식 ConsumerRecord)를 Spring 이벤트로 발행
+                                           → LocalRecordCardMusicGeneratedListener → Mapper → usecase(inbox·음악 저장)
+```
+
+- **켜지는 조건 — 네 가지가 모두 맞을 때만 두 빈이 생긴다**: `local` 프로필 · `KAFKA_CONSUMER_ENABLED=false` · `KAFKA_ENV=dev` · `RECORD_CARD_MUSIC_LOCAL_AI_ENABLED`(기본 `true`, 빈 값은 꺼짐). test·deploy는 앞의 두 조건에서 막힌다 — 프로필을 잘못 넣어도 구독이 켜진 서버는 만들지 않는다. 로컬 앱을 test DB에 붙이면(`KAFKA_ENV=test`, [cdc.md](cdc.md)) 꺼져, 가짜 결과로 test DB 카드를 완료하지 않는다. E2E도 `KAFKA_ENV=test`라 꺼지고, 카드 생성 직후 `GENERATING`을 확인하므로 `.env.test`에서 `false`로도 끈다.
+- **음악 key**: 기본곡·사진곡 모두 `RECORD_CARD_MUSIC_LOCAL_AI_MUSIC_KEY` 하나(로컬 버킷에 올려 둔 파일)를 쓴다. 서버는 AI가 준 key를 그대로 저장·조회하므로 key 규칙을 흉내 내지 않는다. 켜졌는데 비어 있으면 기동하지 않는다.
+- **결과는 성공만 보낸다.** 실패·늦은 결과·중복은 운영 리스너 단위 테스트가 본다.
+- **예약은 인스턴스 메모리에만 있다** — 5초 안에 서버를 끄면 그 카드는 `GENERATING`으로 남는다. 로컬 전용이라 다시 보내지 않는다.
+- **테스트**: `LocalAiMusicAdapterTest`(위임·커밋 뒤 예약·메시지 형식이 운영 Mapper를 통과), `LocalAiMusicWiringTest`(조건별 빈 생성·`@Primary`·요청 → 수신기 → usecase 실제 연결).
 
 ## 새 이벤트를 더할 때
 

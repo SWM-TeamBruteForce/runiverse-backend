@@ -26,16 +26,20 @@ public record CreateRecordCardDraftResponse(
             String uploadType,          // SINGLE · MULTIPART
             String uploadUrl,           // SINGLE일 때만
             Long partSizeBytes,         // MULTIPART일 때만
-            List<PartResponse> parts    // MULTIPART일 때만
+            List<PartResponse> parts,   // MULTIPART일 때만
+            String thumbnailImageKey,   // 작은 버전(썸네일) — 원본 크기와 상관없이 늘 한 번에 올린다
+            String thumbnailUploadUrl
     ) {
 
         static UploadResponse from(Upload upload) {
             return switch (upload) {
                 case Upload.Single single -> new UploadResponse(single.recordCardImageId(), single.imageKey(),
-                        "SINGLE", single.uploadUrl(), null, null);
+                        "SINGLE", single.uploadUrl(), null, null, single.thumbnail().imageKey(),
+                        single.thumbnail().uploadUrl());
                 case Upload.Multipart multipart -> new UploadResponse(multipart.recordCardImageId(),
                         multipart.imageKey(), "MULTIPART", null, multipart.partSizeBytes(),
-                        multipart.parts().stream().map(PartResponse::from).toList());
+                        multipart.parts().stream().map(PartResponse::from).toList(), multipart.thumbnail().imageKey(),
+                        multipart.thumbnail().uploadUrl());
             };
         }
     }

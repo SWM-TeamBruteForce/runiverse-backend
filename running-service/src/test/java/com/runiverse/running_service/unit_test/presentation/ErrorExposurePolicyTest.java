@@ -166,6 +166,15 @@ public class ErrorExposurePolicyTest {
     }
 
     @Test
+    @DisplayName("수정 초안 뒤에 카드가 바뀐 기록 카드 수정 확정은 409 그대로 노출한다")
+    void recordCardChangedIsExposed() {
+        // 가려지면 500으로 바뀌어, 앱이 다시 불러와 수정하라고 안내할 수 없다
+        assertThat(ErrorExposurePolicy.isExposed(
+                HttpStatus.CONFLICT,
+                RecordCardErrorCode.RECORD_CARD_CHANGED.getCode())).isTrue();
+    }
+
+    @Test
     @DisplayName("온보딩 미완료는 409 그대로 노출한다")
     void onboardingNotCompletedIsExposed() {
         // 러닝 시작·닉네임 변경이 공통으로 쓰는 코드 — 클라가 온보딩 화면으로 보내야 한다

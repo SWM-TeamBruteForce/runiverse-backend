@@ -1,5 +1,7 @@
 package com.runiverse.running_service.unit_test.running.presentation;
 
+import com.runiverse.running_service.domain.recordcard.vo.RecordCardActivityType;
+import com.runiverse.running_service.application.recordcard.common.RouteArtConverter;
 import com.runiverse.running_service.application.running.query.record.GetMyRunningRecordsResult;
 import com.runiverse.running_service.domain.running.room.vo.RunningRoomType;
 import com.runiverse.running_service.presentation.running.response.RunningRecordsResponse;
@@ -8,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -23,7 +26,7 @@ public class RunningRecordsResponseTest {
         GetMyRunningRecordsResult result = new GetMyRunningRecordsResult(List.of(
                 new GetMyRunningRecordsResult.RunningRecord(
                         501L, 125L, RunningRoomType.MATCH, 3L, STARTED_AT,
-                        5020, 1800, 359, 42)));
+                        5020, 1800, 359, 42, null)));
 
         // when
         RunningRecordsResponse response = RunningRecordsResponse.from(result);
@@ -48,13 +51,43 @@ public class RunningRecordsResponseTest {
         GetMyRunningRecordsResult result = new GetMyRunningRecordsResult(List.of(
                 new GetMyRunningRecordsResult.RunningRecord(
                         501L, 125L, RunningRoomType.SOLO, 1L, STARTED_AT,
-                        5020, 1800, 359, null)));
+                        5020, 1800, 359, null, null)));
 
         // when
         RunningRecordsResponse response = RunningRecordsResponse.from(result);
 
         // then
         assertThat(response.runningRecords().get(0).totalElevationGainMeters()).isNull();
+    }
+
+    @Test
+    @DisplayName("카드 요약은 그대로 옮기고(활동 유형은 이름 문자열), 선 아트는 8-1과 같은 [x, y] 배열이다 — 카드가 없으면 null")
+    void 카드_요약을_옮긴다() {
+        // given
+        UUID photoCard = UUID.fromString("01a0f2d4-6180-7000-8000-4466554400c8");
+        UUID lineCard = UUID.fromString("01a0f2d4-6180-7000-8000-4466554400c9");
+        GetMyRunningRecordsResult result = new GetMyRunningRecordsResult(List.of(
+                record(501L, new GetMyRunningRecordsResult.RecordCard(photoCard, RecordCardActivityType.RACE, "https://thumb", null)),
+                record(502L, new GetMyRunningRecordsResult.RecordCard(lineCard, RecordCardActivityType.DAILY, null,
+                        List.of(List.of(new RouteArtConverter.Point(0.1, 0.9),
+                                new RouteArtConverter.Point(0.2, 0.8))))),
+                record(503L, null)));
+
+        // when
+        List<RunningRecordsResponse.RunningRecordResponse> records =
+                RunningRecordsResponse.from(result).runningRecords();
+
+        // then
+        assertThat(records.get(0).recordCard().recordCardId()).isEqualTo(photoCard);
+        assertThat(records.get(0).recordCard().activityType()).isEqualTo("RACE");
+        assertThat(records.get(0).recordCard().thumbnailUrl()).isEqualTo("https://thumb");
+        assertThat(records.get(0).recordCard().routeArt()).isNull();
+        assertThat(records.get(1).recordCard().activityType()).isEqualTo("DAILY");
+        assertThat(records.get(1).recordCard().thumbnailUrl()).isNull();
+        assertThat(records.get(1).recordCard().routeArt()).singleElement()
+                .satisfies(segment -> assertThat(segment)
+                        .containsExactly(new double[]{0.1, 0.9}, new double[]{0.2, 0.8}));
+        assertThat(records.get(2).recordCard()).isNull();
     }
 
     @Test
@@ -65,5 +98,11 @@ public class RunningRecordsResponseTest {
 
         // then
         assertThat(response.runningRecords()).isEmpty();
+    }
+
+    private static GetMyRunningRecordsResult.RunningRecord record(long runningRecordId,
+                                                                 GetMyRunningRecordsResult.RecordCard recordCard) {
+        return new GetMyRunningRecordsResult.RunningRecord(runningRecordId, 125L, RunningRoomType.SOLO, 1L,
+                STARTED_AT, 5020, 1800, 359, null, recordCard);
     }
 }

@@ -1,6 +1,7 @@
 package com.runiverse.running_service.application.recordcard.command.completedraft;
 
 import com.runiverse.running_service.application.common.port.out.UploadedImage;
+import com.runiverse.running_service.application.recordcard.common.RecordCardStorageKeys;
 import com.runiverse.running_service.application.recordcard.common.RecordCardDraftProperties;
 import com.runiverse.running_service.application.recordcard.exception.InvalidRecordCardImageException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardDraftInProgressException;
@@ -18,7 +19,8 @@ import com.runiverse.running_service.application.recordcard.port.out.UpdateRecor
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-// 9-2 확정 — 트랜잭션을 걸지 않는다. S3 확인은 트랜잭션 밖에서 먼저 끝내고, DB 저장만 RecordCardDraftSaver가 짧게 연다
+// 9-2 확정 — 트랜잭션을 걸지 않는다. S3 확인은 트랜잭션 밖에서 먼저 끝내고, DB 저장만 짧게 연다(작성 RecordCardDraftSaver·수정 RecordCardEditDraftSaver).
+// 작성과 수정이 같은 API다 — 초안의 종류로 가른다
 @Service
 @RequiredArgsConstructor
 public class CompleteRecordCardDraftHandler implements CompleteRecordCardDraftUsecase {
@@ -30,6 +32,7 @@ public class CompleteRecordCardDraftHandler implements CompleteRecordCardDraftUs
     private final LoadRecordCardImagePort loadRecordCardImagePort;
     private final CompleteMultipartUploadPort completeMultipartUploadPort;
     private final RecordCardDraftSaver recordCardDraftSaver;
+    private final RecordCardEditDraftSaver recordCardEditDraftSaver;
 
     @Override
     public CompleteRecordCardDraftResult handle(CompleteRecordCardDraftCommand command) {
@@ -49,8 +52,12 @@ public class CompleteRecordCardDraftHandler implements CompleteRecordCardDraftUs
             // 4. 사진이 S3에 다 있는지(400) — 트랜잭션 밖이다. 실패하면 아무것도 저장하지 않고 초안은 그대로 둔다
             RecordCardDraft verified = verifyUploads(draft);
 
-            // 5. DB 저장(트랜잭션) — 기록 잠금·카드 확인·순위·저장. 이미 이 초안이 만든 카드면 저장 없이 끝난다
-            recordCardDraftSaver.save(verified);
+            // 5. DB 저장(트랜잭션) — 작성은 카드를 새로 만들고(이미 이 초안이 만든 카드면 저장 없이 끝난다),
+            //    수정은 있는 카드를 고친다(그사이 다른 수정이 있었으면 409)
+            switch (verified.type()) {
+                case CREATE -> recordCardDraftSaver.save(verified);
+                case UPDATE -> recordCardEditDraftSaver.save(verified);
+            }
 
             // 6. 확정 표시 — 남은 유효 시간은 그대로다. 그사이 초안이 만료돼 표시를 못 남겨도 카드는 저장됐으니 정상 응답
             updateRecordCardDraftPort.update(verified.confirm());
@@ -76,7 +83,10 @@ public class CompleteRecordCardDraftHandler implements CompleteRecordCardDraftUs
                 current = current.withImage(i, image.merge());
                 updateRecordCardDraftPort.update(current);
             }
-            verifyObject(image);
+            verifyObject(image.imageKey(), image.fileSizeBytes(), image.contentType());
+            // 작은 버전(썸네일)도 올라와 있어야 한다 — 형식은 원본과 같다
+            verifyObject(RecordCardStorageKeys.thumbnailKeyOf(image.imageKey()), image.thumbnailFileSizeBytes(),
+                    image.contentType());
         }
         return current;
     }
@@ -93,11 +103,10 @@ public class CompleteRecordCardDraftHandler implements CompleteRecordCardDraftUs
     }
 
     // 실물을 초안에 적힌 크기·형식과 대조한다 — 클라가 올렸다는 말을 믿지 않는다
-    private void verifyObject(DraftImage image) {
-        UploadedImage uploaded = loadRecordCardImagePort.load(image.imageKey())
+    private void verifyObject(String key, long sizeBytes, String contentType) {
+        UploadedImage uploaded = loadRecordCardImagePort.load(key)
                 .orElseThrow(RecordCardImageNotUploadedException::new);
-        if (uploaded.sizeBytes() != image.fileSizeBytes()
-                || !image.contentType().equalsIgnoreCase(uploaded.contentType())) {
+        if (uploaded.sizeBytes() != sizeBytes || !contentType.equalsIgnoreCase(uploaded.contentType())) {
             throw new InvalidRecordCardImageException();
         }
     }

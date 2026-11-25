@@ -21,7 +21,7 @@ public record CreateRecordCardDraftRequest(
         String activityType,
 
         @NotBlank(message = "회고 글은 필수입니다.")
-        @Size(max = 500, message = "회고 글은 500자 이하여야 합니다.")
+        @Size(max = 1000, message = "회고 글은 1000자 이하여야 합니다.")
         String memo,
 
         @NotBlank(message = "공개 범위는 필수입니다.")
@@ -37,7 +37,7 @@ public record CreateRecordCardDraftRequest(
         Integer thumbnailIndex
 ) {
 
-    // 최대 크기(100MB)는 운영값이라 여기서 보지 않는다 — 유스케이스가 설정값으로 본다
+    // 최대 크기(사진 100MB·썸네일 1MB)는 운영값이라 여기서 보지 않는다 — 유스케이스가 설정값으로 본다
     public record Image(
             @NotBlank(message = "이미지 형식은 필수입니다.")
             @Pattern(regexp = "^(?i)(image/jpeg|image/png|image/webp)$",
@@ -47,6 +47,11 @@ public record CreateRecordCardDraftRequest(
             @NotNull(message = "파일 크기는 필수입니다.")
             @Min(value = 1, message = "파일 크기는 1바이트 이상이어야 합니다.")
             Long fileSizeBytes,
+
+            // 앱이 원본과 같은 형식으로 줄여 함께 올리는 작은 버전 — 달력·목록 칸이 원본 대신 받는다
+            @NotNull(message = "썸네일 크기는 필수입니다.")
+            @Min(value = 1, message = "썸네일 크기는 1바이트 이상이어야 합니다.")
+            Long thumbnailFileSizeBytes,
 
             // 사진 key의 마지막 부분에 들어간다 — 폴더를 벗어나는 / · \ · 제어 문자와, 앞뒤 공백을 지우면 . · ..만 남는 이름을 막는다.
             // 앞뒤 공백은 막지 않는다 — Command가 지우고 받는다

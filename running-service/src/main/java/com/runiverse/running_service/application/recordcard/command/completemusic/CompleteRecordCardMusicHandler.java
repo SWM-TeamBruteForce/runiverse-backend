@@ -7,6 +7,7 @@ import com.runiverse.running_service.application.recordcard.port.out.LoadRecordC
 import com.runiverse.running_service.application.recordcard.port.out.SaveRecordCardMusicPort;
 import com.runiverse.running_service.domain.recordcard.RecordCard;
 import com.runiverse.running_service.domain.recordcard.RecordCardImage;
+import com.runiverse.running_service.domain.recordcard.vo.MusicStatus;
 import com.runiverse.running_service.domain.recordcard.vo.RecordCardId;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +22,8 @@ import java.util.stream.Collectors;
 
 // 음악 생성 완료를 카드에 반영한다 — inbox 기록과 상태 변경이 한 트랜잭션이다.
 // 결과에 담긴 음악만 본다 — 담기지 않은 음악은 다른 요청(생성 중에 들어온 수정·다시 만들기)의 것일 수 있다.
-// GENERATING인 음악만 바꾼다 — 이미 끝난 음악에 온 결과는 늦게 온 결과라 덮지 않는다
+// 사진 음악은 GENERATING인 것만 바꾼다 — 이미 끝난 사진 음악에 온 결과는 늦게 온 결과라 덮지 않는다.
+// 기본곡은 끝난 곡에도 온 결과를 따른다 — AI 서버가 요청마다 기본곡을 같은 경로에 다시 만들어, 결과가 곧 지금 파일의 상태다
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -82,21 +84,23 @@ public class CompleteRecordCardMusicHandler implements CompleteRecordCardMusicUs
                 command.failedStage(), command.failureCode());
     }
 
+    // 기본곡은 끝난 곡에도 온 결과를 따른다 — 같은 결과가 다시 온 경우만 건너뛴다(규칙은 RecordCard.completeBaseMusic)
     private boolean applyBaseMusic(RecordCard recordCard, CompleteRecordCardMusicCommand command) {
-        if (!recordCard.getBaseMusicStatus().isGenerating()) {
-            log.warn("[기록 카드] 기본곡 반영 건너뜀: 이미 끝난 음악 - recordCardId={}, eventId={}, currentStatus={}, "
-                            + "result={}",
-                    command.recordCardId(), command.eventId(), recordCard.getBaseMusicStatus(), command.result());
-            return false;
+        MusicStatus before = recordCard.getBaseMusicStatus();
+        boolean changed = recordCard.completeBaseMusic(command.result(), command.baseMusicKey());
+        if (!changed) {
+            log.info("[기록 카드] 기본곡 반영 건너뜀: 같은 결과 - recordCardId={}, eventId={}, "
+                            + "currentStatus={}, result={}",
+                    command.recordCardId(), command.eventId(), before, command.result());
         }
-        return recordCard.completeBaseMusic(command.result(), command.baseMusicKey());
+        return changed;
     }
 
     private boolean applyPhotoMusic(RecordCard recordCard, Map<UUID, RecordCardImage> imagesById,
                                     PhotoMusic photoMusic, CompleteRecordCardMusicCommand command) {
         RecordCardImage image = imagesById.get(photoMusic.recordCardImageId());
         if (image == null) {
-            // 수정에서 뺀 사진의 늦은 결과 — 사진 행은 작성 확정만 만든다
+            // 수정에서 뺀 사진의 늦은 결과 — 사진 행은 음악 요청과 같은 트랜잭션에서 만들어 결과보다 늦게 생길 수 없다
             log.warn("[기록 카드] 사진 음악 반영 건너뜀: 사진 없음 - recordCardId={}, recordCardImageId={}, eventId={}",
                     command.recordCardId(), photoMusic.recordCardImageId(), command.eventId());
             return false;

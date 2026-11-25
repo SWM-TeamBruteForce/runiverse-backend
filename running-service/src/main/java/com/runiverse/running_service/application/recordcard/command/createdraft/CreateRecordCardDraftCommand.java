@@ -17,8 +17,10 @@ public record CreateRecordCardDraftCommand(
         images = images == null ? List.of() : List.copyOf(images);
     }
 
-    // 올릴 사진 하나 — 아직 파일은 없고 형식·크기·이름만 안다. 이름은 사용자가 올린 파일 이름에서 앞뒤 공백만 지운 값이다
-    public record Image(String mimeType, long fileSizeBytes, String fileName, String caption) {
+    // 올릴 사진 하나 — 아직 파일은 없고 형식·크기·이름만 안다. 이름은 사용자가 올린 파일 이름에서 앞뒤 공백만 지운 값이다.
+    // 작은 버전(썸네일)은 원본과 같은 형식이라 크기만 받는다
+    public record Image(String mimeType, long fileSizeBytes, long thumbnailFileSizeBytes, String fileName,
+                        String caption) {
 
         public Image {
             // 이 이름이 사진 key의 마지막 칸이 된다 — 업로드 URL 서명·S3 확인·DB 저장이 모두 이 값을 쓴다.

@@ -24,18 +24,28 @@ public record CreateRecordCardDraftResult(
 
         String imageKey();
 
+        // 원본과 함께 올리는 작은 버전(썸네일) — 원본 크기와 상관없이 늘 한 번에 올린다
+        Thumbnail thumbnail();
+
         // 한 번에 올린다 — URL 하나
-        record Single(UUID recordCardImageId, String imageKey, String uploadUrl) implements Upload {
+        record Single(UUID recordCardImageId, String imageKey, String uploadUrl, Thumbnail thumbnail)
+                implements Upload {
 
         }
 
         // 조각으로 나눠 올린다 — S3 UploadId는 초안에만 두고 여기 싣지 않는다
-        record Multipart(UUID recordCardImageId, String imageKey, long partSizeBytes, List<MultipartUpload.Part> parts)
+        record Multipart(UUID recordCardImageId, String imageKey, long partSizeBytes, List<MultipartUpload.Part> parts,
+                         Thumbnail thumbnail)
                 implements Upload {
 
             public Multipart {
                 parts = List.copyOf(parts);
             }
+        }
+
+        // 작은 버전의 key와 업로드 URL — key는 원본과 같은 사진 폴더의 thumbnail/ 아래다
+        record Thumbnail(String imageKey, String uploadUrl) {
+
         }
     }
 }

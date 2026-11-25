@@ -1,5 +1,6 @@
 package com.runiverse.running_service.unit_test.recordcard.application;
 
+import ch.qos.logback.classic.Level;
 import com.runiverse.running_service.application.common.port.out.RecordInboxEventPort;
 import com.runiverse.running_service.application.recordcard.command.completemusic.CompleteRecordCardMusicCommand;
 import com.runiverse.running_service.application.recordcard.command.completemusic.CompleteRecordCardMusicCommand.PhotoMusic;
@@ -13,6 +14,7 @@ import com.runiverse.running_service.domain.recordcard.vo.MusicStatus;
 import com.runiverse.running_service.domain.recordcard.vo.RecordCardActivityType;
 import com.runiverse.running_service.domain.recordcard.vo.RecordCardId;
 import com.runiverse.running_service.domain.recordcard.vo.RecordCardVisibility;
+import com.runiverse.running_service.support.LogCapture;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -127,8 +129,8 @@ class CompleteRecordCardMusicHandlerTest {
     }
 
     @Test
-    @DisplayName("이미 끝난 기본곡은 늦게 온 결과로 덮지 않는다 — 사진은 그대로 반영한다")
-    void keepsFinishedBaseMusic() {
+    @DisplayName("끝난 기본곡에 실패가 오면 FAILED가 된다 — 사진은 그대로 반영한다")
+    void finishedBaseMusicTakesFailure() {
         // given
         RecordCard card = card(MusicStatus.COMPLETED, OLD_KEY, image(IMAGE_A, MusicStatus.GENERATING, null, 0));
         givenFirstEvent(card);
@@ -137,9 +139,47 @@ class CompleteRecordCardMusicHandlerTest {
         handler.handle(command(MusicStatus.FAILED, null, List.of(new PhotoMusic(IMAGE_A, null))));
 
         // then
-        assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.COMPLETED);
-        assertThat(card.getBaseMusicKey()).contains(new MusicKey(OLD_KEY));
+        assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.FAILED);
+        assertThat(card.getBaseMusicKey()).isEmpty();
         assertThat(imageOf(card, IMAGE_A).getMusicStatus()).isEqualTo(MusicStatus.FAILED);
+    }
+
+    @Test
+    @DisplayName("끝난 기본곡에도 성공 결과는 새 key로 반영한다 — 수정 요청의 결과다")
+    void completedBaseMusicTakesNewSuccess() {
+        // given
+        RecordCard card = card(MusicStatus.COMPLETED, OLD_KEY, image(IMAGE_A, MusicStatus.GENERATING, null, 0));
+        givenFirstEvent(card);
+
+        // when
+        handler.handle(command(MusicStatus.COMPLETED, BASE_KEY, List.of(new PhotoMusic(IMAGE_A, KEY_A))));
+
+        // then
+        assertThat(card.getBaseMusicStatus()).isEqualTo(MusicStatus.COMPLETED);
+        assertThat(card.getBaseMusicKey()).contains(new MusicKey(BASE_KEY));
+        assertThat(imageOf(card, IMAGE_A).getMusicStatus()).isEqualTo(MusicStatus.COMPLETED);
+    }
+
+    @Test
+    @DisplayName("끝난 기본곡에 같은 key의 성공이 오면 그대로 두고 INFO로 남긴다 — 활동유형이 같은 수정의 정상 결과다")
+    void sameBaseMusicResultIsInfo() {
+        // given -> AI가 기본곡을 같은 경로에 다시 만들어 key가 같다
+        RecordCard card = card(MusicStatus.COMPLETED, BASE_KEY, image(IMAGE_A, MusicStatus.GENERATING, null, 0));
+        givenFirstEvent(card);
+        LogCapture log = LogCapture.of(CompleteRecordCardMusicHandler.class);
+
+        try {
+            // when
+            handler.handle(command(MusicStatus.COMPLETED, BASE_KEY, List.of(new PhotoMusic(IMAGE_A, KEY_A))));
+
+            // then
+            assertThat(card.getBaseMusicKey()).contains(new MusicKey(BASE_KEY));
+            assertThat(log.messages(Level.WARN)).isEmpty();
+            assertThat(log.messages(Level.INFO))
+                    .anyMatch(message -> message.startsWith("[기록 카드] 기본곡 반영 건너뜀: 같은 결과"));
+        } finally {
+            log.stop();
+        }
     }
 
     @Test

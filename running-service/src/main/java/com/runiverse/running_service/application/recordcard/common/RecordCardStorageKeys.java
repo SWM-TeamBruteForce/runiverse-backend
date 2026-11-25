@@ -8,6 +8,7 @@ import java.util.UUID;
 public final class RecordCardStorageKeys {
 
     private static final String ROOT = "record-cards";
+    private static final String THUMBNAIL_FOLDER = "thumbnail/";
 
     private RecordCardStorageKeys() {
     }
@@ -21,5 +22,13 @@ public final class RecordCardStorageKeys {
     // 폴더를 벗어나는 문자(/·\·제어 문자)와 길이는 Request DTO가 이미 걸렀다
     public static String imageKey(UUID userId, UUID recordCardId, UUID recordCardImageId, String fileName) {
         return "%s%s/%s/%s".formatted(prefixOf(userId), recordCardId, recordCardImageId, fileName);
+    }
+
+    // 사진의 작은 버전(썸네일) — 원본과 같은 사진 폴더의 thumbnail/ 아래에 원본 파일 이름 그대로 둔다.
+    // 원본 파일 이름에는 /가 없어(Request DTO 검사) 원본 key와 겹치지 않는다. 저장하지 않고 원본 key에서 계산한다 —
+    // 업로드 URL 발급·확정 확인·목록 URL이 모두 이 메서드를 쓴다
+    public static String thumbnailKeyOf(String imageKey) {
+        int lastSlash = imageKey.lastIndexOf('/');
+        return imageKey.substring(0, lastSlash + 1) + THUMBNAIL_FOLDER + imageKey.substring(lastSlash + 1);
     }
 }

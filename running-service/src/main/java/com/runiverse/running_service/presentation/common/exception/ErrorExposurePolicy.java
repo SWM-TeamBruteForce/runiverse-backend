@@ -80,6 +80,8 @@ public final class ErrorExposurePolicy {
             RecordCardErrorCode.RECORD_CARD_ALREADY_EXISTS.getCode(),
             // 처리 중인 확정과 부딪혔다 — 가려지면 앱이 다시 부를지 가를 수 없다
             RecordCardErrorCode.RECORD_CARD_DRAFT_IN_PROGRESS.getCode(),
+            // 수정 초안 뒤에 카드가 바뀌었다 — 가려지면 앱이 다시 불러와 수정하라고 안내할 수 없다
+            RecordCardErrorCode.RECORD_CARD_CHANGED.getCode(),
             // 가려지면 운영자가 이미 보낸 것인지 서버 오류인지 가를 수 없다
             PushCampaignErrorCode.PUSH_CAMPAIGN_ALREADY_SENT.getCode()
     );

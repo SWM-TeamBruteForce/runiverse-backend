@@ -34,6 +34,7 @@ public class S3StorageAdapterLoadTest {
     private static final String USER_ASSET_BUCKET = "runiverse-user-assets-test";
     private static final String GPS_TRACK_BUCKET = "runiverse-gps-tracks-test";
     private static final String RECORD_CARD_BUCKET = "runiverse-record-cards-test";
+    private static final String MUSIC_BUCKET = "runiverse-musics-test";
     private static final Duration TTL = Duration.ofMinutes(10);
     private static final Duration VIEW_TTL = Duration.ofHours(1);
     private static final String KEY = "profiles/9f1cf1a0-0000-7000-8000-000000000001/0198a3f2.jpg";
@@ -47,7 +48,7 @@ public class S3StorageAdapterLoadTest {
     void setUp() {
         // 조회 경로는 presigner를 쓰지 않는다. 호출되면 NPE로 드러나도록 null을 넣는다
         adapter = new S3StorageAdapter(null,
-                new S3Properties(REGION, USER_ASSET_BUCKET, GPS_TRACK_BUCKET, RECORD_CARD_BUCKET, TTL, VIEW_TTL, null, null), s3Client);
+                new S3Properties(REGION, USER_ASSET_BUCKET, GPS_TRACK_BUCKET, RECORD_CARD_BUCKET, MUSIC_BUCKET, TTL, VIEW_TTL, null, null), s3Client);
     }
 
     @Test

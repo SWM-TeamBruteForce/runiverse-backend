@@ -6,8 +6,10 @@ import com.runiverse.running_service.application.recordcard.command.createdraft.
 import com.runiverse.running_service.application.recordcard.command.createdraft.CreateRecordCardDraftResult;
 import com.runiverse.running_service.application.recordcard.command.createdraft.CreateRecordCardDraftResult.Upload;
 import com.runiverse.running_service.application.recordcard.common.RecordCardDraftProperties;
+import com.runiverse.running_service.application.recordcard.common.RecordCardUploadIssuer;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardAlreadyExistsException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardImageTooLargeException;
+import com.runiverse.running_service.application.recordcard.exception.RecordCardThumbnailTooLargeException;
 import com.runiverse.running_service.application.recordcard.exception.RunningRecordNotFoundException;
 import com.runiverse.running_service.application.recordcard.port.out.ExistsOwnRunningRecordPort;
 import com.runiverse.running_service.application.recordcard.port.out.FindRecordCardIdByRunningRecordPort;
@@ -89,10 +91,12 @@ class CreateRecordCardDraftHandlerTest {
     @BeforeEach
     void setUp() {
         RecordCardDraftProperties properties = new RecordCardDraftProperties(
-                TTL, DataSize.ofMegabytes(100), DataSize.ofMegabytes(10), Duration.ofSeconds(30));
+                TTL, DataSize.ofMegabytes(100), DataSize.ofMegabytes(1), DataSize.ofMegabytes(10), Duration.ofSeconds(30));
         handler = new CreateRecordCardDraftHandler(properties, existsOwnRunningRecordPort,
                 findRecordCardIdByRunningRecordPort, generateRecordCardDraftIdPort, generateRecordCardIdPort,
-                generateImageIdPort, generateUploadUrlPort, startMultipartUploadPort, saveRecordCardDraftPort);
+                new RecordCardUploadIssuer(properties, generateImageIdPort, generateUploadUrlPort,
+                        startMultipartUploadPort),
+                saveRecordCardDraftPort);
     }
 
     @Test
@@ -103,14 +107,17 @@ class CreateRecordCardDraftHandlerTest {
         when(generateImageIdPort.generate()).thenReturn(IMAGE_ID_1);
         String key = "record-cards/%s/%s/%s/노을 사진.JPG".formatted(USER_ID, CARD_ID, IMAGE_ID_1);
         when(generateUploadUrlPort.generate(key, "image/jpeg", 204800L, TTL)).thenReturn("https://signed");
+        String thumbnailKey = "record-cards/%s/%s/%s/thumbnail/노을 사진.JPG".formatted(USER_ID, CARD_ID, IMAGE_ID_1);
+        when(generateUploadUrlPort.generate(thumbnailKey, "image/jpeg", 100L, TTL)).thenReturn("https://thumb");
 
         // when
         CreateRecordCardDraftResult result = handler.handle(command(
-                List.of(new CreateRecordCardDraftCommand.Image("IMAGE/JPEG", 204800L, "노을 사진.JPG", "다리 밑 노을")), null));
+                List.of(new CreateRecordCardDraftCommand.Image("IMAGE/JPEG", 204800L, 100L, "노을 사진.JPG", "다리 밑 노을")), null));
 
         // then
         assertThat(result.recordCardDraftId()).isEqualTo(DRAFT_ID);
-        assertThat(result.uploads()).containsExactly(new Upload.Single(IMAGE_ID_1, key, "https://signed"));
+        assertThat(result.uploads()).containsExactly(new Upload.Single(IMAGE_ID_1, key, "https://signed",
+                new Upload.Thumbnail(thumbnailKey, "https://thumb")));
 
         RecordCardDraft draft = savedDraft();
         assertThat(draft.recordCardDraftId()).isEqualTo(DRAFT_ID);
@@ -124,7 +131,7 @@ class CreateRecordCardDraftHandlerTest {
         assertThat(draft.thumbnailIndex()).isZero();
         assertThat(draft.confirmed()).isFalse();
         assertThat(draft.images()).containsExactly(new DraftImage(IMAGE_ID_1, key, "image/jpeg", 204800L,
-                "다리 밑 노을", UploadType.SINGLE, null, null, false));
+                "다리 밑 노을", UploadType.SINGLE, null, null, false, 100L));
     }
 
     @Test
@@ -141,16 +148,20 @@ class CreateRecordCardDraftHandlerTest {
                 new MultipartUpload.Part(3, "https://p3"));
         when(startMultipartUploadPort.start(key, "image/png", size, PART_SIZE, TTL))
                 .thenReturn(new MultipartUpload("s3-upload-id", parts));
+        String thumbnailKey = "record-cards/%s/%s/%s/thumbnail/IMG_0002.png".formatted(USER_ID, CARD_ID, IMAGE_ID_1);
+        when(generateUploadUrlPort.generate(thumbnailKey, "image/png", 100L, TTL)).thenReturn("https://thumb");
 
         // when
         CreateRecordCardDraftResult result = handler.handle(command(
-                List.of(new CreateRecordCardDraftCommand.Image("image/png", size, "IMG_0002.png", null)), null));
+                List.of(new CreateRecordCardDraftCommand.Image("image/png", size, 100L, "IMG_0002.png", null)), null));
 
         // then
-        assertThat(result.uploads()).containsExactly(new Upload.Multipart(IMAGE_ID_1, key, PART_SIZE, parts));
+        assertThat(result.uploads()).containsExactly(new Upload.Multipart(IMAGE_ID_1, key, PART_SIZE, parts,
+                new Upload.Thumbnail(thumbnailKey, "https://thumb")));
         assertThat(savedDraft().images()).containsExactly(new DraftImage(IMAGE_ID_1, key, "image/png", size,
-                null, UploadType.MULTIPART, "s3-upload-id", 3, false));
-        verify(generateUploadUrlPort, never()).generate(anyString(), anyString(), anyLong(), any());
+                null, UploadType.MULTIPART, "s3-upload-id", 3, false, 100L));
+        // 원본은 조각 URL만 받는다 — 한 번에 올리는 URL은 작은 버전(썸네일) 것뿐이다
+        verify(generateUploadUrlPort, never()).generate(eq(key), anyString(), anyLong(), any());
     }
 
     @Test
@@ -162,7 +173,7 @@ class CreateRecordCardDraftHandlerTest {
 
         // when
         CreateRecordCardDraftResult result = handler.handle(command(
-                List.of(new CreateRecordCardDraftCommand.Image("image/webp", PART_SIZE, "run.webp", null)), null));
+                List.of(new CreateRecordCardDraftCommand.Image("image/webp", PART_SIZE, 100L, "run.webp", null)), null));
 
         // then
         assertThat(result.uploads().getFirst()).isInstanceOf(Upload.Single.class);
@@ -178,8 +189,8 @@ class CreateRecordCardDraftHandlerTest {
 
         // when
         CreateRecordCardDraftResult result = handler.handle(command(List.of(
-                new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, "IMG_0001.jpg", null),
-                new CreateRecordCardDraftCommand.Image("image/png", 2L, "IMG_0002.png", null)), 1));
+                new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, 100L, "IMG_0001.jpg", null),
+                new CreateRecordCardDraftCommand.Image("image/png", 2L, 100L, "IMG_0002.png", null)), 1));
 
         // then
         assertThat(result.uploads()).extracting(Upload::imageKey).containsExactly(
@@ -200,8 +211,8 @@ class CreateRecordCardDraftHandlerTest {
 
         // when
         CreateRecordCardDraftResult result = handler.handle(command(List.of(
-                new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, "IMG_0001.jpg", null),
-                new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, "IMG_0001.jpg", null)), null));
+                new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, 100L, "IMG_0001.jpg", null),
+                new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, 100L, "IMG_0001.jpg", null)), null));
 
         // then
         assertThat(result.uploads()).extracting(Upload::imageKey).containsExactly(
@@ -217,10 +228,12 @@ class CreateRecordCardDraftHandlerTest {
         when(generateImageIdPort.generate()).thenReturn(IMAGE_ID_1);
         String key = "record-cards/%s/%s/%s/my photo.jpg".formatted(USER_ID, CARD_ID, IMAGE_ID_1);
         when(generateUploadUrlPort.generate(key, "image/jpeg", 1L, TTL)).thenReturn("https://signed");
+        when(generateUploadUrlPort.generate("record-cards/%s/%s/%s/thumbnail/my photo.jpg".formatted(USER_ID, CARD_ID,
+                IMAGE_ID_1), "image/jpeg", 100L, TTL)).thenReturn("https://thumb");
 
         // when - 가운데 공백은 이름의 일부라 남는다
         CreateRecordCardDraftResult result = handler.handle(command(List.of(
-                new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, "  my photo.jpg ", null)), null));
+                new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, 100L, "  my photo.jpg ", null)), null));
 
         // then
         assertThat(result.uploads()).extracting(Upload::imageKey).containsExactly(key);
@@ -253,7 +266,7 @@ class CreateRecordCardDraftHandlerTest {
         when(generateImageIdPort.generate()).thenReturn(IMAGE_ID_1);
 
         // when
-        handler.handle(command(List.of(new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, "IMG_0001.jpg", "   ")), null));
+        handler.handle(command(List.of(new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, 100L, "IMG_0001.jpg", "   ")), null));
 
         // then
         assertThat(savedDraft().images().getFirst().caption()).isNull();
@@ -278,12 +291,31 @@ class CreateRecordCardDraftHandlerTest {
     void rejectTooLargeImage() {
         // when & then -> 문구의 크기는 운영값으로 만든다
         assertThatThrownBy(() -> handler.handle(command(List.of(
-                new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, "IMG_0001.jpg", null),
-                new CreateRecordCardDraftCommand.Image("image/jpeg", MAX_SIZE + 1, "IMG_0001.jpg", null)), null)))
+                new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, 100L, "IMG_0001.jpg", null),
+                new CreateRecordCardDraftCommand.Image("image/jpeg", MAX_SIZE + 1, 100L, "IMG_0001.jpg", null)), null)))
                 .isInstanceOf(RecordCardImageTooLargeException.class)
                 .hasMessage("이미지는 100MB 이하만 업로드할 수 있습니다.");
         verifyNoInteractions(existsOwnRunningRecordPort, findRecordCardIdByRunningRecordPort,
                 generateImageIdPort, generateUploadUrlPort, startMultipartUploadPort, saveRecordCardDraftPort);
+    }
+
+    @Test
+    @DisplayName("작은 버전(썸네일)이 최대 크기(1MB)를 넘으면 400으로 거절하고 업로드를 시작하지 않는다 — 딱 1MB는 받는다")
+    void rejectTooLargeThumbnail() {
+        // when & then
+        long max = DataSize.ofMegabytes(1).toBytes();
+        assertThatThrownBy(() -> handler.handle(command(List.of(
+                new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, max + 1, "IMG_0001.jpg", null)), null)))
+                .isInstanceOf(RecordCardThumbnailTooLargeException.class)
+                .hasMessage("썸네일은 1MB 이하만 업로드할 수 있습니다.");
+        verifyNoInteractions(existsOwnRunningRecordPort, generateImageIdPort, generateUploadUrlPort,
+                startMultipartUploadPort, saveRecordCardDraftPort);
+
+        givenOwnRecordWithoutCard();
+        when(generateImageIdPort.generate()).thenReturn(IMAGE_ID_1);
+        assertThat(handler.handle(command(List.of(
+                new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, max, "IMG_0001.jpg", null)), null))
+                .uploads()).hasSize(1);
     }
 
     @Test
@@ -297,7 +329,7 @@ class CreateRecordCardDraftHandlerTest {
 
         // when
         CreateRecordCardDraftResult result = handler.handle(command(
-                List.of(new CreateRecordCardDraftCommand.Image("image/jpeg", MAX_SIZE, "IMG_0001.jpg", null)), null));
+                List.of(new CreateRecordCardDraftCommand.Image("image/jpeg", MAX_SIZE, 100L, "IMG_0001.jpg", null)), null));
 
         // then
         assertThat(result.uploads()).hasSize(1);
@@ -312,7 +344,7 @@ class CreateRecordCardDraftHandlerTest {
 
         // when & then
         assertThatThrownBy(() -> handler.handle(command(
-                List.of(new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, "IMG_0001.jpg", null)), null)))
+                List.of(new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, 100L, "IMG_0001.jpg", null)), null)))
                 .isInstanceOf(RunningRecordNotFoundException.class);
         verifyNoInteractions(findRecordCardIdByRunningRecordPort, generateImageIdPort, generateUploadUrlPort,
                 startMultipartUploadPort, saveRecordCardDraftPort);
@@ -329,7 +361,7 @@ class CreateRecordCardDraftHandlerTest {
 
         // when & then
         assertThatThrownBy(() -> handler.handle(command(
-                List.of(new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, "IMG_0001.jpg", null)), null)))
+                List.of(new CreateRecordCardDraftCommand.Image("image/jpeg", 1L, 100L, "IMG_0001.jpg", null)), null)))
                 .isInstanceOf(RecordCardAlreadyExistsException.class);
         verifyNoInteractions(generateRecordCardIdPort, generateImageIdPort, generateUploadUrlPort,
                 startMultipartUploadPort, saveRecordCardDraftPort);

@@ -236,7 +236,7 @@ class RecordCardDraftSaverTest {
         return new RecordCardDraft(UUID.randomUUID(), DraftType.CREATE, CARD_ID, USER_ID, RECORD_ID,
                 RecordCardActivityType.TRAVEL, "바람이 좋았다", RecordCardVisibility.FRIENDS,
                 List.of(new DraftImage(IMAGE_ID, "k/1/a.jpg", "image/jpeg", 10L, "노을", UploadType.SINGLE,
-                        null, null, false)),
+                        null, null, false, 100L)),
                 0, false);
     }
 }

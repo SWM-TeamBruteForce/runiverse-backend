@@ -4,11 +4,14 @@ import com.github.f4b6a3.uuid.UuidCreator;
 import com.runiverse.running_service.application.recordcard.command.completedraft.CompleteRecordCardDraftCommand;
 import com.runiverse.running_service.application.recordcard.command.completedraft.CompleteRecordCardDraftHandler;
 import com.runiverse.running_service.application.recordcard.command.completedraft.RecordCardDraftSaver;
+import com.runiverse.running_service.application.recordcard.command.completedraft.RecordCardEditDraftSaver;
+import com.runiverse.running_service.application.recordcard.command.update.RecordCardEditor;
 import com.runiverse.running_service.application.recordcard.command.createdraft.CreateRecordCardDraftCommand;
 import com.runiverse.running_service.application.recordcard.command.createdraft.CreateRecordCardDraftHandler;
 import com.runiverse.running_service.application.recordcard.command.createdraft.CreateRecordCardDraftResult;
 import com.runiverse.running_service.application.recordcard.command.createdraft.CreateRecordCardDraftResult.Upload;
 import com.runiverse.running_service.application.recordcard.common.RecordCardDraftProperties;
+import com.runiverse.running_service.application.recordcard.common.RecordCardUploadIssuer;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardAlreadyExistsException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardDraftInProgressException;
 import com.runiverse.running_service.application.recordcard.exception.RecordCardDraftNotFoundException;
@@ -35,6 +38,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
+import static com.runiverse.running_service.application.recordcard.common.RecordCardStorageKeys.thumbnailKeyOf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -64,14 +68,18 @@ class CompleteRecordCardDraftIntegrationTest {
         objectStore = new FakeRecordCardObjectStore();
         multipartUploads = new FakeMultipartUploadStarter();
         RecordCardDraftProperties properties = new RecordCardDraftProperties(Duration.ofMinutes(30),
-                DataSize.ofMegabytes(100), DataSize.ofMegabytes(10), Duration.ofSeconds(30));
+                DataSize.ofMegabytes(100), DataSize.ofMegabytes(1), DataSize.ofMegabytes(10), Duration.ofSeconds(30));
         createHandler = new CreateRecordCardDraftHandler(properties, recordCardStore, recordCardStore,
-                new FakeRecordCardIdGenerator(1L), new FakeRecordCardIdGenerator(2L), new FakeImageIdGenerator(),
-                new FakeUploadUrlGenerator(), multipartUploads, draftStore);
+                new FakeRecordCardIdGenerator(1L), new FakeRecordCardIdGenerator(2L),
+                new RecordCardUploadIssuer(properties, new FakeImageIdGenerator(), new FakeUploadUrlGenerator(),
+                        multipartUploads),
+                draftStore);
         completeHandler = new CompleteRecordCardDraftHandler(properties, draftStore, draftStore, draftStore,
                 objectStore, objectStore,
                 new RecordCardDraftSaver(recordCardStore, recordCardStore, recordCardStore, recordCardStore,
-                        recordCardStore, musicRequests));
+                        recordCardStore, musicRequests),
+                new RecordCardEditDraftSaver(new RecordCardEditor(recordCardStore, recordCardStore, recordCardStore,
+                        recordCardStore, recordCardStore, musicRequests, recordCardStore)));
         recordCardStore.addRecord(RECORD_ID, userId);
     }
 
@@ -80,8 +88,8 @@ class CompleteRecordCardDraftIntegrationTest {
     void createUploadAndComplete() {
         // given
         CreateRecordCardDraftResult draft = createDraft(RECORD_ID, List.of(
-                new CreateRecordCardDraftCommand.Image("image/jpeg", 1_000L, "IMG_1.jpg", "노을"),
-                new CreateRecordCardDraftCommand.Image("image/png", TEN_MB * 2 + 1, "한강 야경.png", null)));
+                new CreateRecordCardDraftCommand.Image("image/jpeg", 1_000L, 100L, "IMG_1.jpg", "노을"),
+                new CreateRecordCardDraftCommand.Image("image/png", TEN_MB * 2 + 1, 100L, "한강 야경.png", null)));
         uploadAll(draft);
 
         // when
@@ -137,8 +145,8 @@ class CompleteRecordCardDraftIntegrationTest {
     void missingImageThenRetry() {
         // given
         CreateRecordCardDraftResult draft = createDraft(RECORD_ID, List.of(
-                new CreateRecordCardDraftCommand.Image("image/png", TEN_MB * 2 + 1, "big.png", null),
-                new CreateRecordCardDraftCommand.Image("image/jpeg", 1_000L, "small.jpg", null)));
+                new CreateRecordCardDraftCommand.Image("image/png", TEN_MB * 2 + 1, 100L, "big.png", null),
+                new CreateRecordCardDraftCommand.Image("image/jpeg", 1_000L, 100L, "small.jpg", null)));
         upload(draft.uploads().get(0), "image/png", TEN_MB * 2 + 1);
 
         // when & then -> 두 번째 사진이 없다. 첫 사진은 이미 합쳐진다
@@ -257,8 +265,10 @@ class CompleteRecordCardDraftIntegrationTest {
         upload(draft.uploads().get(1), "image/png", TEN_MB * 2 + 1);
     }
 
-    // 앱의 업로드를 흉내 낸다 — 한 번에 올린 사진은 객체가 생기고, 나눠 올린 사진은 조각이 모두 올라간다
+    // 앱의 업로드를 흉내 낸다 — 한 번에 올린 사진은 객체가 생기고, 나눠 올린 사진은 조각이 모두 올라간다.
+    // 작은 버전(썸네일)은 늘 한 번에 올린다 — 크기는 작성 요청에 적은 값(100바이트)이다
     private void upload(Upload upload, String contentType, long size) {
+        objectStore.putObject(upload.thumbnail().imageKey(), 100L, contentType);
         switch (upload) {
             case Upload.Single single -> objectStore.putObject(single.imageKey(), size, contentType);
             case Upload.Multipart multipart -> multipart.parts().forEach(part -> objectStore.uploadPart(

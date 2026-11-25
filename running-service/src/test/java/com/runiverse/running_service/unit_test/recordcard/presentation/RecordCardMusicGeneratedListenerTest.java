@@ -5,6 +5,7 @@ import com.runiverse.running_service.application.recordcard.command.completemusi
 import com.runiverse.running_service.application.recordcard.port.in.CompleteRecordCardMusicUsecase;
 import com.runiverse.running_service.domain.recordcard.vo.MusicStatus;
 import com.runiverse.running_service.presentation.recordcard.kafka.RecordCardMusicGeneratedListener;
+import com.runiverse.running_service.presentation.recordcard.kafka.RecordCardMusicGeneratedMessageMapper;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -81,7 +82,9 @@ class RecordCardMusicGeneratedListenerTest {
 
     @BeforeEach
     void setUp() {
-        listener = new RecordCardMusicGeneratedListener(JsonMapper.builder().build(), usecase);
+        // 실제 Mapper로 조립한다 — 검사·변환을 옮기기 전과 같은 케이스가 그대로 통과해야 한다
+        listener = new RecordCardMusicGeneratedListener(
+                new RecordCardMusicGeneratedMessageMapper(JsonMapper.builder().build()), usecase);
     }
 
     @Test
